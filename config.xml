@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+	<name>ssbhesabfa</name>
+	<displayName><![CDATA[Hesabfa Online Accounting ]]></displayName>
+	<version><![CDATA[1.0.0]]></version>
+	<description><![CDATA[Hesabfa Online Accounting ]]></description>
+	<author><![CDATA[Saeed Sattar Beglou]]></author>
+	<tab><![CDATA[billing_invoicing]]></tab>
+	<is_configurable>1</is_configurable>
+	<need_instance>1</need_instance>
+</module>
