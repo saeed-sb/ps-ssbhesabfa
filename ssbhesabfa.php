@@ -60,6 +60,9 @@ class Ssbhesabfa extends Module
     public function install()
     {
         Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_USERNAME', false);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_PASSWORD', false);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_API', false);
 
         return parent::install() &&
             $this->registerHook('header') &&
@@ -81,6 +84,9 @@ class Ssbhesabfa extends Module
     public function uninstall()
     {
         Configuration::deleteByName('SSBHESABFA_LIVE_MODE');
+        Configuration::deleteByName('SSBHESABFA_ACCOUNT_USERNAME');
+        Configuration::deleteByName('SSBHESABFA_ACCOUNT_PASSWORD');
+        Configuration::deleteByName('SSBHESABFA_ACCOUNT_API');
 
         return parent::uninstall();
     }
@@ -90,16 +96,31 @@ class Ssbhesabfa extends Module
      */
     public function getContent()
     {
+        $output = '';
         /**
          * If values have been submitted in the form, process.
          */
         if (((bool)Tools::isSubmit('submitSsbhesabfaModule')) == true) {
             $this->postProcess();
+
+            include ('classes/hesabfaAPI.php');
+            $api = new hesabfaAPI();
+            $result = $api->api_request(array('code' => '000001'), 'contact/getcontacts');
+
+            echo '<pre>';
+            var_dump($result);
+            echo '</pre>';
+
+            if (!is_object($result)) {
+                $output .= $this->displayError($result);
+            } else {
+                $output .= $this->displayConfirmation('done');
+            }
         }
 
         $this->context->smarty->assign('module_dir', $this->_path);
 
-        $output = $this->context->smarty->fetch($this->local_path.'views/templates/admin/configure.tpl');
+        $output .= $this->context->smarty->fetch($this->local_path.'views/templates/admin/configure.tpl');
 
         return $output.$this->renderForm();
     }
@@ -167,14 +188,20 @@ class Ssbhesabfa extends Module
                         'col' => 3,
                         'type' => 'text',
                         'prefix' => '<i class="icon icon-envelope"></i>',
-                        'desc' => $this->l('Enter a valid email address'),
-                        'name' => 'SSBHESABFA_ACCOUNT_EMAIL',
+                        'desc' => $this->l('Enter a username'),
+                        'name' => 'SSBHESABFA_ACCOUNT_USERNAME',
                         'label' => $this->l('Email'),
                     ),
                     array(
                         'type' => 'password',
                         'name' => 'SSBHESABFA_ACCOUNT_PASSWORD',
                         'label' => $this->l('Password'),
+                    ),
+                    array(
+                        'col' => 6,
+                        'type' => 'text',
+                        'name' => 'SSBHESABFA_ACCOUNT_API',
+                        'label' => $this->l('API Key'),
                     ),
                 ),
                 'submit' => array(
@@ -190,9 +217,10 @@ class Ssbhesabfa extends Module
     protected function getConfigFormValues()
     {
         return array(
-            'SSBHESABFA_LIVE_MODE' => Configuration::get('SSBHESABFA_LIVE_MODE', true),
-            'SSBHESABFA_ACCOUNT_EMAIL' => Configuration::get('SSBHESABFA_ACCOUNT_EMAIL', 'contact@prestashop.com'),
-            'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD', null),
+            'SSBHESABFA_LIVE_MODE' => Configuration::get('SSBHESABFA_LIVE_MODE'),
+            'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
+            'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+            'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
         );
     }
 
@@ -213,10 +241,6 @@ class Ssbhesabfa extends Module
     */
     public function hookBackOfficeHeader()
     {
-        if (Tools::getValue('module_name') == $this->name) {
-            $this->context->controller->addJS($this->_path.'views/js/back.js');
-            $this->context->controller->addCSS($this->_path.'views/css/back.css');
-        }
     }
 
     /**
@@ -224,8 +248,6 @@ class Ssbhesabfa extends Module
      */
     public function hookHeader()
     {
-        $this->context->controller->addJS($this->_path.'/views/js/front.js');
-        $this->context->controller->addCSS($this->_path.'/views/css/front.css');
     }
 
     public function hookActionCategoryAdd()
