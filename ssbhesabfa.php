@@ -40,33 +40,24 @@ class Ssbhesabfa extends Module
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
-        /**
-         * Set $this->bootstrap to true if your module is compliant with bootstrap (PrestaShop 1.6)
-         */
         $this->bootstrap = true;
 
         parent::__construct();
 
-        $this->displayName = $this->l('Hesabfa Online Accounting ');
-        $this->description = $this->l('Hesabfa Online Accounting ');
+        $this->displayName = $this->l('Hesabfa Online Accounting');
+        $this->description = $this->l('Connect "Hesabfa Online Accounting" to Prestashop');
 
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
     }
 
-    /**
-     * Don't forget to create update methods if needed:
-     * http://doc.prestashop.com/display/PS16/Enabling+the+Auto-Update
-     */
     public function install()
     {
         Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
-        Configuration::updateValue('SSBHESABFA_ACCOUNT_USERNAME', false);
-        Configuration::updateValue('SSBHESABFA_ACCOUNT_PASSWORD', false);
-        Configuration::updateValue('SSBHESABFA_ACCOUNT_API', false);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_USERNAME', null);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_PASSWORD', null);
+        Configuration::updateValue('SSBHESABFA_ACCOUNT_API', null);
 
         return parent::install() &&
-            $this->registerHook('header') &&
-            $this->registerHook('backOfficeHeader') &&
             $this->registerHook('actionCategoryAdd') &&
             $this->registerHook('actionCategoryDelete') &&
             $this->registerHook('actionCategoryUpdate') &&
@@ -103,19 +94,33 @@ class Ssbhesabfa extends Module
         if (((bool)Tools::isSubmit('submitSsbhesabfaModule')) == true) {
             $this->postProcess();
 
+            //test environment
+            $data = array('code' => '000001');
+            $method = 'contact/getcontacts';
+
             include ('classes/hesabfaAPI.php');
             $api = new hesabfaAPI();
-            $result = $api->api_request(array('code' => '000001'), 'contact/getcontacts');
+            $result = $api->api_request($data, $method);
+
+            //$paymentModules = PaymentModule::getInstalledPaymentModules();
+            //$paymentModules = PaymentOptionsFinderCore::present();
+
+            $test = new PaymentOptionsFinder;
+            $paymentModules = $test->find();
 
             echo '<pre>';
-            var_dump($result);
+            //var_dump($test);
+            var_dump($paymentModules);
+            //var_dump($result);
             echo '</pre>';
 
             if (!is_object($result)) {
                 $output .= $this->displayError($result);
             } else {
-                $output .= $this->displayConfirmation('done');
+                $output .= $this->displayConfirmation($this->l('Done'));
             }
+
+            //end test environment
         }
 
         $this->context->smarty->assign('module_dir', $this->_path);
@@ -234,20 +239,6 @@ class Ssbhesabfa extends Module
         foreach (array_keys($form_values) as $key) {
             Configuration::updateValue($key, Tools::getValue($key));
         }
-    }
-
-    /**
-    * Add the CSS & JavaScript files you want to be loaded in the BO.
-    */
-    public function hookBackOfficeHeader()
-    {
-    }
-
-    /**
-     * Add the CSS & JavaScript files you want to be added on the FO.
-     */
-    public function hookHeader()
-    {
     }
 
     public function hookActionCategoryAdd()

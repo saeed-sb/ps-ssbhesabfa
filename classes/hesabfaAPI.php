@@ -27,26 +27,15 @@
 
 class hesabfaAPI
 {
-    public $apiKey;
-    public $userId;
-    public $password;
-
-    public function __construct()
-    {
-        $this->apiKey = Configuration::get('SSBHESABFA_ACCOUNT_API');
-        $this->userId = Configuration::get('SSBHESABFA_ACCOUNT_USERNAME');
-        $this->password = Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD');
-    }
-
     public function api_request($data = array(), $method)
     {
         if (!isset($method))
             return false;
 
         $data = array_merge(array(
-            'apiKey' => $this->apiKey,
-            'userId' => $this->userId,
-            'password' => $this->password
+            'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+            'userId' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
+            'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD')
         ), $data);
 
         $data_string = json_encode($data);
@@ -75,46 +64,46 @@ class hesabfaAPI
             if ($result->Success == false) {
                 switch ($result->ErrorCode) {
                     case '100':
-                        return 'InternalServerError';
+                        return $this->l('InternalServerError');
                         break;
                     case '101':
-                        return 'TooManyRequests';
+                        return $this->l('TooManyRequests');
                         break;
                     case '103':
-                        return 'MissingData';
+                        return $this->l('MissingData');
                         break;
                     case '104':
-                        return 'MissingParameter' . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return $this->l('MissingParameter') . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '105':
-                        return 'ApiDisabled';
+                        return $this->l('ApiDisabled');
                         break;
                     case '106':
-                        return 'UserIsNotOwner';
+                        return $this->l('UserIsNotOwner');
                         break;
                     case '107':
-                        return 'BusinessNotFound';
+                        return $this->l('BusinessNotFound');
                         break;
                     case '108':
-                        return 'BusinessExpired';
+                        return $this->l('BusinessExpired');
                         break;
                     case '110':
-                        return 'IdMustBeZero';
+                        return $this->l('IdMustBeZero');
                         break;
                     case '111':
-                        return 'IdMustNotBeZero';
+                        return $this->l('IdMustNotBeZero');
                         break;
                     case '112':
-                        return 'ObjectNotFound' . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return $this->l('ObjectNotFound') . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '113':
-                        return 'MissingApiKey';
+                        return $this->l('MissingApiKey');
                         break;
                     case '114':
-                        return 'ParameterIsOutOfRange' . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return $this->l('ParameterIsOutOfRange') . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '190':
-                        return 'ApplicationError' . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return $this->l('ApplicationError') . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                 }
             } else {
