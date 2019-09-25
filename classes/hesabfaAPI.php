@@ -110,5 +110,6 @@ class hesabfaAPI
                 return $result;
             }
         }
+        return false;
     }
 }

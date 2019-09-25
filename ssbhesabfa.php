@@ -28,6 +28,8 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+include ('classes/hesabfaAPI.php');
+
 class Ssbhesabfa extends Module
 {
     protected $config_form = false;
@@ -58,17 +60,16 @@ class Ssbhesabfa extends Module
         Configuration::updateValue('SSBHESABFA_ACCOUNT_API', null);
 
         return parent::install() &&
-            $this->registerHook('actionCategoryAdd') &&
-            $this->registerHook('actionCategoryDelete') &&
-            $this->registerHook('actionCategoryUpdate') &&
             $this->registerHook('actionCustomerAccountAdd') &&
-            $this->registerHook('actionOrderReturn') &&
-            $this->registerHook('actionPaymentConfirmation') &&
+            $this->registerHook('actionObjectAddressAddAfter') &&
+            $this->registerHook('actionObjectAddressUpdateAfter') &&
             $this->registerHook('actionProductAdd') &&
             $this->registerHook('actionProductDelete') &&
             $this->registerHook('actionProductListOverride') &&
             $this->registerHook('actionProductUpdate') &&
+            $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('actionValidateOrder') &&
+            $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('displayPaymentReturn');
     }
 
@@ -241,24 +242,74 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function hookActionCategoryAdd()
+    /**
+     * @param $data
+     * @param $method
+     */
+    public function runAPI($data, $method)
     {
-        /* Place your code here. */
+        $api = new hesabfaAPI();
+        $result = $api->api_request($data, $method);
+
+        // ToDo add log $result
+        //Tools::dieObject($result);
+        //if (is_object($result)) {
+        //    $msg = $result->Success . $result->ErrorCode . $result->ErrorMessage;
+        //    PrestaShopLogger::addLog($msg, 1,  null, null, null, true, null);
+        //} else {
+        //    PrestaShopLogger::addLog($result, 1,  null, null, null, true, null);
+        //}
     }
 
-    public function hookActionCategoryDelete()
+    /**
+     * @param $params
+     */
+    public function hookActionCustomerAccountAdd($params)
     {
-        /* Place your code here. */
+        // ToDo: check if customer exists
+
+        $method = 'contact/save';
+        $data = array (
+            'contact' => array (
+                'Code' => $params['newCustomer']->id,
+                'Name' => $params['newCustomer']->firstname . ' ' . $params['newCustomer']->lastname,
+                'FirstName' => $params['newCustomer']->firstname,
+                'LastName' => $params['newCustomer']->lastname,
+                'ContactType' => 1,
+                'Email' => $params['newCustomer']->email,
+            )
+        );
+
+        $this->runAPI($data, $method);
     }
 
-    public function hookActionCategoryUpdate()
+    public function hookActionObjectAddressAddAfter($params)
     {
-        /* Place your code here. */
+        $customer = new Customer($params['object']->id_customer);
+
+        $method = 'contact/save';
+        $data = array (
+            'contact' => array (
+                'Code' => $params['object']->id_customer,
+                'Name' => $customer->firstname . ' ' . $customer->lastname,
+                'ContactType' => 1,
+                'NationalCode' => $params['object']->dni,
+                'EconomicCode' => $params['object']->vat_number,
+                'Address' => $params['object']->address1 . ' ' . $params['object']->address2,
+                'City' => $params['object']->city,
+                'State' => State::getNameById($params['object']->id_state),
+                'PostalCode' => $params['object']->postcode,
+                'Phone' => $params['object']->phone,
+                'Mobile' => $params['object']->phone_mobile,
+            )
+        );
+
+        $this->runAPI($data, $method);
     }
 
-    public function hookActionCustomerAccountAdd()
+    public function hookActionObjectAddressUpdateAfter($params)
     {
-        /* Place your code here. */
+        $this->hookActionObjectAddressAddAfter($params);
     }
 
     public function hookActionOrderReturn()
