@@ -38,7 +38,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -61,6 +61,9 @@ class Ssbhesabfa extends Module
 
         return parent::install() &&
             $this->registerHook('actionCustomerAccountAdd') &&
+            $this->registerHook('actionCustomerAccountUpdate') &&
+            $this->registerHook('actionCustomerAccountAddAfter') &&
+
             $this->registerHook('actionObjectAddressAddAfter') &&
             $this->registerHook('actionObjectAddressUpdateAfter') &&
             $this->registerHook('actionProductAdd') &&
@@ -92,36 +95,23 @@ class Ssbhesabfa extends Module
         /**
          * If values have been submitted in the form, process.
          */
-        if (((bool)Tools::isSubmit('submitSsbhesabfaModule')) == true) {
+        if (((bool)Tools::isSubmit('submitSsbhesabfaSaveSettings')) == true) {
             $this->postProcess();
-
-            //test environment
-            $data = array('code' => '000001');
-            $method = 'contact/getcontacts';
-
-            include ('classes/hesabfaAPI.php');
-            $api = new hesabfaAPI();
-            $result = $api->api_request($data, $method);
-
-            //$paymentModules = PaymentModule::getInstalledPaymentModules();
-            //$paymentModules = PaymentOptionsFinderCore::present();
-
-            $test = new PaymentOptionsFinder;
-            $paymentModules = $test->find();
-
-            echo '<pre>';
-            //var_dump($test);
-            var_dump($paymentModules);
-            //var_dump($result);
-            echo '</pre>';
-
-            if (!is_object($result)) {
-                $output .= $this->displayError($result);
+            $output .= $this->displayConfirmation($this->l('Setting Updated.'));
+        } elseif (((bool)Tools::getValue('submitSaveProduct')) == true) {
+            if (Tools::getValue('SSBHESABFA_PRODUCT_ID') != null) {
+                $this->saveProductProcess(Tools::getValue('SSBHESABFA_PRODUCT_ID'));
+                $output .= $this->displayConfirmation($this->l('Product Added/Updated successfuly.'));
             } else {
-                $output .= $this->displayConfirmation($this->l('Done'));
+                $output .= $this->displayError($this->l('Enter Product ID'));
             }
-
-            //end test environment
+        } elseif (((bool)Tools::getValue('submitSaveCustomer')) == true) {
+            if (Tools::getValue('SSBHESABFA_CUSTOMER_ID') != null) {
+                $this->saveCustomerProcess(Tools::getValue('SSBHESABFA_CUSTOMER_ID'));
+                $output .= $this->displayConfirmation($this->l('Customer Added/Updated successfuly.'));
+            } else {
+                $output .= $this->displayError($this->l('Enter Customer ID'));
+            }
         }
 
         $this->context->smarty->assign('module_dir', $this->_path);
@@ -156,12 +146,9 @@ class Ssbhesabfa extends Module
             'id_language' => $this->context->language->id,
         );
 
-        return $helper->generateForm(array($this->getConfigForm()));
+        return $helper->generateForm(array($this->getConfigForm(), $this->getItemForm(), $this->getContactForm()));
     }
 
-    /**
-     * Create the structure of your form.
-     */
     protected function getConfigForm()
     {
         return array(
@@ -212,14 +199,65 @@ class Ssbhesabfa extends Module
                 ),
                 'submit' => array(
                     'title' => $this->l('Save'),
+                    'name' => 'submitSsbhesabfaSaveSettings',
+                    'id' => 'submitSsbhesabfaSaveSettings',
                 ),
             ),
         );
     }
 
-    /**
-     * Set values for the inputs.
-     */
+    protected function getItemForm()
+    {
+        return array(
+            'form' => array(
+                'legend' => array(
+                    'title' => $this->l('Add Product'),
+                    'icon' => 'icon-product',
+                ),
+                'input' => array(
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        'desc' => $this->l('Enter a Product ID'),
+                        'name' => 'SSBHESABFA_PRODUCT_ID',
+                        'label' => $this->l('Product ID'),
+                    ),
+                ),
+                'submit' => array(
+                    'title' => $this->l('Add/Update'),
+                    'name' => 'submitSaveProduct',
+                    'id' => 'submitSaveProduct',
+                ),
+            ),
+        );
+    }
+
+    protected function getContactForm()
+    {
+        return array(
+            'form' => array(
+                'legend' => array(
+                    'title' => $this->l('Add Customer'),
+                    'icon' => 'icon-person',
+                ),
+                'input' => array(
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        'desc' => $this->l('Enter a Customer ID'),
+                        'name' => 'SSBHESABFA_CUSTOMER_ID',
+                        'label' => $this->l('Customer ID'),
+                    ),
+                ),
+                'submit' => array(
+                    'title' => $this->l('Add/Update'),
+                    'name' => 'submitSaveCustomer',
+                    'id' => 'submitSaveCustomer',
+                ),
+            ),
+        );
+    }
+
     protected function getConfigFormValues()
     {
         return array(
@@ -227,12 +265,13 @@ class Ssbhesabfa extends Module
             'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
             'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
             'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+
+            'SSBHESABFA_PRODUCT_ID' => null,
+            'SSBHESABFA_CUSTOMER_ID' => null,
+
         );
     }
 
-    /**
-     * Save form data.
-     */
     protected function postProcess()
     {
         $form_values = $this->getConfigFormValues();
@@ -242,69 +281,78 @@ class Ssbhesabfa extends Module
         }
     }
 
-    /**
-     * @param $data
-     * @param $method
-     */
-    public function runAPI($data, $method)
-    {
-        $api = new hesabfaAPI();
-        $result = $api->api_request($data, $method);
+    //
+    public function saveProductProcess($id_product){
+        $id_lang = Language::getIdByIso('fa');
+        $product = new Product($id_product);
+        $data = array (
+            'Code' => $id_product,
+            'Name' => $product->name[$id_lang],
+            'ItemType' => 0,
+            'Barcode' => $product->reference,
+            'SellPrice' => $product->price,
+        );
 
-        // ToDo add log $result
-        //Tools::dieObject($result);
-        //if (is_object($result)) {
-        //    $msg = $result->Success . $result->ErrorCode . $result->ErrorMessage;
-        //    PrestaShopLogger::addLog($msg, 1,  null, null, null, true, null);
-        //} else {
-        //    PrestaShopLogger::addLog($result, 1,  null, null, null, true, null);
-        //}
+        $obj = new hesabfaAPI();
+        $obj->itemSave($data);
     }
 
-    /**
-     * @param $params
-     */
+    public function saveCustomerProcess($id_customer){
+        $customer = new Customer($id_customer);
+        $data = array (
+            'Code' => $id_customer,
+            'Name' => $customer->firstname . ' ' . $customer->lastname,
+            'FirstName' => $customer->firstname,
+            'LastName' => $customer->lastname,
+            'ContactType' => 1,
+            'Email' => $customer->email,
+        );
+
+        $obj = new hesabfaAPI();
+        $obj->contactSave($data);
+    }
+
+    //Hooks
     public function hookActionCustomerAccountAdd($params)
     {
         // ToDo: check if customer exists
-
-        $method = 'contact/save';
         $data = array (
-            'contact' => array (
-                'Code' => $params['newCustomer']->id,
-                'Name' => $params['newCustomer']->firstname . ' ' . $params['newCustomer']->lastname,
-                'FirstName' => $params['newCustomer']->firstname,
-                'LastName' => $params['newCustomer']->lastname,
-                'ContactType' => 1,
-                'Email' => $params['newCustomer']->email,
-            )
+            'Code' => $params['newCustomer']->id,
+            'Name' => $params['newCustomer']->firstname . ' ' . $params['newCustomer']->lastname,
+            'FirstName' => $params['newCustomer']->firstname,
+            'LastName' => $params['newCustomer']->lastname,
+            'ContactType' => 1,
+            'Email' => $params['newCustomer']->email,
         );
 
-        $this->runAPI($data, $method);
+        $obj = new hesabfaAPI();
+        $obj->contactSave($data);
+    }
+
+    public function hookActionCustomerAccountUpdate($params)
+    {
+        $this->hookActionCustomerAccountAdd($params);
     }
 
     public function hookActionObjectAddressAddAfter($params)
     {
         $customer = new Customer($params['object']->id_customer);
 
-        $method = 'contact/save';
         $data = array (
-            'contact' => array (
-                'Code' => $params['object']->id_customer,
-                'Name' => $customer->firstname . ' ' . $customer->lastname,
-                'ContactType' => 1,
-                'NationalCode' => $params['object']->dni,
-                'EconomicCode' => $params['object']->vat_number,
-                'Address' => $params['object']->address1 . ' ' . $params['object']->address2,
-                'City' => $params['object']->city,
-                'State' => State::getNameById($params['object']->id_state),
-                'PostalCode' => $params['object']->postcode,
-                'Phone' => $params['object']->phone,
-                'Mobile' => $params['object']->phone_mobile,
-            )
+            'Code' => $params['object']->id_customer,
+            'Name' => $customer->firstname . ' ' . $customer->lastname,
+            'ContactType' => 1,
+            'NationalCode' => $params['object']->dni,
+            'EconomicCode' => $params['object']->vat_number,
+            'Address' => $params['object']->address1 . ' ' . $params['object']->address2,
+            'City' => $params['object']->city,
+            'State' => State::getNameById($params['object']->id_state),
+            'PostalCode' => $params['object']->postcode,
+            'Phone' => $params['object']->phone,
+            'Mobile' => $params['object']->phone_mobile,
         );
-
-        $this->runAPI($data, $method);
+    $obj = new hesabfaAPI();
+    $obj->contactSave($data);
     }
 
     public function hookActionObjectAddressUpdateAfter($params)
@@ -322,22 +370,36 @@ class Ssbhesabfa extends Module
         /* Place your code here. */
     }
 
-    public function hookActionProductAdd()
+    public function hookActionProductAdd($params)
     {
-        /* Place your code here. */
+        $data = array (
+            'Code' => $params['product']->id,
+            'Name' => $params['product']->name,
+            'ItemType' => 0,
+            'Barcode' => $params['product']->reference,
+            'SellPrice' => $params['product']->price,
+        );
+
+        $obj = new hesabfaAPI();
+        $obj->itemSave($data);
     }
 
-    public function hookActionProductDelete()
+    public function hookActionProductUpdate($params)
     {
-        /* Place your code here. */
+        $this->hookActionProductAdd($params);
+    }
+
+    public function hookActionProductDelete($params)
+    {
+        $data = array (
+            'Code' => $params['id_product'],
+        );
+
+        $obj = new hesabfaAPI();
+        $obj->itemDelete($data);
     }
 
     public function hookActionProductListOverride()
-    {
-        /* Place your code here. */
-    }
-
-    public function hookActionProductUpdate()
     {
         /* Place your code here. */
     }

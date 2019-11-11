@@ -24,9 +24,12 @@
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *  International Registered Trademark & Property of PrestaShop SA
  */
+//include(dirname(__FILE__) . '/../../../config/config.inc.php');
+//include(dirname(__FILE__) . '/../../../init.php');
 
 class hesabfaAPI
 {
+    //
     public function api_request($data = array(), $method)
     {
         if (!isset($method))
@@ -57,53 +60,53 @@ class hesabfaAPI
         curl_close($ch);
 
         if ($result == null) {
-            return $this->l('No response from Hesabfa');
+            return 'No response from Hesabfa';
         } else {
             $result = json_decode($result);
 
-            if ($result->Success == false) {
+            if (!isset($result->Success)) {
                 switch ($result->ErrorCode) {
                     case '100':
-                        return $this->l('InternalServerError');
+                        return 'InternalServerError';
                         break;
                     case '101':
-                        return $this->l('TooManyRequests');
+                        return 'TooManyRequests';
                         break;
                     case '103':
-                        return $this->l('MissingData');
+                        return 'MissingData';
                         break;
                     case '104':
-                        return $this->l('MissingParameter') . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return 'MissingParameter' . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '105':
-                        return $this->l('ApiDisabled');
+                        return 'ApiDisabled';
                         break;
                     case '106':
-                        return $this->l('UserIsNotOwner');
+                        return 'UserIsNotOwner';
                         break;
                     case '107':
-                        return $this->l('BusinessNotFound');
+                        return 'BusinessNotFound';
                         break;
                     case '108':
-                        return $this->l('BusinessExpired');
+                        return 'BusinessExpired';
                         break;
                     case '110':
-                        return $this->l('IdMustBeZero');
+                        return 'IdMustBeZero';
                         break;
                     case '111':
-                        return $this->l('IdMustNotBeZero');
+                        return 'IdMustNotBeZero';
                         break;
                     case '112':
-                        return $this->l('ObjectNotFound') . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return 'ObjectNotFound' . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '113':
-                        return $this->l('MissingApiKey');
+                        return 'MissingApiKey';
                         break;
                     case '114':
-                        return $this->l('ParameterIsOutOfRange') . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return 'ParameterIsOutOfRange' . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                     case '190':
-                        return $this->l('ApplicationError') . '. ErrorMessage: ' . $result->ErrorMessage;
+                        return 'ApplicationError' . '. ErrorMessage: ' . $result->ErrorMessage;
                         break;
                 }
             } else {
@@ -111,5 +114,170 @@ class hesabfaAPI
             }
         }
         return false;
+    }
+
+    //Contact functions
+    public function contactGet($code) {
+        $method = 'contact/get';
+        $data = array(
+            'code' => $code,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function contactGetContacts($queryInfo) {
+        $method = 'contact/getcontacts';
+        $data = array(
+            'queryInfo' => $queryInfo,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function contactSave($contact) {
+        $method = 'contact/save';
+        $data = array(
+            'contact' => $contact,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function contactBatchSave($contacts) {
+        $method = 'contact/batchsave';
+        $data = array(
+            'contacts' => $contacts,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function contactDelete($code) {
+        $method = 'contact/delete';
+        $data = array(
+            'code' => $code,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    //Items functions
+    public function itemGet($code) {
+        $method = 'item/get';
+        $data = array(
+            'code' => $code,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function itemGetByBarcode($barcode) {
+        $method = 'item/getByBarcode';
+        $data = array(
+            'barcode' => $barcode,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function itemGetItems($queryInfo) {
+        $method = 'item/getitems';
+        $data = array(
+            'queryInfo' => $queryInfo,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function itemSave($item) {
+        $method = 'item/save';
+        $data = array(
+            'item' => $item,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function itemBatchSave($items) {
+        $method = 'item/batchsave';
+        $data = array(
+            'items' => $items,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function itemDelete($code) {
+        $method = 'item/delete';
+        $data = array(
+            'code' => $code,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    //Invoice functions
+    public function invoiceGet($number, $type) {
+        $method = 'invoice/get';
+        $data = array(
+            'number' => $number,
+            'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceGetInvoices($queryinfo, $type) {
+        $method = 'invoice/getinvoices';
+        $data = array(
+            'code' => $queryinfo,
+            'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceSave($invoice) {
+        $method = 'invoice/save';
+        $data = array(
+            'invoice' => $invoice,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceDelete($number, $type) {
+        $method = 'invoice/delete';
+        $data = array(
+            'code' => $number,
+            'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null) {
+        $method = 'invoice/savepayment';
+        $data = array(
+            'number' => $number,
+            'bankCode' => $bankCode,
+            'date' => $date,
+            'amount' => $amount,
+            'transactionNumber' => $transactionNumber,
+            'description' => $description,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceGetOnlineInvoiceURL($number, $type) {
+        $method = 'invoice/getonlineinvoiceurl';
+        $data = array(
+            'number' => $number,
+            'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
     }
 }
