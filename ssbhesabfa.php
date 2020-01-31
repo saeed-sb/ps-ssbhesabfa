@@ -212,7 +212,7 @@ class Ssbhesabfa extends Module
             'form' => array(
                 'legend' => array(
                     'title' => $this->l('Add Product'),
-                    'icon' => 'icon-product',
+                    'icon' => 'icon-store',
                 ),
                 'input' => array(
                     array(
@@ -238,7 +238,7 @@ class Ssbhesabfa extends Module
             'form' => array(
                 'legend' => array(
                     'title' => $this->l('Add Customer'),
-                    'icon' => 'icon-person',
+                    'icon' => 'icon-user',
                 ),
                 'input' => array(
                     array(
