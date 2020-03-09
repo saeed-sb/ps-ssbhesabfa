@@ -1,5 +1,5 @@
 {*
-* 2007-2019 PrestaShop
+* 2007-2020 PrestaShop
 *
 * NOTICE OF LICENSE
 *
@@ -24,7 +24,7 @@
 *}
 
 <div class="panel">
-    <h3><i class="icon icon-credit-card"></i> {l s='Settings' mod='pixelupdate'}</h3>
+    <h3><i class="icon icon-credit-card"></i> {l s='Settings' mod='ssbhesabfa'}</h3>
     <!-- Nav tabs -->
     <ul class="nav nav-tabs" id="myTab" role="tablist">
         <li class="nav-item {if $current_form_tab == null}active{/if}">

@@ -28,7 +28,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-include ('classes/hesabfaAPI.php');
+include('classes/hesabfaAPI.php');
 
 class Ssbhesabfa extends Module
 {
@@ -38,7 +38,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.2';
+        $this->version = '0.8.3';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -247,7 +247,7 @@ class Ssbhesabfa extends Module
     {
         $input_array = array();
 
-        foreach($this->getPaymentMethodsName() as $item)
+        foreach ($this->getPaymentMethodsName() as $item)
         {
             $input = array(
                 'col' => 3,
@@ -468,7 +468,7 @@ class Ssbhesabfa extends Module
         $options = array();
         $states = new OrderState();
 
-        foreach($states->getOrderStates($this->context->language->id) as $item)
+        foreach ($states->getOrderStates($this->context->language->id) as $item)
         {
             array_push($options, array(
                 'id_option' => $item['id_order_state'],
@@ -614,7 +614,8 @@ Select "No" to ignore the number of Prestashop invoices.'),
     }
 
     //
-    protected function setConfigFormValues($form = null){
+    protected function setConfigFormValues($form = null)
+    {
         $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
             Configuration::updateValue($key, Tools::getValue($key));
@@ -622,20 +623,21 @@ Select "No" to ignore the number of Prestashop invoices.'),
     }
 
     //General submit form action
-    protected function postProcess(){
-
+    protected function postProcess()
+    {
     }
 
     //Functions
     //Return Payment methods Name and ID
-    public function getPaymentMethodsName() {
+    public function getPaymentMethodsName()
+    {
         $payment_array = array();
         $modules_list = Module::getPaymentModules();
 
-        foreach($modules_list as $module)
+        foreach ($modules_list as $module)
         {
             $module_obj = Module::getInstanceById($module['id_module']);
-            $module_Id = str_replace(' ','_', 'SSBHESABFA_BANK_' . strtoupper($module_obj->displayName));
+            $module_Id = str_replace(' ','_', 'SSBHESABFA_BANK_' . Tools::strtoupper($module_obj->displayName));
 
             array_push($payment_array, array(
                 'name' => $module_obj->displayName,
@@ -646,7 +648,8 @@ Select "No" to ignore the number of Prestashop invoices.'),
         return $payment_array;
     }
 
-    public function setChangeHook(){
+    public function setChangeHook()
+    {
         $store_url = $this->context->link->getBaseLink();
         //TODO: if store installed in local -> show error
 

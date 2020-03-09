@@ -39,8 +39,7 @@ $pixelupdate = Module::getInstanceByName('ssbhesabfa');
 
 /* Check if the module is enabled */
 if ($pixelupdate->active) {
-
-    $post = file_get_contents('php://input');
+    $post = Tools::file_get_contents('php://input');
     $result = json_decode($post);
 
     //file_put_contents('php://stdout', 'Webhook event received: ' . print_r($result, true) . "\r\n");
@@ -49,4 +48,3 @@ if ($pixelupdate->active) {
     fwrite($file, $result);
     fclose($file);
 }
-

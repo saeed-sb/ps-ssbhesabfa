@@ -1,7 +1,6 @@
 <?php
-
 /**
- * 2007-2019 PrestaShop
+ * 2007-2020 PrestaShop
  *
  * NOTICE OF LICENSE
  *
@@ -24,13 +23,11 @@
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *  International Registered Trademark & Property of PrestaShop SA
  */
-//include(dirname(__FILE__) . '/../../../config/config.inc.php');
-//include(dirname(__FILE__) . '/../../../init.php');
 
 class hesabfaAPI
 {
     //
-    public function api_request($data = array(), $method)
+    public function apiRequest($method, $data = array())
     {
         if (!isset($method))
             return false;
@@ -117,174 +114,193 @@ class hesabfaAPI
     }
 
     //Contact functions
-    public function contactGet($code) {
+    public function contactGet($code)
+    {
         $method = 'contact/get';
         $data = array(
             'code' => $code,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function contactGetById($idList) {
+    public function contactGetById($idList)
+    {
         $method = 'contact/getById';
         $data = array(
             'idList' => $idList,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function contactGetContacts($queryInfo) {
+    public function contactGetContacts($queryInfo)
+    {
         $method = 'contact/getcontacts';
         $data = array(
             'queryInfo' => $queryInfo,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function contactSave($contact) {
+    public function contactSave($contact)
+    {
         $method = 'contact/save';
         $data = array(
             'contact' => $contact,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function contactBatchSave($contacts) {
+    public function contactBatchSave($contacts)
+    {
         $method = 'contact/batchsave';
         $data = array(
             'contacts' => $contacts,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function contactDelete($code) {
+    public function contactDelete($code)
+    {
         $method = 'contact/delete';
         $data = array(
             'code' => $code,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
     //Items functions
-    public function itemGet($code) {
+    public function itemGet($code)
+    {
         $method = 'item/get';
         $data = array(
             'code' => $code,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemGetByBarcode($barcode) {
+    public function itemGetByBarcode($barcode)
+    {
         $method = 'item/getByBarcode';
         $data = array(
             'barcode' => $barcode,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemGetById($idList) {
+    public function itemGetById($idList)
+    {
         $method = 'item/getById';
         $data = array(
             'idList' => $idList,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemGetItems($queryInfo) {
+    public function itemGetItems($queryInfo)
+    {
         $method = 'item/getitems';
         $data = array(
             'queryInfo' => $queryInfo,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemSave($item) {
+    public function itemSave($item)
+    {
         $method = 'item/save';
         $data = array(
             'item' => $item,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemBatchSave($items) {
+    public function itemBatchSave($items)
+    {
         $method = 'item/batchsave';
         $data = array(
             'items' => $items,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function itemDelete($code) {
+    public function itemDelete($code)
+    {
         $method = 'item/delete';
         $data = array(
             'code' => $code,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
     //Invoice functions
-    public function invoiceGet($number, $type) {
+    public function invoiceGet($number, $type)
+    {
         $method = 'invoice/get';
         $data = array(
             'number' => $number,
             'type' => $type,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetById($id) {
+    public function invoiceGetById($id)
+    {
         $method = 'invoice/get';
         $data = array(
             'id' => $id,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetInvoices($queryinfo, $type) {
+    public function invoiceGetInvoices($queryinfo, $type)
+    {
         $method = 'invoice/getinvoices';
         $data = array(
             'code' => $queryinfo,
             'type' => $type,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceSave($invoice) {
+    public function invoiceSave($invoice)
+    {
         $method = 'invoice/save';
         $data = array(
             'invoice' => $invoice,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceDelete($number, $type) {
+    public function invoiceDelete($number, $type)
+    {
         $method = 'invoice/delete';
         $data = array(
             'code' => $number,
             'type' => $type,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null) {
+    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null)
+    {
         $method = 'invoice/savepayment';
         $data = array(
             'number' => $number,
@@ -295,36 +311,39 @@ class hesabfaAPI
             'description' => $description,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetOnlineInvoiceURL($number, $type) {
+    public function invoiceGetOnlineInvoiceURL($number, $type)
+    {
         $method = 'invoice/getonlineinvoiceurl';
         $data = array(
             'number' => $number,
             'type' => $type,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
     //Settings functions
-    public function settingSetChangeHook($url, $hookPassword) {
+    public function settingSetChangeHook($url, $hookPassword)
+    {
         $method = 'invoice/getonlineinvoiceurl';
         $data = array(
             'url' => $url,
             'hookPassword' => $hookPassword,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 
-    public function settingGetChanges($start) {
+    public function settingGetChanges($start)
+    {
         $method = 'setting/GetChanges';
         $data = array(
             'start' => $start,
         );
 
-        return $this->api_request($data, $method);
+        return $this->apiRequest($method, $data);
     }
 }
