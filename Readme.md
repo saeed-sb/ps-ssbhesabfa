@@ -1,2 +1,2 @@
 # ssbhesabfa
- Connet "Hesabfa Online Accounting" to Prestashop
+ Connect "Hesabfa Online Accounting" to Prestashop
