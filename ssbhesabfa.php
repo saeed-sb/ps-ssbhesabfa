@@ -32,13 +32,13 @@ include ('classes/hesabfaAPI.php');
 
 class Ssbhesabfa extends Module
 {
-    protected $config_form = false;
+    protected $config_form = true;
 
     public function __construct()
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.1.0';
+        $this->version = '0.8.2';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -54,10 +54,34 @@ class Ssbhesabfa extends Module
 
     public function install()
     {
+
+        //Setting
         Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
         Configuration::updateValue('SSBHESABFA_ACCOUNT_USERNAME', null);
         Configuration::updateValue('SSBHESABFA_ACCOUNT_PASSWORD', null);
         Configuration::updateValue('SSBHESABFA_ACCOUNT_API', null);
+        Configuration::updateValue('SSBHESABFA_WEBHOOK_PASSWORD', bin2hex(openssl_random_pseudo_bytes(16)));
+        Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', 0);
+
+        //Invoice
+        Configuration::updateValue('SSBHESABFA_INVOICE_SAVE_STATUS', 2);
+        Configuration::updateValue('SSBHESABFA_INVOICE_PAYMENT_STATUS', 2);
+        Configuration::updateValue('SSBHESABFA_INVOICE_NUMBER_TYPE', false);
+
+        //Contact
+        Configuration::updateValue('SSBHESABFA_CONTACT_SAVE_STATUS', 1);
+        Configuration::updateValue('SSBHESABFA_CONTACT_NODE_FAMILY', 'Online Store Customer\'s');
+        Configuration::updateValue('SSBHESABFA_CONTACT_NUMBER_TYPE', 1);
+        Configuration::updateValue('SSBHESABFA_CONTACT_NUMBER_PREFIX', 0);
+
+        //Item
+        Configuration::updateValue('SSBHESABFA_ITEM_SAVE_STATUS', 1);
+        Configuration::updateValue('SSBHESABFA_ITEM_NUMBER_TYPE', 1);
+        Configuration::updateValue('SSBHESABFA_ITEM_NUMBER_PREFIX', 0);
+        Configuration::updateValue('SSBHESABFA_ITEM_UNKNOWN_ID', 0);
+        Configuration::updateValue('SSBHESABFA_ITEM_GIFT_WRAPPING_ID', 0);
+        Configuration::updateValue('SSBHESABFA_ITEM_UPDATE_PRICE', 0);
+        Configuration::updateValue('SSBHESABFA_ITEM_UPDATE_QUANTITY', 0);
 
         return parent::install() &&
             $this->registerHook('actionCustomerAccountAdd') &&
@@ -78,10 +102,13 @@ class Ssbhesabfa extends Module
 
     public function uninstall()
     {
-        Configuration::deleteByName('SSBHESABFA_LIVE_MODE');
-        Configuration::deleteByName('SSBHESABFA_ACCOUNT_USERNAME');
-        Configuration::deleteByName('SSBHESABFA_ACCOUNT_PASSWORD');
-        Configuration::deleteByName('SSBHESABFA_ACCOUNT_API');
+        $sql = "SELECT `name` FROM `" . _DB_PREFIX_ . "configuration` 
+                WHERE `name` LIKE '%SSBHESABFA_%'";
+        $configurations = Db::getInstance()->ExecuteS($sql);
+
+        foreach ($configurations as $configuration) {
+            Configuration::deleteByName($configuration['name']);
+        }
 
         return parent::uninstall();
     }
@@ -95,36 +122,43 @@ class Ssbhesabfa extends Module
         /**
          * If values have been submitted in the form, process.
          */
-        if (((bool)Tools::isSubmit('submitSsbhesabfaSaveSettings')) == true) {
-            $this->postProcess();
-            $output .= $this->displayConfirmation($this->l('Setting Updated.'));
-        } elseif (((bool)Tools::getValue('submitSaveProduct')) == true) {
-            if (Tools::getValue('SSBHESABFA_PRODUCT_ID') != null) {
-                $this->saveProductProcess(Tools::getValue('SSBHESABFA_PRODUCT_ID'));
-                $output .= $this->displayConfirmation($this->l('Product Added/Updated successfuly.'));
-            } else {
-                $output .= $this->displayError($this->l('Enter Product ID'));
-            }
-        } elseif (((bool)Tools::getValue('submitSaveCustomer')) == true) {
-            if (Tools::getValue('SSBHESABFA_CUSTOMER_ID') != null) {
-                $this->saveCustomerProcess(Tools::getValue('SSBHESABFA_CUSTOMER_ID'));
-                $output .= $this->displayConfirmation($this->l('Customer Added/Updated successfuly.'));
-            } else {
-                $output .= $this->displayError($this->l('Enter Customer ID'));
-            }
+        if (((bool)Tools::isSubmit('submitSsbhesabfaModuleConfig')) == true) {
+            $this->setConfigFormValues('Config');
+            $this->setChangeHook();
+            $output .= $this->displayConfirmation($this->l('API Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleBank')) == true) {
+            $this->setConfigFormValues('Bank');
+            $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleItem')) == true) {
+            $this->setConfigFormValues('Item');
+            $output .= $this->displayConfirmation($this->l('Catalog Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleContact')) == true) {
+            $this->setConfigFormValues('Contact');
+            $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleInvoice')) == true) {
+            $this->setConfigFormValues('Invoice');
+            $output .= $this->displayConfirmation($this->l('Orders Setting updated.'));
         }
 
-        $this->context->smarty->assign('module_dir', $this->_path);
+        $this->context->smarty->assign('current_form_tab', Tools::getValue('form_tab'));
 
+        $forms = array('Config', 'Bank', 'Item', 'Contact', 'Invoice');
+        foreach ($forms as $form) {
+            $html = $this->renderForm($form);
+            $this->context->smarty->assign($form, $html);
+        }
+
+        // To load form inside your template
         $output .= $this->context->smarty->fetch($this->local_path.'views/templates/admin/configure.tpl');
 
-        return $output.$this->renderForm();
+        // To return form html only
+        return $output;
     }
 
     /**
-     * Create the form that will be displayed in the configuration of your module.
+     * Create the form that will be displayed in the configuration of module.
      */
-    protected function renderForm()
+    protected function renderForm($form = null)
     {
         $helper = new HelperForm();
 
@@ -135,28 +169,29 @@ class Ssbhesabfa extends Module
         $helper->allow_employee_form_lang = Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG', 0);
 
         $helper->identifier = $this->identifier;
-        $helper->submit_action = 'submitSsbhesabfaModule';
+        //$helper->submit_action = 'submitSsbhesabfaModuleSaveSetting';
+        $helper->submit_action = 'submitSsbhesabfaModule'.$form;
         $helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false)
-            .'&configure='.$this->name.'&tab_module='.$this->tab.'&module_name='.$this->name;
+            .'&configure='.$this->name.'&tab_module='.$this->tab.'&module_name='.$this->name.'&form_tab='.$form;
         $helper->token = Tools::getAdminTokenLite('AdminModules');
-
         $helper->tpl_vars = array(
-            'fields_value' => $this->getConfigFormValues(), /* Add values for your inputs */
+            'fields_value' => $this->getConfigFormValues($form), /* Add values for your inputs */
             'languages' => $this->context->controller->getLanguages(),
             'id_language' => $this->context->language->id,
         );
 
-        return $helper->generateForm(array($this->getConfigForm(), $this->getItemForm(), $this->getContactForm()));
+        $function_name = 'get'.$form.'Form';
+        return $helper->generateForm(array($this->$function_name()));
     }
 
+    /**
+     * Configuration Tab's form
+     * @return array
+     */
     protected function getConfigForm()
     {
         return array(
             'form' => array(
-                'legend' => array(
-                'title' => $this->l('Settings'),
-                'icon' => 'icon-cogs',
-                ),
                 'input' => array(
                     array(
                         'type' => 'switch',
@@ -179,6 +214,8 @@ class Ssbhesabfa extends Module
                     ),
                     array(
                         'col' => 3,
+                        'top' => $this->l('Text to display before the fieldset'),
+                        'title' => 'test title',
                         'type' => 'text',
                         'prefix' => '<i class="icon icon-envelope"></i>',
                         'desc' => $this->l('Enter a username'),
@@ -199,8 +236,36 @@ class Ssbhesabfa extends Module
                 ),
                 'submit' => array(
                     'title' => $this->l('Save'),
-                    'name' => 'submitSsbhesabfaSaveSettings',
-                    'id' => 'submitSsbhesabfaSaveSettings',
+                    //'name' => 'submitSsbhesabfaModuleSaveSetting',
+                    //'id' => 'submitSsbhesabfaModuleSaveSetting',
+                ),
+            ),
+        );
+    }
+
+    protected function getBankForm()
+    {
+        $input_array = array();
+
+        foreach($this->getPaymentMethodsName() as $item)
+        {
+            $input = array(
+                'col' => 3,
+                'type' => 'text',
+                'name' => $item['ID'],
+                'label' => $item['name'],
+            );
+
+            array_push($input_array, $input);
+        }
+
+        return array(
+            'form' => array(
+                'input' => $input_array,
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                    //'name' => 'submitSsbhesabfaModuleSaveSetting',
+                    //'id' => 'submitSsbhesabfaModuleSaveSetting',
                 ),
             ),
         );
@@ -210,23 +275,120 @@ class Ssbhesabfa extends Module
     {
         return array(
             'form' => array(
-                'legend' => array(
-                    'title' => $this->l('Add Product'),
-                    'icon' => 'icon-store',
-                ),
                 'input' => array(
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Save Product:'),
+                        'desc' => $this->l('Choose how to add Product into Hesabfa'),
+                        'name' => 'SSBHESABFA_ITEM_SAVE_STATUS',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 0,
+                                    'name' => $this->l('Manually'),
+                                ),
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Automatically after Add/Update Product'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('Automatically before Save Invoice'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Product Code'),
+                        'desc' => $this->l('Choose Product Code type in Hesabfa'),
+                        'name' => 'SSBHESABFA_ITEM_NUMBER_TYPE',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Same as Product ID in Online Store'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('Add prefix to Product ID in Online Store'),
+                                ),
+                                array(
+                                    'id_option' => 3,
+                                    'name' => $this->l('Choose Product Reference code'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
                     array(
                         'col' => 3,
                         'type' => 'text',
-                        'desc' => $this->l('Enter a Product ID'),
-                        'name' => 'SSBHESABFA_PRODUCT_ID',
-                        'label' => $this->l('Product ID'),
+                        'desc' => $this->l('Enter a prefix of Product ID, Maximum 999'),
+                        'name' => 'SSBHESABFA_ITEM_NUMBER_PREFIX',
+                        'label' => $this->l('Product ID prefix'),
+                    ),
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        'required' => true,
+                        'desc' => $this->l('Enter a Unknown product ID, it\'s use when product not define in Hesabfa'),
+                        'name' => 'SSBHESABFA_ITEM_UNKNOWN_ID',
+                        'label' => $this->l('Unknown Product ID'),
+                    ),
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        'desc' => $this->l('Enter a Gift Wrapping product ID in Hesabfa'),
+                        'name' => 'SSBHESABFA_ITEM_GIFT_WRAPPING_ID',
+                        'label' => $this->l('Gift Wrapping Service ID'),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Update Price'),
+                        'name' => 'SSBHESABFA_ITEM_UPDATE_PRICE',
+                        'is_bool' => true,
+                        'desc' => $this->l('Update Price after change in Hesabfa'),
+                        'values' => array(
+                            array(
+                                'id' => 'price_on',
+                                'value' => true,
+                                'label' => $this->l('Enabled')
+                            ),
+                            array(
+                                'id' => 'price_off',
+                                'value' => false,
+                                'label' => $this->l('Disabled')
+                            )
+                        ),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Update Quantity'),
+                        'name' => 'SSBHESABFA_ITEM_UPDATE_QUANTITY',
+                        'is_bool' => true,
+                        'desc' => $this->l('Update Quantity after change in Hesabfa'),
+                        'values' => array(
+                            array(
+                                'id' => 'quantity_on',
+                                'value' => true,
+                                'label' => $this->l('Enabled')
+                            ),
+                            array(
+                                'id' => 'quantity_off',
+                                'value' => false,
+                                'label' => $this->l('Disabled')
+                            )
+                        ),
                     ),
                 ),
                 'submit' => array(
-                    'title' => $this->l('Add/Update'),
-                    'name' => 'submitSaveProduct',
-                    'id' => 'submitSaveProduct',
+                    'title' => $this->l('Save'),
+                    //'name' => 'submitSsbhesabfaModuleSaveSetting',
+                    //'id' => 'submitSsbhesabfaModuleSaveSetting',
                 ),
             ),
         );
@@ -236,83 +398,270 @@ class Ssbhesabfa extends Module
     {
         return array(
             'form' => array(
-                'legend' => array(
-                    'title' => $this->l('Add Customer'),
-                    'icon' => 'icon-user',
-                ),
                 'input' => array(
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Save Customer:'),
+                        'desc' => $this->l('Choose how to add Customer into Hesabfa'),
+                        'name' => 'SSBHESABFA_CONTACT_SAVE_STATUS',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('After Register/Update Customer'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('Before insert Invoice'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Customer Code'),
+                        'desc' => $this->l('Choose "Customer Code" type in Hesabfa'),
+                        'name' => 'SSBHESABFA_CONTACT_NUMBER_TYPE',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Same as Customer ID in Online Store'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('Add prefix to Customer ID in Online Store'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
                     array(
                         'col' => 3,
                         'type' => 'text',
-                        'desc' => $this->l('Enter a Customer ID'),
-                        'name' => 'SSBHESABFA_CUSTOMER_ID',
-                        'label' => $this->l('Customer ID'),
+                        'desc' => $this->l('Enter a prefix of Customer ID, Maximum 999'),
+                        'name' => 'SSBHESABFA_CONTACT_NUMBER_PREFIX',
+                        'label' => $this->l('Customer ID prefix'),
+                    ),
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        'desc' => $this->l('Enter a Customer\'s Group in Hesabfa'),
+                        'name' => 'SSBHESABFA_CONTACT_NODE_FAMILY',
+                        'label' => $this->l('Customer\'s Group'),
                     ),
                 ),
                 'submit' => array(
-                    'title' => $this->l('Add/Update'),
-                    'name' => 'submitSaveCustomer',
-                    'id' => 'submitSaveCustomer',
+                    'title' => $this->l('Save'),
+                    //'name' => 'submitSsbhesabfaModuleSaveSetting',
+                    //'id' => 'submitSsbhesabfaModuleSaveSetting',
                 ),
             ),
         );
     }
 
-    protected function getConfigFormValues()
+    protected function getInvoiceForm()
     {
+        $options = array();
+        $states = new OrderState();
+
+        foreach($states->getOrderStates($this->context->language->id) as $item)
+        {
+            array_push($options, array(
+                'id_option' => $item['id_order_state'],
+                'name' => $item['name'],
+            ));
+        }
+
         return array(
-            'SSBHESABFA_LIVE_MODE' => Configuration::get('SSBHESABFA_LIVE_MODE'),
-            'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-            'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
-            'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-
-            'SSBHESABFA_PRODUCT_ID' => null,
-            'SSBHESABFA_CUSTOMER_ID' => null,
-
+            'form' => array(
+                'input' => array(
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Save Order State:'),
+                        'desc' => $this->l('At what "Order State" should the invoice be save in Hesabfa?'),
+                        'name' => 'SSBHESABFA_INVOICE_SAVE_STATUS',
+                        'options' => array(
+                            'query' => $options,
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Save Payment State'),
+                        'desc' => $this->l('At what "Order State" should the payment be save in Hesabfa?'),
+                        'name' => 'SSBHESABFA_INVOICE_PAYMENT_STATUS',
+                        'options' => array(
+                            'query' => $options,
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('Serialized Invoice Number?'),
+                        'name' => 'SSBHESABFA_INVOICE_NUMBER_TYPE',
+                        'is_bool' => true,
+                        'desc' => $this->l('Select "Yes" for the invoice number to be identical between Prestashop and Hesabfa.
+Select "No" to ignore the number of Prestashop invoices.'),
+                        'values' => array(
+                            array(
+                                'id' => 'invoice_no_on',
+                                'value' => true,
+                                'label' => $this->l('Yes')
+                            ),
+                            array(
+                                'id' => 'invoice_no_off',
+                                'value' => false,
+                                'label' => $this->l('No')
+                            )
+                        ),
+                    ),
+                ),
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                    //'name' => 'submitSsbhesabfaModuleSaveSetting',
+                    //'id' => 'submitSsbhesabfaModuleSaveSetting',
+                ),
+            ),
         );
     }
 
-    protected function postProcess()
+    //
+    protected function getConfigFormValues($form = null)
     {
-        $form_values = $this->getConfigFormValues();
+        switch ($form) {
+            case 'Config':
+                $keys =  array(
+                    'SSBHESABFA_LIVE_MODE' => Configuration::get('SSBHESABFA_LIVE_MODE'),
+                    'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
+                    'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+                    'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+                );
+                break;
+            case 'Item':
+                $keys =  array(
+                    'SSBHESABFA_ITEM_SAVE_STATUS' => Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS'),
+                    'SSBHESABFA_ITEM_NUMBER_TYPE' => Configuration::get('SSBHESABFA_ITEM_NUMBER_TYPE'),
+                    'SSBHESABFA_ITEM_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
+                    'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
+                    'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
+                );
+                break;
+            case 'Contact':
+                $keys =  array(
+                    'SSBHESABFA_CONTACT_SAVE_STATUS' => Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS'),
+                    'SSBHESABFA_CONTACT_NUMBER_TYPE' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_TYPE'),
+                    'SSBHESABFA_CONTACT_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_PREFIX'),
+                    'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
+                );
+                break;
+            case 'Invoice':
+                $keys =  array(
+                    'SSBHESABFA_INVOICE_SAVE_STATUS' => Configuration::get('SSBHESABFA_INVOICE_SAVE_STATUS'),
+                    'SSBHESABFA_INVOICE_PAYMENT_STATUS' => Configuration::get('SSBHESABFA_INVOICE_PAYMENT_STATUS'),
+                    'SSBHESABFA_INVOICE_NUMBER_TYPE' => Configuration::get('SSBHESABFA_INVOICE_NUMBER_TYPE'),
+                );
+                break;
+            case 'Bank':
+                $keys = array();
+                $paymentsName = $this->getPaymentMethodsName();
+                foreach ($paymentsName as $item) {
+                    $keys[$item['ID']] = Configuration::get($item['ID']);
+                }
+                break;
+            default:
+                $keys =  array(
+                    'SSBHESABFA_LIVE_MODE' => Configuration::get('SSBHESABFA_LIVE_MODE'),
+                    'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
+                    'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+                    'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
 
+                    'SSBHESABFA_PRODUCT_ID' => null,
+                    'SSBHESABFA_CUSTOMER_ID' => null,
+
+                    'SSBHESABFA_ITEM_SAVE_STATUS' => Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS'),
+                    'SSBHESABFA_ITEM_NUMBER_TYPE' => Configuration::get('SSBHESABFA_ITEM_NUMBER_TYPE'),
+                    'SSBHESABFA_ITEM_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
+                    'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
+                    'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
+
+                    'SSBHESABFA_CONTACT_SAVE_STATUS' => Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS'),
+                    'SSBHESABFA_CONTACT_NUMBER_TYPE' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_TYPE'),
+                    'SSBHESABFA_CONTACT_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_PREFIX'),
+                    'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
+
+                    'SSBHESABFA_INVOICE_SAVE_STATUS' => Configuration::get('SSBHESABFA_INVOICE_SAVE_STATUS'),
+                    'SSBHESABFA_INVOICE_PAYMENT_STATUS' => Configuration::get('SSBHESABFA_INVOICE_PAYMENT_STATUS'),
+                    'SSBHESABFA_INVOICE_NUMBER_TYPE' => Configuration::get('SSBHESABFA_INVOICE_NUMBER_TYPE'),
+                );
+
+                //Get config form value in Payment Method's tab
+                $paymentsName = $this->getPaymentMethodsName();
+                foreach ($paymentsName as $item) {
+                    $keys[$item['ID']] = Configuration::get($item['ID']);
+                }
+        }
+        return $keys;
+    }
+
+    //
+    protected function setConfigFormValues($form = null){
+        $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
             Configuration::updateValue($key, Tools::getValue($key));
         }
     }
 
-    //
-    public function saveProductProcess($id_product){
-        $id_lang = Language::getIdByIso('fa');
-        $product = new Product($id_product);
+    //General submit form action
+    protected function postProcess(){
+
+    }
+
+    //Functions
+    //Return Payment methods Name and ID
+    public function getPaymentMethodsName() {
+        $payment_array = array();
+        $modules_list = Module::getPaymentModules();
+
+        foreach($modules_list as $module)
+        {
+            $module_obj = Module::getInstanceById($module['id_module']);
+            $module_Id = str_replace(' ','_', 'SSBHESABFA_BANK_' . strtoupper($module_obj->displayName));
+
+            array_push($payment_array, array(
+                'name' => $module_obj->displayName,
+                'ID' => $module_Id,
+            ));
+        }
+
+        return $payment_array;
+    }
+
+    public function setChangeHook(){
+        $store_url = $this->context->link->getBaseLink();
+        //TODO: if store installed in local -> show error
+
         $data = array (
-            'Code' => $id_product,
-            'Name' => $product->name[$id_lang],
-            'ItemType' => 0,
-            'Barcode' => $product->reference,
-            'SellPrice' => $product->price,
+            'url' => $store_url . 'modules/ssbhesabfa/hesabfa-webhook.php?token=' . Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10),
+            'hookPassword' => Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD'),
         );
 
         $obj = new hesabfaAPI();
-        $obj->itemSave($data);
+        $obj->settingSetChangeHook($data);
     }
 
-    public function saveCustomerProcess($id_customer){
-        $customer = new Customer($id_customer);
-        $data = array (
-            'Code' => $id_customer,
-            'Name' => $customer->firstname . ' ' . $customer->lastname,
-            'FirstName' => $customer->firstname,
-            'LastName' => $customer->lastname,
-            'ContactType' => 1,
-            'Email' => $customer->email,
-        );
-
-        $obj = new hesabfaAPI();
-        $obj->contactSave($data);
-    }
 
     //Hooks
+    //Contact
     public function hookActionCustomerAccountAdd($params)
     {
         // ToDo: check if customer exists
@@ -351,13 +700,32 @@ class Ssbhesabfa extends Module
             'Phone' => $params['object']->phone,
             'Mobile' => $params['object']->phone_mobile,
         );
-    $obj = new hesabfaAPI();
-    $obj->contactSave($data);
+        $obj = new hesabfaAPI();
+        $obj->contactSave($data);
     }
 
     public function hookActionObjectAddressUpdateAfter($params)
     {
         $this->hookActionObjectAddressAddAfter($params);
+    }
+
+    //Invoice
+    public function hookActionValidateOrder()
+    {
+        /* Place your code here. */
+        //$params['order']->total_paid;
+        //$params['id_order'];
+        //$params['customer']->id;
+    }
+
+    public function hookActionOrderStatusUpdate()
+    {
+        /* Place your code here. */
+    }
+
+    public function hookDisplayPaymentReturn()
+    {
+        /* Place your code here. */
     }
 
     public function hookActionOrderReturn()
@@ -370,6 +738,7 @@ class Ssbhesabfa extends Module
         /* Place your code here. */
     }
 
+    //Item
     public function hookActionProductAdd($params)
     {
         $data = array (
@@ -400,16 +769,6 @@ class Ssbhesabfa extends Module
     }
 
     public function hookActionProductListOverride()
-    {
-        /* Place your code here. */
-    }
-
-    public function hookActionValidateOrder()
-    {
-        /* Place your code here. */
-    }
-
-    public function hookDisplayPaymentReturn()
     {
         /* Place your code here. */
     }

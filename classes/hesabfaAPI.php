@@ -126,6 +126,15 @@ class hesabfaAPI
         return $this->api_request($data, $method);
     }
 
+    public function contactGetById($idList) {
+        $method = 'contact/getById';
+        $data = array(
+            'idList' => $idList,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
     public function contactGetContacts($queryInfo) {
         $method = 'contact/getcontacts';
         $data = array(
@@ -181,6 +190,15 @@ class hesabfaAPI
         return $this->api_request($data, $method);
     }
 
+    public function itemGetById($idList) {
+        $method = 'item/getById';
+        $data = array(
+            'idList' => $idList,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
     public function itemGetItems($queryInfo) {
         $method = 'item/getitems';
         $data = array(
@@ -223,6 +241,15 @@ class hesabfaAPI
         $data = array(
             'number' => $number,
             'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function invoiceGetById($id) {
+        $method = 'invoice/get';
+        $data = array(
+            'id' => $id,
         );
 
         return $this->api_request($data, $method);
@@ -276,6 +303,26 @@ class hesabfaAPI
         $data = array(
             'number' => $number,
             'type' => $type,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    //Settings functions
+    public function settingSetChangeHook($url, $hookPassword) {
+        $method = 'invoice/getonlineinvoiceurl';
+        $data = array(
+            'url' => $url,
+            'hookPassword' => $hookPassword,
+        );
+
+        return $this->api_request($data, $method);
+    }
+
+    public function settingGetChanges($start) {
+        $method = 'setting/GetChanges';
+        $data = array(
+            'start' => $start,
         );
 
         return $this->api_request($data, $method);
