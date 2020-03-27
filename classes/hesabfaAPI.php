@@ -24,7 +24,7 @@
  *  International Registered Trademark & Property of PrestaShop SA
  */
 
-class hesabfaAPI
+class hesabfaApi
 {
     //
     public function apiRequest($method, $data = array())
@@ -39,7 +39,6 @@ class hesabfaAPI
         ), $data);
 
         $data_string = json_encode($data);
-
         $url = 'https://api.hesabfa.com/v1/' . $method;
 
         $ch = curl_init();
@@ -246,7 +245,7 @@ class hesabfaAPI
     }
 
     //Invoice functions
-    public function invoiceGet($number, $type)
+    public function invoiceGet($number, $type = 0)
     {
         $method = 'invoice/get';
         $data = array(
@@ -267,12 +266,12 @@ class hesabfaAPI
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetInvoices($queryinfo, $type)
+    public function invoiceGetInvoices($queryinfo, $type = 0)
     {
         $method = 'invoice/getinvoices';
         $data = array(
-            'code' => $queryinfo,
             'type' => $type,
+            'queryInfo' => $queryinfo,
         );
 
         return $this->apiRequest($method, $data);
@@ -288,7 +287,7 @@ class hesabfaAPI
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceDelete($number, $type)
+    public function invoiceDelete($number, $type = 0)
     {
         $method = 'invoice/delete';
         $data = array(
@@ -314,7 +313,7 @@ class hesabfaAPI
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetOnlineInvoiceURL($number, $type)
+    public function invoiceGetOnlineInvoiceURL($number, $type = 0)
     {
         $method = 'invoice/getonlineinvoiceurl';
         $data = array(
@@ -328,7 +327,7 @@ class hesabfaAPI
     //Settings functions
     public function settingSetChangeHook($url, $hookPassword)
     {
-        $method = 'invoice/getonlineinvoiceurl';
+        $method = 'setting/SetChangeHook';
         $data = array(
             'url' => $url,
             'hookPassword' => $hookPassword,

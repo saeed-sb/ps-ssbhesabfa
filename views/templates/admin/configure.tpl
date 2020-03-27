@@ -18,7 +18,7 @@
 * needs please refer to http://www.prestashop.com for more information.
 *
 *  @author    PrestaShop SA <contact@prestashop.com>
-*  @copyright 2007-2019 PrestaShop SA
+*  @copyright 2007-2020 PrestaShop SA
 *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 *  International Registered Trademark & Property of PrestaShop SA
 *}
@@ -42,7 +42,7 @@
         <li class="nav-item {if $current_form_tab == 'Bank'}active{/if}">
             <a class="nav-link" id="payment-tab" data-toggle="tab" href="#payment" role="tab" aria-controls="payment" aria-selected="false">Payment Methods</a>
         </li>
-        <li class="nav-item {if $current_form_tab == 'Config'}active{/if}">
+        <li class="nav-item {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}">
             <a class="nav-link" id="api-tab" data-toggle="tab" href="#api" role="tab" aria-controls="api" aria-selected="false">API</a>
         </li>
     </ul>
@@ -58,16 +58,6 @@
         <div class="tab-pane {if $current_form_tab == 'Invoice'}active{/if}" id="orders" role="tabpanel" aria-labelledby="orders-tab">{$Invoice}</div>
         <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
         <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">{$Bank}</div>
-        <div class="tab-pane {if $current_form_tab == 'Config'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}
-            <div class="panel">
-                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sed sed risus pretium quam. Tellus elementum sagittis vitae et leo duis ut diam. Posuere lorem ipsum dolor sit amet. Scelerisque felis imperdiet proin fermentum leo vel. Ornare suspendisse sed nisi lacus sed viverra tellus in. Elit scelerisque mauris pellentesque pulvinar. Cursus risus at ultrices mi. Scelerisque viverra mauris in aliquam. Sed euismod nisi porta lorem mollis aliquam ut porttitor leo. Ullamcorper morbi tincidunt ornare massa. Arcu cursus euismod quis viverra nibh. Pellentesque habitant morbi tristique senectus et netus et malesuada fames. Neque convallis a cras semper auctor neque vitae. Erat pellentesque adipiscing commodo elit at imperdiet dui accumsan. Pharetra magna ac placerat vestibulum lectus mauris ultrices eros in. Mattis ullamcorper velit sed ullamcorper morbi tincidunt.</p>
-
-                <div class="panel-footer">
-                    <button type="submit" value="1" id="submitSsbhesabfaModuleTestConnection" name="submitSsbhesabfaModuleTestConnection" class="btn btn-default pull-right">
-                        <i class="process-icon-save"></i>Test Connection!
-                    </button>
-                </div>
-            </div>
-        </div>
+        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}{$Test}</div>
     </div>
 </div>

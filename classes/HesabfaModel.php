@@ -24,36 +24,22 @@
  *  International Registered Trademark & Property of PrestaShop SA
  */
 
-include(dirname(__FILE__) . '/../../config/config.inc.php');
-include(dirname(__FILE__) . '/../../init.php');
+class HesabfaModel extends ObjectModel
+{
+    public static $definition = [
+        'table' => 'ssb_hesabfa',
+        'primary' => 'id_ssb_hesabfa',
+        'multilang' => false,
+        'fields' => [
+            'id_ssb_hesabfa' => ['type' => self::TYPE_INT, 'validate' => 'isUnsignedInt'],
+            'obj_type' => ['type' => self::TYPE_STRING, 'db_type' => 'varchar(32)'],
+            'id_hesabfa' => ['type' => self::TYPE_INT, 'db_type' => 'int(10)', 'validate' => 'isUnsignedInt'],
+            'id_ps' => ['type' => self::TYPE_INT, 'db_type' => 'int(10)', 'validate' => 'isUnsignedInt'],
+        ],
+    ];
 
-
-/* Check security token */
-if (!Tools::isPHPCLI()) {
-    if (Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10) != Tools::getValue('token') || !Module::isInstalled('ssbhesabfa')) {
-        PrestaShopLogger::addLog('Bad token');
-        die('Bad token');
-    }
-}
-$ssbHesabfa = Module::getInstanceByName('ssbhesabfa');
-
-/* Check if the module is enabled */
-if ($ssbHesabfa->active) {
-    $post = Tools::file_get_contents('php://input');
-    $result = json_decode($post);
-
-    if (!isset($result)) {
-        PrestaShopLogger::addLog('ssbhesabfa: Invalid Webhook request.');
-        die('Invalid request.');
-    }
-
-    PrestaShopLogger::addLog($result);
-
-
-
-    //file_put_contents('php://stdout', 'Webhook event received: ' . print_r($result, true) . "\r\n");
-
-    //$file = fopen('debug.txt', 'w');
-    //fwrite($file, $result);
-    //fclose($file);
+    public $id_ssb_hesabfa;
+    public $obj_type;
+    public $id_hesabfa;
+    public $id_ps;
 }

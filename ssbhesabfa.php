@@ -28,11 +28,12 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-include('classes/hesabfaAPI.php');
+include('classes/hesabfaApi.php');
+include('classes/HesabfaModel.php');
 
 class Ssbhesabfa extends Module
 {
-    protected $config_form = true;
+    protected $config_form = false;
 
     public function __construct()
     {
@@ -64,12 +65,15 @@ class Ssbhesabfa extends Module
         Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', 0);
 
         //Invoice
+        $default_currency = Currency::getDefaultCurrency();
         Configuration::updateValue('SSBHESABFA_INVOICE_SAVE_STATUS', 2);
         Configuration::updateValue('SSBHESABFA_INVOICE_PAYMENT_STATUS', 2);
         Configuration::updateValue('SSBHESABFA_INVOICE_NUMBER_TYPE', false);
+        Configuration::updateValue('SSBHESABFA_INVOICE_DEFAULT_CURRENCY', $default_currency->id);
 
         //Contact
         Configuration::updateValue('SSBHESABFA_CONTACT_SAVE_STATUS', 1);
+        Configuration::updateValue('SSBHESABFA_CONTACT_ADDRESS_STATUS', 1);
         Configuration::updateValue('SSBHESABFA_CONTACT_NODE_FAMILY', 'Online Store Customer\'s');
         Configuration::updateValue('SSBHESABFA_CONTACT_NUMBER_TYPE', 1);
         Configuration::updateValue('SSBHESABFA_CONTACT_NUMBER_PREFIX', 0);
@@ -96,6 +100,7 @@ class Ssbhesabfa extends Module
             $this->registerHook('actionProductUpdate') &&
             $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('actionValidateOrder') &&
+            $this->registerHook('actionOrderStatusUpdate') &&
             $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('displayPaymentReturn');
     }
@@ -123,26 +128,32 @@ class Ssbhesabfa extends Module
          * If values have been submitted in the form, process.
          */
         if (((bool)Tools::isSubmit('submitSsbhesabfaModuleConfig')) == true) {
-            $this->setConfigFormValues('Config');
+            $this->setConfigFormsValues('Config');
             $this->setChangeHook();
             $output .= $this->displayConfirmation($this->l('API Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleBank')) == true) {
-            $this->setConfigFormValues('Bank');
+            $this->setConfigFormsValues('Bank');
             $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleItem')) == true) {
-            $this->setConfigFormValues('Item');
+            $this->setConfigFormsValues('Item');
             $output .= $this->displayConfirmation($this->l('Catalog Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleContact')) == true) {
-            $this->setConfigFormValues('Contact');
+            $this->setConfigFormsValues('Contact');
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleInvoice')) == true) {
-            $this->setConfigFormValues('Invoice');
+            $this->setConfigFormsValues('Invoice');
             $output .= $this->displayConfirmation($this->l('Orders Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleTest')) == true) {
+            if ($this->testConnection()) {
+                $output .= $this->displayConfirmation($this->l('Test Successfully'));
+            } else {
+                $output .= $this->displayError($this->l('Connecting to Hesabfa fail, Please check the Credential and API Key.'));
+            }
         }
 
         $this->context->smarty->assign('current_form_tab', Tools::getValue('form_tab'));
 
-        $forms = array('Config', 'Bank', 'Item', 'Contact', 'Invoice');
+        $forms = array('Config', 'Bank', 'Item', 'Contact', 'Invoice', 'Test');
         foreach ($forms as $form) {
             $html = $this->renderForm($form);
             $this->context->smarty->assign($form, $html);
@@ -243,6 +254,17 @@ class Ssbhesabfa extends Module
         );
     }
 
+    protected function getTestForm()
+    {
+        return array(
+            'form' => array(
+                'submit' => array(
+                    'title' => $this->l('Test Connection'),
+                ),
+            ),
+        );
+    }
+
     protected function getBankForm()
     {
         $input_array = array();
@@ -252,7 +274,7 @@ class Ssbhesabfa extends Module
             $input = array(
                 'col' => 3,
                 'type' => 'text',
-                'name' => $item['ID'],
+                'name' => $item['id'],
                 'label' => $item['name'],
             );
 
@@ -421,6 +443,30 @@ class Ssbhesabfa extends Module
                     ),
                     array(
                         'type' => 'select',
+                        'label' => $this->l('Update Customer Address:'),
+                        'desc' => $this->l('Choose when update Customer address in Hesabfa'),
+                        'name' => 'SSBHESABFA_CONTACT_ADDRESS_STATUS',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Use first customer address'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('update address with Invoice address'),
+                                ),
+                                array(
+                                    'id_option' => 3,
+                                    'name' => $this->l('update address with Delivery address'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
+                        'type' => 'select',
                         'label' => $this->l('Customer Code'),
                         'desc' => $this->l('Choose "Customer Code" type in Hesabfa'),
                         'name' => 'SSBHESABFA_CONTACT_NUMBER_TYPE',
@@ -465,14 +511,23 @@ class Ssbhesabfa extends Module
 
     protected function getInvoiceForm()
     {
-        $options = array();
+        $status_options = array();
         $states = new OrderState();
 
         foreach ($states->getOrderStates($this->context->language->id) as $item)
         {
-            array_push($options, array(
+            array_push($status_options, array(
                 'id_option' => $item['id_order_state'],
                 'name' => $item['name'],
+            ));
+        }
+
+        $currency_options = array();
+        foreach (Currency::getCurrencies() as $currency)
+        {
+            array_push($currency_options, array(
+                'id_option' => $currency['id_currency'],
+                'name' => $currency['name'],
             ));
         }
 
@@ -485,7 +540,7 @@ class Ssbhesabfa extends Module
                         'desc' => $this->l('At what "Order State" should the invoice be save in Hesabfa?'),
                         'name' => 'SSBHESABFA_INVOICE_SAVE_STATUS',
                         'options' => array(
-                            'query' => $options,
+                            'query' => $status_options,
                             'id' => 'id_option',
                             'name' => 'name'
                         )
@@ -496,7 +551,7 @@ class Ssbhesabfa extends Module
                         'desc' => $this->l('At what "Order State" should the payment be save in Hesabfa?'),
                         'name' => 'SSBHESABFA_INVOICE_PAYMENT_STATUS',
                         'options' => array(
-                            'query' => $options,
+                            'query' => $status_options,
                             'id' => 'id_option',
                             'name' => 'name'
                         )
@@ -521,6 +576,17 @@ Select "No" to ignore the number of Prestashop invoices.'),
                             )
                         ),
                     ),
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Hesabfa Default Currency:'),
+                        'desc' => $this->l('if it\'s not available in dropdown, add it in Localization.'),
+                        'name' => 'SSBHESABFA_INVOICE_DEFAULT_CURRENCY',
+                        'options' => array(
+                            'query' => $currency_options,
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
                 ),
                 'submit' => array(
                     'title' => $this->l('Save'),
@@ -531,7 +597,7 @@ Select "No" to ignore the number of Prestashop invoices.'),
         );
     }
 
-    //
+    //Configuration form Values
     protected function getConfigFormValues($form = null)
     {
         switch ($form) {
@@ -548,7 +614,7 @@ Select "No" to ignore the number of Prestashop invoices.'),
                     'SSBHESABFA_ITEM_SAVE_STATUS' => Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS'),
                     'SSBHESABFA_ITEM_NUMBER_TYPE' => Configuration::get('SSBHESABFA_ITEM_NUMBER_TYPE'),
                     'SSBHESABFA_ITEM_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
-                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_UNKNOWN_ID'),
                     'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
@@ -557,6 +623,7 @@ Select "No" to ignore the number of Prestashop invoices.'),
             case 'Contact':
                 $keys =  array(
                     'SSBHESABFA_CONTACT_SAVE_STATUS' => Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS'),
+                    'SSBHESABFA_CONTACT_ADDRESS_STATUS' => Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS'),
                     'SSBHESABFA_CONTACT_NUMBER_TYPE' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_TYPE'),
                     'SSBHESABFA_CONTACT_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_PREFIX'),
                     'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
@@ -567,13 +634,14 @@ Select "No" to ignore the number of Prestashop invoices.'),
                     'SSBHESABFA_INVOICE_SAVE_STATUS' => Configuration::get('SSBHESABFA_INVOICE_SAVE_STATUS'),
                     'SSBHESABFA_INVOICE_PAYMENT_STATUS' => Configuration::get('SSBHESABFA_INVOICE_PAYMENT_STATUS'),
                     'SSBHESABFA_INVOICE_NUMBER_TYPE' => Configuration::get('SSBHESABFA_INVOICE_NUMBER_TYPE'),
+                    'SSBHESABFA_INVOICE_DEFAULT_CURRENCY' => Configuration::get('SSBHESABFA_INVOICE_DEFAULT_CURRENCY'),
                 );
                 break;
             case 'Bank':
                 $keys = array();
                 $paymentsName = $this->getPaymentMethodsName();
                 foreach ($paymentsName as $item) {
-                    $keys[$item['ID']] = Configuration::get($item['ID']);
+                    $keys[$item['id']] = Configuration::get($item['id']);
                 }
                 break;
             default:
@@ -589,12 +657,13 @@ Select "No" to ignore the number of Prestashop invoices.'),
                     'SSBHESABFA_ITEM_SAVE_STATUS' => Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS'),
                     'SSBHESABFA_ITEM_NUMBER_TYPE' => Configuration::get('SSBHESABFA_ITEM_NUMBER_TYPE'),
                     'SSBHESABFA_ITEM_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
-                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX'),
+                    'SSBHESABFA_ITEM_UNKNOWN_ID' => Configuration::get('SSBHESABFA_ITEM_UNKNOWN_ID'),
                     'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
 
                     'SSBHESABFA_CONTACT_SAVE_STATUS' => Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS'),
+                    'SSBHESABFA_CONTACT_ADDRESS_STATUS' => Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS'),
                     'SSBHESABFA_CONTACT_NUMBER_TYPE' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_TYPE'),
                     'SSBHESABFA_CONTACT_NUMBER_PREFIX' => Configuration::get('SSBHESABFA_CONTACT_NUMBER_PREFIX'),
                     'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
@@ -602,19 +671,19 @@ Select "No" to ignore the number of Prestashop invoices.'),
                     'SSBHESABFA_INVOICE_SAVE_STATUS' => Configuration::get('SSBHESABFA_INVOICE_SAVE_STATUS'),
                     'SSBHESABFA_INVOICE_PAYMENT_STATUS' => Configuration::get('SSBHESABFA_INVOICE_PAYMENT_STATUS'),
                     'SSBHESABFA_INVOICE_NUMBER_TYPE' => Configuration::get('SSBHESABFA_INVOICE_NUMBER_TYPE'),
+                    'SSBHESABFA_INVOICE_DEFAULT_CURRENCY' => Configuration::get('SSBHESABFA_INVOICE_DEFAULT_CURRENCY'),
                 );
 
                 //Get config form value in Payment Method's tab
                 $paymentsName = $this->getPaymentMethodsName();
                 foreach ($paymentsName as $item) {
-                    $keys[$item['ID']] = Configuration::get($item['ID']);
+                    $keys[$item['id']] = Configuration::get($item['id']);
                 }
         }
         return $keys;
     }
 
-    //
-    protected function setConfigFormValues($form = null)
+    protected function setConfigFormsValues($form = null)
     {
         $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
@@ -627,6 +696,15 @@ Select "No" to ignore the number of Prestashop invoices.'),
     {
     }
 
+    protected function testConnection()
+    {
+        $connection = $this->setChangeHook();
+        if (isset($connection) && $connection->Success)
+            return true;
+        else
+            return false;
+    }
+
     //Functions
     //Return Payment methods Name and ID
     public function getPaymentMethodsName()
@@ -637,12 +715,32 @@ Select "No" to ignore the number of Prestashop invoices.'),
         foreach ($modules_list as $module)
         {
             $module_obj = Module::getInstanceById($module['id_module']);
-            $module_Id = str_replace(' ','_', 'SSBHESABFA_BANK_' . Tools::strtoupper($module_obj->displayName));
+            $module_Id = str_replace(' ', '_', 'SSBHESABFA_BANK_' . Tools::strtoupper($module_obj->displayName));
 
             array_push($payment_array, array(
                 'name' => $module_obj->displayName,
-                'ID' => $module_Id,
+                'id' => $module_Id,
             ));
+        }
+
+        if (Module::isInstalled('psf_prestapay')) {
+            $prestapay = Module::getInstanceByName('psf_prestapay');
+
+            /* Check if the module is enabled */
+            if ($prestapay->active) {
+                //die(var_dump($prestapay->getModulePlugins(1)));
+                $psf_prestapay = new psf_prestapay();
+                $plugins = $psf_prestapay->getModulePlugins(1);
+                //var_dump($plugins->gateway);
+                //$plugins = $prestapay->getModulePlugins(1);
+                foreach ($plugins as $key => $plugin) {
+                    //echo '<pre>';
+                    //echo $key;
+                    //var_dump(get_class($plugin));
+                    //var_dump($plugin);
+                    //echo '</pre>';
+                }
+            }
         }
 
         return $payment_array;
@@ -653,32 +751,306 @@ Select "No" to ignore the number of Prestashop invoices.'),
         $store_url = $this->context->link->getBaseLink();
         //TODO: if store installed in local -> show error
 
-        $data = array (
-            'url' => $store_url . 'modules/ssbhesabfa/hesabfa-webhook.php?token=' . Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10),
-            'hookPassword' => Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD'),
-        );
+        //$url = $store_url . 'modules/ssbhesabfa/ssbhesabfa-webhook.php?token=' . Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10);
+        $url = 'https://webhook.site/2c4b65ef-723d-4ab7-ba49-895ba8c39b99';
+        $hookPassword = Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD');
 
-        $obj = new hesabfaAPI();
-        $obj->settingSetChangeHook($data);
+        $hesabfa = new hesabfaApi();
+
+        return $hesabfa->settingSetChangeHook($url, $hookPassword);
     }
 
+    //Items
+    public function getItemCodeByProductId($id_product)
+    {
+        if (!isset($id_product))
+            return false;
+
+        $product = new Product($id_product);
+
+        switch (Configuration::get('SSBHESABFA_ITEM_NUMBER_TYPE'))
+        {
+            case 1:
+                $code = $id_product;
+                break;
+            case 2:
+                $code = Configuration::get('SSBHESABFA_ITEM_NUMBER_PREFIX') * 1000 + $id_product;
+                break;
+            case 3:
+                if(isset($product->reference))
+                    $code = $product->reference;
+                else
+                    $code = Configuration::get('SSBHESABFA_ITEM_UNKNOWN_ID');
+                break;
+        }
+
+        return $code;
+    }
+
+    public function setItem($id_product)
+    {
+        if (!isset($id_product))
+            return false;
+
+        $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
+        $code = $this->getItemCodeByProductId($id_product);
+
+        $hesabfa = new hesabfaApi();
+        $result = $hesabfa->itemGet($code);
+
+        if ($result->Success == false && $result->ErrorCode == 112)
+        {
+            $product = new Product($id_product);
+
+            $itemType = ($product->is_virtual == 1 ? 1 : 0);
+            $item = array (
+                'Code' => $code,
+                'Name' => $product->name[$id_default_lang],
+                'ItemType' => $itemType,
+                'Barcode' => $product->upc,
+            );
+
+            return $hesabfa->itemSave($item);
+        }
+        return false;
+    }
+
+    //Contact
+    public function getContactCodeByCustomerId($id_customer)
+    {
+        if (!isset($id_customer))
+            return false;
+
+        switch (Configuration::get('SSBHESABFA_CONTACT_NUMBER_TYPE'))
+        {
+            case 1:
+                $code = $id_customer;
+                break;
+            case 2:
+                $code = Configuration::get('SSBHESABFA_CONTACT_NUMBER_PREFIX') * 1000 + $id_customer;
+                break;
+        }
+
+        return $code;
+    }
+
+    public function setContact($id_customer)
+    {
+        if (!isset($id_customer))
+            return false;
+
+        $code = $this->getContactCodeByCustomerId($id_customer);
+
+        $hesabfa = new hesabfaApi();
+        $result = $hesabfa->contactGet($code);
+
+        if (($result->Success == false && $result->ErrorCode == 112))
+        {
+            $customer = new Customer($id_customer);
+            $data = array (
+                'Code' => $code,
+                'Name' => $customer->firstname . ' ' . $customer->lastname,
+                'FirstName' => $customer->firstname,
+                'LastName' => $customer->lastname,
+                'ContactType' => 1,
+                'Email' => $customer->email,
+            );
+            return $hesabfa->contactSave($data);
+        } elseif ($result->Success == true) {
+            return $result;
+        }
+        return false;
+    }
+
+    public function setContactAddress($id_customer, $id_address)
+    {
+        if (!isset($id_customer) || !isset($id_address))
+            return false;
+
+        $code = $this->getContactCodeByCustomerId($id_customer);
+
+        $customer = new Customer($id_customer);
+        $address = new Address($id_address);
+
+        $data = array (
+            'Code' => $code,
+            'Name' => $customer->firstname . ' ' . $customer->lastname,
+            'FirstName' => $customer->firstname,
+            'LastName' => $customer->lastname,
+            'ContactType' => 1,
+            'NationalCode' => $address->dni,
+            'EconomicCode' => $address->vat_number,
+            'Address' => $address->address1 . ' ' . $address->address2,
+            'City' => $address->city,
+            'State' => State::getNameById($address->id_state)  == false ? null : State::getNameById($address->id_state),
+            'Country' => Country::getNameById($this->context->language->id, $address->id_country) == false ? null : Country::getNameById($this->context->language->id, $address->id_country),
+            'PostalCode' => $address->postcode,
+            'Phone' => $address->phone,
+            'Mobile' => $address->phone_mobile,
+            'Email' => $customer->email,
+        );
+
+        $hesabfa = new hesabfaApi();
+        return $hesabfa->contactSave($data);
+    }
+
+    //Invoice
+    public function getInvoiceCodeByOrderId($id_order)
+    {
+        if (!isset($id_order))
+            return false;
+
+        if (Configuration::get('SSBHESABFA_INVOICE_NUMBER_TYPE') == true){
+            $code = $id_order;
+        } else {
+            $order = new Order($id_order);
+
+            $hesabfa = new hesabfaApi();
+            $data = array(
+                'SortBy' => 'Number',
+                'SortDesc' => false,
+                'Take' => 100,
+                'Skip' => 0,
+                'Filters' => array(
+                    array(
+                        'Property' => 'Reference',
+                        'Operator' => '=',
+                        'Value' => $order->reference,
+                    ),
+                ),
+            );
+
+            $invoices = $hesabfa->invoiceGetInvoices($data);
+
+            if ($invoices->Success && $invoices->Result->FilteredCount == 1) {
+                $code = $invoices->Result->List[0]->Number;
+            } else {
+                $code = null;
+            }
+        }
+        return $code;
+    }
+
+    public function setOrder($id_order)
+    {
+        if (!isset($id_order))
+            return false;
+
+        $order = new Order($id_order);
+        $hesabfa = new hesabfaApi();
+
+        $items = array();
+        $i = 0;
+        $products = $order->getProducts();
+        foreach ($products as $key => $product) {
+            $code = $this->getItemCodeByProductId($product['product_id']);
+
+            // add product before insert invoice
+            $result = $hesabfa->itemGet($code);
+            if (!$result->Success && $result->ErrorCode == 112) {
+                if (Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS') == 2) {
+                    $this->setItem($product['product_id']);
+                } else {
+                    $code = Configuration::get('SSBHESABFA_ITEM_UNKNOWN_ID');
+                }
+            }
+
+            $item = array (
+                'RowNumber' => $i,
+                'ItemCode' => (int)$code,
+                'Description' => $product['product_name'],
+                'Quantity' => (int)$product['product_quantity'],
+                'UnitPrice' => (int)$this->getOrderPriceInDefaultCurrency($product['product_price'], $id_order),
+                'Discount' => $this->getOrderPriceInDefaultCurrency($product['reduction_amount_tax_excl'], $id_order),
+                'Tax' => $this->getOrderPriceInDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
+            );
+            array_push($items, $item);
+            $i++;
+        }
+
+        if ($order->total_wrapping_tax_excl > 0)
+        {
+            array_push($items, array (
+                'RowNumber' => $i+1,
+                'ItemCode' => $this->getItemCodeByProductId(Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID')),
+                'Description' => $this->l('Gift wrapping Service'),
+                'Quantity' => 1,
+                'UnitPrice' => $this->getOrderPriceInDefaultCurrency(($order->total_wrapping), $id_order),
+                'Discount' => 0,
+                'Tax' => $this->getOrderPriceInDefaultCurrency(($order->total_wrapping_tax_incl - $order->total_wrapping_tax_excl), $id_order),
+            ));
+        }
+
+        $data = array (
+            'Number' => $this->getInvoiceCodeByOrderId($id_order),
+            'InvoiceType' => 0,
+            'ContactCode' => $this->getContactCodeByCustomerId($order->id_customer),
+            'Date' => $order->date_add,
+            'DueDate' => $order->date_add,
+            'Reference' => $order->reference,
+            'Status' => 2,
+            'Freight' => $this->getOrderPriceInDefaultCurrency($order->total_shipping_tax_incl, $id_order),
+            'InvoiceItems' => $items,
+        );
+
+        return $hesabfa->invoiceSave($data);
+    }
+
+    public function getOrderPriceInDefaultCurrency($price, $id_order)
+    {
+        if (!isset($price) || !isset($id_order))
+            return false;
+
+        $order = new Order($id_order);
+        $currency = new Currency(Configuration::get('SSBHESABFA_INVOICE_DEFAULT_CURRENCY'));
+        $price = $price / $order->conversion_rate / $currency->getConversionRate();
+
+        return $price;
+    }
+
+    public function setOrderPayment($id_order)
+    {
+        if (!isset($id_order))
+            return false;
+
+        $code = $this->getInvoiceCodeByOrderId($id_order);
+        $hesabfa = new hesabfaApi();
+        $result = $hesabfa->invoiceGet($code,0);
+
+        if (($result->Success == false && $result->ErrorCode == 112))
+        {
+            $order = new Order($id_order);
+            $payments = $order->getOrderPaymentCollection();
+
+            foreach ($payments as $payment) {
+                $orderPayment = new OrderPayment($payment['id_order_payment']);
+
+                return $hesabfa->invoiceSavePayment($code, $this->getBankCodeByName($orderPayment->payment_method), $orderPayment->date_add, $orderPayment->amount, $orderPayment->transaction_id, $orderPayment->card_number);
+            }
+        }
+        return false;
+    }
+
+    public function getBankCodeByPaymentName($paymentName)
+    {
+        $configurationName = str_replace(' ', '_', 'SSBHESABFA_BANK_' . Tools::strtoupper($paymentName));
+
+        $sql = 'SELECT `value` FROM `' . _DB_PREFIX_ . 'configuration` 
+                WHERE `name` LIKE `'. $configurationName .'`
+        ';
+        $bankCode = Db::getInstance()->ExecuteS($sql);
+
+        return $bankCode[0];
+    }
 
     //Hooks
     //Contact
     public function hookActionCustomerAccountAdd($params)
     {
-        // ToDo: check if customer exists
-        $data = array (
-            'Code' => $params['newCustomer']->id,
-            'Name' => $params['newCustomer']->firstname . ' ' . $params['newCustomer']->lastname,
-            'FirstName' => $params['newCustomer']->firstname,
-            'LastName' => $params['newCustomer']->lastname,
-            'ContactType' => 1,
-            'Email' => $params['newCustomer']->email,
-        );
-
-        $obj = new hesabfaAPI();
-        $obj->contactSave($data);
+        if (Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS') == 1)
+        {
+            $this->setContact($params['newCustomer']->id);
+        }
     }
 
     public function hookActionCustomerAccountUpdate($params)
@@ -688,32 +1060,11 @@ Select "No" to ignore the number of Prestashop invoices.'),
 
     public function hookActionObjectAddressAddAfter($params)
     {
-        $customer = new Customer($params['object']->id_customer);
-
-        $data = array (
-            'Code' => $params['object']->id_customer,
-            'Name' => $customer->firstname . ' ' . $customer->lastname,
-            'ContactType' => 1,
-            'NationalCode' => $params['object']->dni,
-            'EconomicCode' => $params['object']->vat_number,
-            'Address' => $params['object']->address1 . ' ' . $params['object']->address2,
-            'City' => $params['object']->city,
-            'State' => State::getNameById($params['object']->id_state),
-            'PostalCode' => $params['object']->postcode,
-            'Phone' => $params['object']->phone,
-            'Mobile' => $params['object']->phone_mobile,
-        );
-        $obj = new hesabfaAPI();
-        $obj->contactSave($data);
-    }
-
-    public function hookActionObjectAddressUpdateAfter($params)
-    {
-        $this->hookActionObjectAddressAddAfter($params);
+        $this->setContactAddress($params['object']->id_customer, $params['object']->id);
     }
 
     //Invoice
-    public function hookActionValidateOrder()
+    public function hookActionValidateOrder($params)
     {
         /* Place your code here. */
         //$params['order']->total_paid;
@@ -721,19 +1072,38 @@ Select "No" to ignore the number of Prestashop invoices.'),
         //$params['customer']->id;
     }
 
-    public function hookActionOrderStatusUpdate()
+    public function hookActionOrderStatusUpdate($params)
     {
-        /* Place your code here. */
-    }
+        if ((int)$params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_SAVE_STATUS'))
+        {
+            if (Configuration::get('SSBHESABFA_CONTACT_SAVE_STATUS') == 2)
+            {
+                $order = new Order((int)$params['id_order']);
+                //set customer if not exists
+                $contact = $this->setContact($order->id_customer);
+                if ($contact->Success)
+                {
+                    // add Contact Address
+                    if (Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS') == 2) {
+                        $this->setContactAddress($order->id_customer, $order->id_address_invoice);
+                    } elseif (Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS') == 3) {
+                        $this->setContactAddress($order->id_customer, $order->id_address_delivery);
+                    }
 
-    public function hookDisplayPaymentReturn()
-    {
-        /* Place your code here. */
-    }
+                    // add invoice
+                    $this->setOrder((int)$params['id_order']);
+                }
+            }
+        }
 
-    public function hookActionOrderReturn()
-    {
-        /* Place your code here. */
+        //ToDo: add payment checks
+        if ((int)$params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_PAYMENT_STATUS'))
+        {
+            $this->setOrderPayment((int)$params['id_order']);
+        }
+
+        //haminjoori
+        //Validate::isLoadedObject($customer);
     }
 
     public function hookActionPaymentConfirmation()
@@ -744,35 +1114,14 @@ Select "No" to ignore the number of Prestashop invoices.'),
     //Item
     public function hookActionProductAdd($params)
     {
-        $data = array (
-            'Code' => $params['product']->id,
-            'Name' => $params['product']->name,
-            'ItemType' => 0,
-            'Barcode' => $params['product']->reference,
-            'SellPrice' => $params['product']->price,
-        );
+        if (Configuration::get('SSBHESABFA_ITEM_SAVE_STATUS') == 1)
+            return $this->setItem($params['product']->id);
 
-        $obj = new hesabfaAPI();
-        $obj->itemSave($data);
+        return false;
     }
 
     public function hookActionProductUpdate($params)
     {
-        $this->hookActionProductAdd($params);
-    }
-
-    public function hookActionProductDelete($params)
-    {
-        $data = array (
-            'Code' => $params['id_product'],
-        );
-
-        $obj = new hesabfaAPI();
-        $obj->itemDelete($data);
-    }
-
-    public function hookActionProductListOverride()
-    {
-        /* Place your code here. */
+        return $this->hookActionProductAdd($params);
     }
 }
