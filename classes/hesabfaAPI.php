@@ -26,7 +26,6 @@
 
 class hesabfaApi
 {
-    //
     public function apiRequest($method, $data = array())
     {
         if (!isset($method))
@@ -39,6 +38,7 @@ class hesabfaApi
         ), $data);
 
         $data_string = json_encode($data);
+//die(var_dump($data_string));
         $url = 'https://api.hesabfa.com/v1/' . $method;
 
         $ch = curl_init();
@@ -258,7 +258,7 @@ class hesabfaApi
 
     public function invoiceGetById($id)
     {
-        $method = 'invoice/get';
+        $method = 'invoice/getById';
         $data = array(
             'id' => $id,
         );
@@ -302,8 +302,8 @@ class hesabfaApi
     {
         $method = 'invoice/savepayment';
         $data = array(
-            'number' => $number,
-            'bankCode' => $bankCode,
+            'number' => (int)$number,
+            'bankCode' => (int)$bankCode,
             'date' => $date,
             'amount' => $amount,
             'transactionNumber' => $transactionNumber,
@@ -336,7 +336,7 @@ class hesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function settingGetChanges($start)
+    public function settingGetChanges($start = 0)
     {
         $method = 'setting/GetChanges';
         $data = array(
@@ -344,5 +344,19 @@ class hesabfaApi
         );
 
         return $this->apiRequest($method, $data);
+    }
+
+    public function settingGetBanks()
+    {
+        $method = 'setting/getBanks';
+
+        return $this->apiRequest($method);
+    }
+
+    public function settingGetCurrency()
+    {
+        $method = 'setting/getCurrency';
+
+        return $this->apiRequest($method);
     }
 }

@@ -58,6 +58,6 @@
         <div class="tab-pane {if $current_form_tab == 'Invoice'}active{/if}" id="orders" role="tabpanel" aria-labelledby="orders-tab">{$Invoice}</div>
         <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
         <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">{$Bank}</div>
-        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}{$Test}</div>
+        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
     </div>
 </div>

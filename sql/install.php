@@ -25,7 +25,7 @@
 */
 
 $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa` (
-    `id_ssb_hesabfa` int(11) UNSIGNED NOT NULL,
+    `id_ssb_hesabfa` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
     `obj_type` varchar(32) NOT NULL,
     `id_hesabfa` int(11) UNSIGNED NOT NULL,
     `id_ps` int(11) UNSIGNED NOT NULL,
