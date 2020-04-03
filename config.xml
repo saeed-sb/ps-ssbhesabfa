@@ -2,8 +2,8 @@
 <module>
     <name>ssbhesabfa</name>
     <displayName><![CDATA[Hesabfa Online Accounting]]></displayName>
-    <version><![CDATA[0.8.4]]></version>
-    <description><![CDATA[Connect &quot;Hesabfa Online Accounting&quot; to Prestashop]]></description>
+    <version><![CDATA[0.8.5]]></version>
+    <description><![CDATA[Connect Hesabfa Online Accounting to Prestashop]]></description>
     <author><![CDATA[Saeed Sattar Beglou]]></author>
     <tab><![CDATA[billing_invoicing]]></tab>
     <is_configurable>1</is_configurable>

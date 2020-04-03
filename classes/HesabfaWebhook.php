@@ -36,8 +36,7 @@ class HesabfaWebhook
         $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
         $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
         if ($changes->Success) {
-            foreach ($changes->Result as $item)
-            {
+            foreach ($changes->Result as $item) {
                 switch ($item->ObjectType) {
                     case 'Invoice':
                         $this->setInvoiceChangesById($item->ObjectId);
@@ -67,23 +66,29 @@ class HesabfaWebhook
         $invoice = $hesabfaApi->invoiceGetById($id);
         if ($invoice->Success) {
             //1.set new Hesabfa Invoice Code if changes
-            $id_order = $invoice->Result->Tag;
             $number = $invoice->Result->Number;
+            $json = json_decode($invoice->Result->Tag);
+            $id_order = $json->id_order;
+
             if ($invoice->Result->InvoiceType == 0) {
                 //check if Tag not set in hesabfa
-                if ($id_order == 0){
+                if ($id_order == 0) {
                     $msg = 'This invoice is not define in OnlineStore';
                     PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'Order', $number, true);
                 } else {
-                    $hesabfa = new HesabfaModel(Ssbhesabfa::getObjectId('order', $id_order));
-                    if ($hesabfa->id_hesabfa != $number) {
-                        $id_hesabfa_old = $hesabfa->id_hesabfa;
-                        //ToDo: number must int, what can i do
-                        $hesabfa->id_hesabfa = $number;
-                        $hesabfa->update();
+                    //check if order exist in prestashop
+                    $id_obj = Ssbhesabfa::getObjectId('order', $id_order);
+                    if ($id_obj > 0) {
+                        $hesabfa = new HesabfaModel();
+                        if ($hesabfa->id_hesabfa != $number) {
+                            $id_hesabfa_old = $hesabfa->id_hesabfa;
+                            //ToDo: number must int, what can i do
+                            $hesabfa->id_hesabfa = $number;
+                            $hesabfa->update();
 
-                        $msg = 'Invoice Number changed. Old Number: ' . $id_hesabfa_old . '. New ID: ' . $number;
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
+                            $msg = 'Invoice Number changed. Old Number: ' . $id_hesabfa_old . '. New ID: ' . $number;
+                            PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
+                        }
                     }
                 }
             }
@@ -104,24 +109,30 @@ class HesabfaWebhook
         if ($contact->Success) {
             //1.set new Hesabfa Contact Code if changes
             $code = $contact->Result[0]->Code;
-            $id_customer = $contact->Result[0]->Tag;
+            $json = json_decode($contact->Result[0]->Tag);
+            $id_customer = $json->id_customer;
+
             //check if Tag not set in hesabfa
-            if ($id_customer == 0){
+            if ($id_customer == 0) {
                 $msg = 'This Customer is not define in OnlineStore';
                 PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'customer', $code, true);
 
                 return false;
             }
 
-            $hesabfa = new HesabfaModel(Ssbhesabfa::getObjectId('customer', $id_customer));
-            if ($hesabfa->id_hesabfa != $code) {
-                $id_hesabfa_old = $hesabfa->id_hesabfa;
+            //check if customer exist in prestashop
+            $id_obj = Ssbhesabfa::getObjectId('customer', $id_customer);
+            if ($id_obj > 0){
+                $hesabfa = new HesabfaModel();
+                if ($hesabfa->id_hesabfa != $code) {
+                    $id_hesabfa_old = $hesabfa->id_hesabfa;
 
-                $hesabfa->id_hesabfa = (int)$code;
-                $hesabfa->update();
+                    $hesabfa->id_hesabfa = (int)$code;
+                    $hesabfa->update();
 
-                $msg = 'Contact Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
+                    $msg = 'Contact Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
+                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
+                }
             }
         }
     }
@@ -133,39 +144,45 @@ class HesabfaWebhook
         $item = $hesabfaApi->itemGetById(array($id));
         if ($item->Success) {
             $code = $item->Result[0]->Code;
-            $id_product = $item->Result[0]->Tag;
+            $json = json_decode($item->Result[0]->Tag);
+            $id_product = $json->id_product;
+
             //check if Tag not set in hesabfa
-            if ($id_product == 0){
+            if ($id_product == 0) {
                 $msg = 'This Item is not define in OnlineStore';
                 PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'product', $code, true);
 
                 return false;
             }
+
+            //check if product exist in prestashop
             $id_obj = Ssbhesabfa::getObjectId('product', $id_product);
-            $hesabfa = new HesabfaModel($id_obj);
-            $product = new Product($id_product);
+            if ($id_obj > 0) {
+                $hesabfa = new HesabfaModel($id_obj);
+                $product = new Product($id_product);
 
-            //1.set new Hesabfa Item Code if changes
-            if ($hesabfa->id_hesabfa != $code) {
-                $id_hesabfa_old = $hesabfa->id_hesabfa;
-                $hesabfa->id_hesabfa = (int)$code;
-                $hesabfa->update();
+                //1.set new Hesabfa Item Code if changes
+                if ($hesabfa->id_hesabfa != $code) {
+                    $id_hesabfa_old = $hesabfa->id_hesabfa;
+                    $hesabfa->id_hesabfa = (int)$code;
+                    $hesabfa->update();
 
-                $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
-            }
-
-            //2.set new Price
-            if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
-                //ToDo check currency calculate
-                $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
-                if ($item->Result[0]->SellPrice != $price) {
-                    $old_price = $product->price;
-                    $product->price = $item->Result[0]->SellPrice;
-                    $product->update();
-
-                    $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->Result[0]->SellPrice;
+                    $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
                     PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                }
+
+                //2.set new Price
+                if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
+                    //ToDo check currency calculate
+                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
+                    if ($item->Result[0]->SellPrice != $price) {
+                        $old_price = $product->price;
+                        $product->price = $item->Result[0]->SellPrice;
+                        $product->update();
+
+                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->Result[0]->SellPrice;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
                 }
             }
         }
@@ -177,53 +194,58 @@ class HesabfaWebhook
         $hesabfaApi = new hesabfaApi();
         $item = $hesabfaApi->itemGet($code);
         if ($item->Success) {
-            $id_product = $item->Result->Tag;
+            $json = json_decode($item->Result->Tag);
+            $id_product = $json->id_product;
             //check if Tag not set in hesabfa
-            if ($id_product == 0){
+            if ($id_product == 0) {
                 $msg = 'Item with code: '. $code .' is not define in OnlineStore';
                 PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'product', $code, true);
 
                 return false;
             }
+
+            //check if product exist in prestashop
             $id_obj = Ssbhesabfa::getObjectId('product', $id_product);
-            $hesabfa = new HesabfaModel($id_obj);
-            $product = new Product($id_product);
+            if ($id_obj > 0) {
+                $hesabfa = new HesabfaModel($id_obj);
+                $product = new Product($id_product);
 
-            //1.set new Hesabfa Item Code if changes
-            if ($hesabfa->id_hesabfa != $code) {
-                $id_hesabfa_old = $hesabfa->id_hesabfa;
-                $hesabfa->id_hesabfa = (int)$code;
-                $hesabfa->update();
+                //1.set new Hesabfa Item Code if changes
+                if ($hesabfa->id_hesabfa != $code) {
+                    $id_hesabfa_old = $hesabfa->id_hesabfa;
+                    $hesabfa->id_hesabfa = (int)$code;
+                    $hesabfa->update();
 
-                $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
-            }
-
-            //2.set new Price
-            if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
-                //ToDo check currency calculate
-                $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
-                if ($item->Result->SellPrice != $price) {
-                    $old_price = $product->price;
-                    $product->price = $item->Result->SellPrice;
-                    $product->update();
-
-                    $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->Result->SellPrice;
+                    $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
                     PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                 }
-            }
 
-            //3.set new Quantity
-            if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
-                if ($item->Result->Stock != $product->quantity) {
-                    $old_quantity = $product->quantity;
-                    $product->quantity = $item->Result->Stock;
-                    $product->update();
+                //2.set new Price
+                if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
+                    //ToDo check currency calculate
+                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
+                    if ($item->Result->SellPrice != $price) {
+                        $old_price = $product->price;
+                        $product->price = $item->Result->SellPrice;
+                        $product->update();
 
-                    StockAvailable::setQuantity($id_product, null, $item->Result->Stock);
+                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->Result->SellPrice;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
+                }
 
-                    $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Result->Stock;
-                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                //3.set new Quantity
+                if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
+                    if ($item->Result->Stock != $product->quantity) {
+                        $old_quantity = $product->quantity;
+                        $product->quantity = $item->Result->Stock;
+                        $product->update();
+
+                        StockAvailable::setQuantity($id_product, null, $item->Result->Stock);
+
+                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Result->Stock;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
                 }
             }
         }

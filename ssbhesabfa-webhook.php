@@ -32,7 +32,7 @@ include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
 /* Check security token */
 if (!Tools::isPHPCLI()) {
     if (Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10) != Tools::getValue('token') || !Module::isInstalled('ssbhesabfa')) {
-        PrestaShopLogger::addLog('Bad token',2,null,null,null,true);
+        PrestaShopLogger::addLog('Bad token', 2, null, null, null, true);
         die('Bad token');
     }
 }
@@ -45,13 +45,12 @@ if ($ssbHesabfa->active) {
     $result = json_decode($post);
 
     if (!isset($result)) {
-        PrestaShopLogger::addLog('ssbhesabfa: Invalid Webhook request.',2,null,null,null,true);
+        PrestaShopLogger::addLog('ssbhesabfa - Invalid Webhook request.', 2, null, null, null, true);
         die('Invalid request.');
     }
 
-    if ($result->Password != Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD'))
-    {
-        PrestaShopLogger::addLog('ssbhesabfa: Invalid Webhook password.',2,null,null,null,true);
+    if ($result->Password != Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD')) {
+        PrestaShopLogger::addLog('ssbhesabfa - Invalid Webhook password.', 2, null, null, null, true);
         die('Invalid password.');
     }
 

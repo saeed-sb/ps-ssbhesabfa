@@ -28,7 +28,7 @@ class hesabfaApi
 {
     public function apiRequest($method, $data = array())
     {
-        if (!isset($method))
+        if ($method == null)
             return false;
 
         $data = array_merge(array(
