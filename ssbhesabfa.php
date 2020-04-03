@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.5';
+        $this->version = '0.8.6';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -134,13 +134,22 @@ class Ssbhesabfa extends Module
             $this->setConfigFormsValues('Contact');
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProducts')) == true) {
-            $this->exportProducts();
-            $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                $this->exportProducts();
+                $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
+            }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportCustomers')) == true) {
-            $this->exportCustomers();
-            $output .= $this->displayConfirmation($this->l('Customers exported to Hesabfa successfully.'));
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                $this->exportCustomers();
+                $output .= $this->displayConfirmation($this->l('Customers exported to Hesabfa successfully.'));
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before export Customers.'));
+            }
         }
 
+        //Show error when connection not stabilised
         if (Configuration::get('SSBHESABFA_LIVE_MODE') != 1) {
             $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please open the API tab and check your API Settings.'));
         }
@@ -148,7 +157,7 @@ class Ssbhesabfa extends Module
         //show error if store installed in local
         $shop_domain = Configuration::get('PS_SHOP_DOMAIN');
         if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
-            $output .= $this->displayWarning($this->l('Your store is installed on localhost, no Hesabfa changes will be applied to the store.'));
+            $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
         }
 
         $this->context->smarty->assign(array(
@@ -243,7 +252,7 @@ class Ssbhesabfa extends Module
         $input_array = array();
 
         $bank_options = array();
-        $hesabfaApi = new hesabfaApi();
+        $hesabfaApi = new HesabfaApi();
         $banks = $hesabfaApi->settingGetBanks();
 
         if ($banks->Success) {
@@ -295,13 +304,6 @@ class Ssbhesabfa extends Module
         return array(
             'form' => array(
                 'input' => array(
-                    array(
-                        'col' => 3,
-                        'type' => 'text',
-                        'desc' => $this->l('Enter a Gift wrapping service Code in Hesabfa'),
-                        'name' => 'SSBHESABFA_ITEM_GIFT_WRAPPING_ID',
-                        'label' => $this->l('Gift wrapping service Code'),
-                    ),
                     array(
                         'type' => 'switch',
                         'label' => $this->l('Update Price'),
@@ -424,7 +426,6 @@ class Ssbhesabfa extends Module
                 break;
             case 'Item':
                 $keys =  array(
-                    'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
                 );
@@ -448,7 +449,6 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
                     'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
 
-                    'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
 
@@ -502,6 +502,7 @@ class Ssbhesabfa extends Module
                 $psf_prestapay = new psf_prestapay();
                 $plugins = $psf_prestapay->getModulePlugins(1);
                 foreach ($plugins as $plugin) {
+                    $plugin;
                 }
             }
         }
@@ -516,7 +517,7 @@ class Ssbhesabfa extends Module
         //$url = 'https://webhook.site/52c66398-281d-4049-941a-478352271969';
         $hookPassword = Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD');
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
         $response = $hesabfa->settingSetChangeHook($url, $hookPassword);
 
         if ($response->Success) {
@@ -551,6 +552,26 @@ class Ssbhesabfa extends Module
             } else {
                 $msg = 'ssbhesabfa - Cannot check the Hesabfa default currency. Error Message: ' . $default_currency->ErrorMessage;
                 PrestaShopLogger::addLog($msg, 2, $default_currency->ErrorCode, null, null, true);
+            }
+
+            //set the Gift wrapping service id
+            if (Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID') == 0) {
+                $hesabfa = new HesabfaApi();
+                $gift_wrapping = $hesabfa->itemSave(array(
+                    'Name' => 'Gift wrapping service',
+                    'ItemType' => 1,
+                    'Tag' => '{"id_product": 0}',
+                ));
+
+                if ($gift_wrapping->Success) {
+                    Configuration::updateValue('SSBHESABFA_ITEM_GIFT_WRAPPING_ID', $gift_wrapping->Result->Code);
+
+                    $msg = 'ssbhesabfa - Hesabfa Giftwrapping service added successfully. Service Code: ' . $gift_wrapping->Result->Code;
+                    PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+                } else {
+                    $msg = 'ssbhesabfa - Cannot set Giftwrapping service code. Error Message: ' . $gift_wrapping->ErrorMessage;
+                    PrestaShopLogger::addLog($msg, 2, $gift_wrapping->ErrorCode, null, null, true);
+                }
             }
 
             $msg = 'ssbhesabfa - Hesabfa webHook successfully Set. URL: ' . (string)$response->Result->url;
@@ -613,9 +634,10 @@ class Ssbhesabfa extends Module
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
             'Tag' => '{"id_product": '.$id_product.'}',
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
+            'ProductCode' => $id_product,
         );
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
         $response = $hesabfa->itemSave($item);
         if ($response->Success) {
             $obj = new HesabfaModel();
@@ -652,7 +674,7 @@ class Ssbhesabfa extends Module
                 $categoryPath .= $categoryName.$sign;
             }
             $this->categoryArray = array();
-            return substr($categoryPath, 0, -strlen($sign));
+            return Tools::substr($categoryPath, 0, -Tools::strlen($sign));
         } else {
             $category = new Category($id_category, Context::getContext()->language->id);
             $this->categoryArray[] = $category->name;
@@ -691,10 +713,11 @@ class Ssbhesabfa extends Module
                 'NodeFamily' => 'اشخاص :' . Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
                 'Email' => $customer->email,
                 'Tag' => '{"id_customer": '.$id_customer.'}',
+                'Note' => 'Customer ID in OnlineStore: ' . $id_customer,
             )
         );
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
         $response = $hesabfa->contactBatchSave($data);
 
         if ($response->Success) {
@@ -743,15 +766,15 @@ class Ssbhesabfa extends Module
                 'City' => $address->city,
                 'State' => State::getNameById($address->id_state)  == false ? null : State::getNameById($address->id_state),
                 'Country' => Country::getNameById($this->context->language->id, $address->id_country) == false ? null : Country::getNameById($this->context->language->id, $address->id_country),
-                'PostalCode' => str_replace('-', '', $address->postcode),
-                'Phone' => (string)$address->phone,
-                'Mobile' => (string)$address->phone_mobile,
+                'PostalCode' => preg_replace("/[^0-9]/", '', $address->postcode),
+                'Phone' => preg_replace("/[^0-9]/", "", $address->phone),
+                'Mobile' => preg_replace("/[^0-9]/", "", $address->phone_mobile),
                 'Email' => $customer->email,
                 'Tag' => '{"id_customer": '.$id_customer.'}',
             )
         );
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
         $response = $hesabfa->contactBatchSave($data);
 
         if ($response->Success) {
@@ -796,6 +819,14 @@ class Ssbhesabfa extends Module
 
         $items = array();
         $i = 0;
+
+        //Splitting total discount to each item
+        $split = 0;
+        $total_discounts = 0;
+        if ($order->total_discounts > 0) {
+            $split = $order->total_discounts / $order->total_products;
+        }
+
         $products = $order->getProducts();
         foreach ($products as $key => $product) {
             $code = $this->getItemCodeByProductId($product['product_id']);
@@ -806,14 +837,23 @@ class Ssbhesabfa extends Module
                 $code = $this->getItemCodeByProductId($product['product_id']);
             }
 
+            //fix remaining discount amount on last item
+            if (end(array_keys($products)) == $key) {
+                $discount = $order->total_discounts - $total_discounts;
+            } else {
+                $discount = ($product['product_price'] * $split);
+                $total_discounts += $discount;
+                $discount += $product['reduction_amount'];
+            }
+
             $item = array (
                 'RowNumber' => $i,
                 'ItemCode' => (int)$code,
                 'Description' => $product['product_name'],
                 'Quantity' => (int)$product['product_quantity'],
-                'UnitPrice' => (int)$this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order),
-                'Discount' => $this->getOrderPriceInHesabfaDefaultCurrency($product['reduction_amount_tax_excl'], $id_order),
-                'Tax' => $this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
+                'UnitPrice' => (float)$this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order),
+                'Discount' => (float)$this->getOrderPriceInHesabfaDefaultCurrency($discount, $id_order),
+                'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
             );
             array_push($items, $item);
             $i++;
@@ -826,7 +866,6 @@ class Ssbhesabfa extends Module
                 'Description' => $this->l('Gift wrapping Service'),
                 'Quantity' => 1,
                 'UnitPrice' => $this->getOrderPriceInHesabfaDefaultCurrency(($order->total_wrapping), $id_order),
-                //ToDo: calculate discount
                 'Discount' => 0,
                 'Tax' => $this->getOrderPriceInHesabfaDefaultCurrency(($order->total_wrapping_tax_incl - $order->total_wrapping_tax_excl), $id_order),
             ));
@@ -846,7 +885,7 @@ class Ssbhesabfa extends Module
             'InvoiceItems' => $items,
         );
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
         $response = $hesabfa->invoiceSave($data);
         if ($response->Success) {
             $obj = new HesabfaModel();
@@ -908,17 +947,17 @@ class Ssbhesabfa extends Module
         ';
         $result = Db::getInstance()->ExecuteS($sql);
         $id_order = $result[0]['id_order'];
-        $code = $this->getInvoiceCodeByOrderId((int)$id_order);
+        $number = $this->getInvoiceCodeByOrderId((int)$id_order);
 
-        $hesabfa = new hesabfaApi();
+        $hesabfa = new HesabfaApi();
 
         $bank_code = $this->getBankCodeByPaymentName($params->payment_method);
         if ($bank_code != false) {
             //fix Hesabfa API error
             if ($params->transaction_id == '')
-                $params->transaction_id = null;
+                $params->transaction_id = 'None';
 
-            $response = $hesabfa->invoiceSavePayment($code, $bank_code, $params->date_add, $params->amount, $params->transaction_id, $params->card_number);
+            $response = $hesabfa->invoiceSavePayment($number, $bank_code, $params->date_add, $params->amount, $params->transaction_id, $params->card_number);
             if ($response->Success) {
                 $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
                 PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
@@ -953,14 +992,16 @@ class Ssbhesabfa extends Module
     }
 
     //Export
-    public function exportProducts() {
+    public function exportProducts()
+    {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, true);
         foreach ($products as $key) {
             $this->setItem($key['id_product']);
         }
     }
 
-    public function exportCustomers() {
+    public function exportCustomers()
+    {
         $customers = Customer::getCustomers();
         foreach ($customers as $customer) {
             $this->setContact($customer['id_customer']);

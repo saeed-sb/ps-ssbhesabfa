@@ -24,7 +24,7 @@
  *  International Registered Trademark & Property of PrestaShop SA
  */
 
-class hesabfaApi
+class HesabfaApi
 {
     public function apiRequest($method, $data = array())
     {

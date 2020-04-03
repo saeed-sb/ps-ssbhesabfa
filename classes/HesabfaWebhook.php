@@ -32,20 +32,20 @@ class HesabfaWebhook
 {
     public function __construct()
     {
-        $hesabfaApi = new hesabfaApi();
+        $hesabfaApi = new HesabfaApi();
         $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
         $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
         if ($changes->Success) {
             foreach ($changes->Result as $item) {
                 switch ($item->ObjectType) {
                     case 'Invoice':
-                        $this->setInvoiceChangesById($item->ObjectId);
+                        $this->setInvoiceChangesById($item->ObjectId, $item->Action);
                         break;
                     case 'Product':
-                        $this->setItemChangesById($item->ObjectId);
+                        $this->setItemChangesById($item->ObjectId, $item->Action);
                         break;
                     case 'Contact':
-                        $this->setContactChangesById($item->ObjectId);
+                        $this->setContactChangesById($item->ObjectId, $item->Action);
                         break;
                 }
 
@@ -60,9 +60,15 @@ class HesabfaWebhook
     }
 
     // use in webhook call when invoice change
-    public function setInvoiceChangesById($id)
+    public function setInvoiceChangesById($id, $action)
     {
-        $hesabfaApi = new hesabfaApi();
+        //ToDo: Delete Order if Action was delete
+        if ($action == 123) {
+            //delete Order from HesabfaModel
+            return;
+        }
+
+        $hesabfaApi = new HesabfaApi();
         $invoice = $hesabfaApi->invoiceGetById($id);
         if ($invoice->Success) {
             //1.set new Hesabfa Invoice Code if changes
@@ -79,7 +85,7 @@ class HesabfaWebhook
                     //check if order exist in prestashop
                     $id_obj = Ssbhesabfa::getObjectId('order', $id_order);
                     if ($id_obj > 0) {
-                        $hesabfa = new HesabfaModel();
+                        $hesabfa = new HesabfaModel($id_obj);
                         if ($hesabfa->id_hesabfa != $number) {
                             $id_hesabfa_old = $hesabfa->id_hesabfa;
                             //ToDo: number must int, what can i do
@@ -101,9 +107,15 @@ class HesabfaWebhook
     }
 
     // use in webhook call when contact change
-    public function setContactChangesById($id)
+    public function setContactChangesById($id, $action)
     {
-        $hesabfaApi = new hesabfaApi();
+        //ToDo: Delete Customer if Action was delete
+        if ($action == 33) {
+            //delete customer from HesabfaModel
+            return;
+        }
+
+        $hesabfaApi = new HesabfaApi();
         $contact = $hesabfaApi->contactGetById(array($id));
 
         if ($contact->Success) {
@@ -122,8 +134,8 @@ class HesabfaWebhook
 
             //check if customer exist in prestashop
             $id_obj = Ssbhesabfa::getObjectId('customer', $id_customer);
-            if ($id_obj > 0){
-                $hesabfa = new HesabfaModel();
+            if ($id_obj > 0) {
+                $hesabfa = new HesabfaModel($id_obj);
                 if ($hesabfa->id_hesabfa != $code) {
                     $id_hesabfa_old = $hesabfa->id_hesabfa;
 
@@ -138,9 +150,15 @@ class HesabfaWebhook
     }
 
     // use in webhook call when product change
-    public function setItemChangesById($id)
+    public function setItemChangesById($id, $action)
     {
-        $hesabfaApi = new hesabfaApi();
+        //ToDo: Delete Product if Action was delete
+        if ($action == 53) {
+            //delete Product from HesabfaModel
+            return;
+        }
+
+        $hesabfaApi = new HesabfaApi();
         $item = $hesabfaApi->itemGetById(array($id));
         if ($item->Success) {
             $code = $item->Result[0]->Code;
@@ -191,7 +209,7 @@ class HesabfaWebhook
     // use in webhook call (in setInvoiceChangesById function) when invoice change
     public function setItemChangesByCode($code)
     {
-        $hesabfaApi = new hesabfaApi();
+        $hesabfaApi = new HesabfaApi();
         $item = $hesabfaApi->itemGet($code);
         if ($item->Success) {
             $json = json_decode($item->Result->Tag);
