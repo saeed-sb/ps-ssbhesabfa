@@ -470,9 +470,10 @@ class Ssbhesabfa extends Module
         $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
             //don't replace password with null if password not entered
-            if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null)
+            if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null) {
                 break;
-
+            }
+            
             Configuration::updateValue($key, Tools::getValue($key));
         }
     }
@@ -525,9 +526,11 @@ class Ssbhesabfa extends Module
 
             //set the last log ID
             $changes = $hesabfa->settingGetChanges();
-            if ($changes->Success && Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID') == 0) {
-                $lastChange = end($changes->Result);
-                Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
+            if ($changes->Success) {
+                if (Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID') == 0) {
+                    $lastChange = end($changes->Result);
+                    Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
+                }
             } else {
                 $msg = 'ssbhesabfa - Cannot check the last change ID. Error Message: ' . $changes->ErrorMessage;
                 PrestaShopLogger::addLog($msg, 2, $changes->ErrorCode, null, null, true);
@@ -587,8 +590,9 @@ class Ssbhesabfa extends Module
 
     public function getObjectId($type, $id_ps)
     {
-        if (!isset($type) || !isset($id_ps))
+        if (!isset($type) || !isset($id_ps)) {
             return false;
+        }
 
         $sql = 'SELECT `id_ssb_hesabfa` 
                     FROM `' . _DB_PREFIX_ . 'ssb_hesabfa`
@@ -601,14 +605,16 @@ class Ssbhesabfa extends Module
     //Items
     public function getItemCodeByProductId($id_product)
     {
-        if (!isset($id_product))
+        if (!isset($id_product)) {
             return false;
+        }
 
         $obj = new HesabfaModel($this->getObjectId('product', $id_product));
-        if (is_object($obj))
+        if (is_object($obj)) {
             return $obj->id_hesabfa;
-        else
+        } else {
             return false;
+        }
     }
 
     public function setItem($id_product)
@@ -685,8 +691,9 @@ class Ssbhesabfa extends Module
     //Contact
     public function getContactCodeByCustomerId($id_customer)
     {
-        if (!isset($id_customer))
+        if (!isset($id_customer)) {
             return false;
+        }
 
         $obj = new HesabfaModel($this->getObjectId('customer', $id_customer));
         return $obj->id_hesabfa;
@@ -694,8 +701,9 @@ class Ssbhesabfa extends Module
 
     public function setContact($id_customer)
     {
-        if (!isset($id_customer))
+        if (!isset($id_customer)) {
             return false;
+        }
 
         $code = null;
         if ($this->getContactCodeByCustomerId($id_customer) != false) {
@@ -745,8 +753,9 @@ class Ssbhesabfa extends Module
 
     public function setContactAddress($id_customer, $id_address)
     {
-        if (!isset($id_customer) || !isset($id_address))
+        if (!isset($id_customer) || !isset($id_address)) {
             return false;
+        }
 
         $code = $this->getContactCodeByCustomerId($id_customer);
 
@@ -797,8 +806,9 @@ class Ssbhesabfa extends Module
 
     public function setOrder($id_order)
     {
-        if (!isset($id_order))
+        if (!isset($id_order)) {
             return false;
+        }
 
         $order = new Order($id_order);
 
@@ -913,8 +923,9 @@ class Ssbhesabfa extends Module
 
     public function getOrderPriceInHesabfaDefaultCurrency($price, $id_order)
     {
-        if (!isset($price) || !isset($id_order))
+        if (!isset($price) || !isset($id_order)) {
             return false;
+        }
 
         $order = new Order($id_order);
         $price = $price / (int)$order->conversion_rate;
@@ -925,8 +936,9 @@ class Ssbhesabfa extends Module
 
     public function getPriceInHesabfaDefaultCurrency($price)
     {
-        if (!isset($price))
+        if (!isset($price)) {
             return false;
+        }
 
         $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
         $price = $price / (int)$currency->conversion_rate;
@@ -935,12 +947,14 @@ class Ssbhesabfa extends Module
 
     public function setOrderPayment($params)
     {
-        if (!isset($params))
+        if (!isset($params)) {
             return false;
+        }
 
         //Skip free order payment
-        if ($params->amount <= 0)
+        if ($params->amount <= 0) {
             return true;
+        }
 
         $sql = 'SELECT `id_order` FROM `' . _DB_PREFIX_ . 'orders` 
                 WHERE `reference` = \''. $params->order_reference .'\'
@@ -954,8 +968,9 @@ class Ssbhesabfa extends Module
         $bank_code = $this->getBankCodeByPaymentName($params->payment_method);
         if ($bank_code != false) {
             //fix Hesabfa API error
-            if ($params->transaction_id == '')
+            if ($params->transaction_id == '') {
                 $params->transaction_id = 'None';
+            }
 
             $response = $hesabfa->invoiceSavePayment($number, $bank_code, $params->date_add, $params->amount, $params->transaction_id, $params->card_number);
             if ($response->Success) {
@@ -1012,14 +1027,16 @@ class Ssbhesabfa extends Module
     //Contact
     public function hookActionObjectCustomerAddAfter($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setContact($params['object']->id);
+        }
     }
 
     public function hookActionCustomerAccountUpdate($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setContact($params['customer']->id);
+        }
     }
 
     public function hookActionObjectCustomerDeleteBefore($params)
@@ -1030,8 +1047,9 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectAddressAddAfter($params)
     {
-        if (Address::getFirstCustomerAddressId($params['object']->id_customer) == 0 && Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Address::getFirstCustomerAddressId($params['object']->id_customer) == 0 && Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setContactAddress($params['object']->id_customer, $params['object']->id);
+        }
     }
 
     //Invoice
@@ -1045,21 +1063,24 @@ class Ssbhesabfa extends Module
 
     public function hookActionPaymentCCAdd($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setOrderPayment($params['paymentCC']);
+        }
     }
 
     //Item
     public function hookActionProductAdd($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setItem($params['product']->id);
+        }
     }
 
     public function hookActionProductUpdate($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE'))
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->hookActionProductAdd($params);
+        }
     }
 
     public function hookActionProductDelete($params)

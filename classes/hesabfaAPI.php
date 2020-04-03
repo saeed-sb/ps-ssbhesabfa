@@ -28,8 +28,9 @@ class HesabfaApi
 {
     public function apiRequest($method, $data = array())
     {
-        if ($method == null)
+        if ($method == null) {
             return false;
+        }
 
         $data = array_merge(array(
             'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
