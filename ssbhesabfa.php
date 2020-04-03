@@ -473,7 +473,7 @@ class Ssbhesabfa extends Module
             if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null) {
                 break;
             }
-            
+
             Configuration::updateValue($key, Tools::getValue($key));
         }
     }
@@ -546,8 +546,9 @@ class Ssbhesabfa extends Module
                     $currency = new Currency();
                     $currency->iso_code = $default_currency->Result->Currency;
 
-                    if ($currency->add())
+                    if ($currency->add()) {
                         Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $currency->id);
+                    }
 
                     $msg = 'ssbhesabfa - Hesabfa default currency('. $default_currency->Result->Currency .') added to Online Store';
                     PrestaShopLogger::addLog($msg, 1, null, null, null, true);
@@ -997,8 +998,9 @@ class Ssbhesabfa extends Module
         if (isset($result[0])) {
             foreach ($modules_list as $module) {
                 $module_obj = Module::getInstanceById($module['id_module']);
-                if ($module_obj->name == $result[0]['module'])
+                if ($module_obj->name == $result[0]['module']) {
                     $configurationName = 'SSBHESABFA_PAYMENT_METHOD_' . $module['id_module'];
+                }
             }
             return Configuration::get($configurationName);
         } else {

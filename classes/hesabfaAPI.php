@@ -65,46 +65,32 @@ class HesabfaApi
                 switch ($result->ErrorCode) {
                     case '100':
                         return 'InternalServerError';
-                        break;
                     case '101':
                         return 'TooManyRequests';
-                        break;
                     case '103':
                         return 'MissingData';
-                        break;
                     case '104':
                         return 'MissingParameter' . '. ErrorMessage: ' . $result->ErrorMessage;
-                        break;
                     case '105':
                         return 'ApiDisabled';
-                        break;
                     case '106':
                         return 'UserIsNotOwner';
-                        break;
                     case '107':
                         return 'BusinessNotFound';
-                        break;
                     case '108':
                         return 'BusinessExpired';
-                        break;
                     case '110':
                         return 'IdMustBeZero';
-                        break;
                     case '111':
                         return 'IdMustNotBeZero';
-                        break;
                     case '112':
                         return 'ObjectNotFound' . '. ErrorMessage: ' . $result->ErrorMessage;
-                        break;
                     case '113':
                         return 'MissingApiKey';
-                        break;
                     case '114':
                         return 'ParameterIsOutOfRange' . '. ErrorMessage: ' . $result->ErrorMessage;
-                        break;
                     case '190':
                         return 'ApplicationError' . '. ErrorMessage: ' . $result->ErrorMessage;
-                        break;
                 }
             } else {
                 return $result;

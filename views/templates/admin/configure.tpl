@@ -54,9 +54,9 @@
                 <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sed sed risus pretium quam. Tellus elementum sagittis vitae et leo duis ut diam. Posuere lorem ipsum dolor sit amet. Scelerisque felis imperdiet proin fermentum leo vel. Ornare suspendisse sed nisi lacus sed viverra tellus in. Elit scelerisque mauris pellentesque pulvinar. Cursus risus at ultrices mi. Scelerisque viverra mauris in aliquam. Sed euismod nisi porta lorem mollis aliquam ut porttitor leo. Ullamcorper morbi tincidunt ornare massa. Arcu cursus euismod quis viverra nibh. Pellentesque habitant morbi tristique senectus et netus et malesuada fames. Neque convallis a cras semper auctor neque vitae. Erat pellentesque adipiscing commodo elit at imperdiet dui accumsan. Pharetra magna ac placerat vestibulum lectus mauris ultrices eros in. Mattis ullamcorper velit sed ullamcorper morbi tincidunt.' mod='ssbhesabfa'}</p>
             </div>
         </div>
-        <div class="tab-pane {if $current_form_tab == 'Item'}active{/if}" id="catalog" role="tabpanel" aria-labelledby="catalog-tab">{$Item}</div>
-        <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
-        <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">{$Bank}</div>
+        <div class="tab-pane {if $current_form_tab == 'Item'}active{/if}" id="catalog" role="tabpanel" aria-labelledby="catalog-tab">{$Item nofilter}</div>
+        <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact nofilter}</div>
+        <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">{$Bank nofilter}</div>
         <div class="tab-pane {if $current_form_tab == 'Export'}active{/if}" id="export" role="tabpanel" aria-labelledby="export-tab">
             <div class="panel">
                 <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
@@ -77,6 +77,6 @@
                 <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
             </div>
         </div>
-        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
+        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config nofilter}</div>
     </div>
 </div>
