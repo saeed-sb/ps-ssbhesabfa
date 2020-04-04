@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.6';
+        $this->version = '0.8.7';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -598,6 +598,20 @@ class Ssbhesabfa extends Module
         $sql = 'SELECT `id_ssb_hesabfa` 
                     FROM `' . _DB_PREFIX_ . 'ssb_hesabfa`
                     WHERE `id_ps` = '. $id_ps .' AND `obj_type` = \''. $type .'\'
+                    ';
+
+        return (int)Db::getInstance()->getValue($sql);
+    }
+
+    public function getObjectIdByCode($type, $id_hesabfa)
+    {
+        if (!isset($type) || !isset($id_hesabfa)) {
+            return false;
+        }
+
+        $sql = 'SELECT `id_ssb_hesabfa` 
+                    FROM `' . _DB_PREFIX_ . 'ssb_hesabfa`
+                    WHERE `id_hesabfa` = '. $id_hesabfa .' AND `obj_type` = \''. $type .'\'
                     ';
 
         return (int)Db::getInstance()->getValue($sql);

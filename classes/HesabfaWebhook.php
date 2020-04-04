@@ -36,16 +36,27 @@ class HesabfaWebhook
         $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
         $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
         if ($changes->Success) {
+            var_dump($changes);
             foreach ($changes->Result as $item) {
                 switch ($item->ObjectType) {
                     case 'Invoice':
-                        $this->setInvoiceChangesById($item->ObjectId, $item->Action);
+                        $this->setInvoiceChangesById($item->ObjectId);
                         break;
                     case 'Product':
-                        $this->setItemChangesById($item->ObjectId, $item->Action);
+                        if ($item->Action == 53) {
+                            $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
+                            $hesabfa = new HesabfaModel($id_obj);
+                            $hesabfa->delete();
+                        }
+                        $this->setItemChangesById($item->ObjectId);
                         break;
                     case 'Contact':
-                        $this->setContactChangesById($item->ObjectId, $item->Action);
+                        if ($item->Action == 33) {
+                            $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
+                            $hesabfa = new HesabfaModel($id_obj);
+                            $hesabfa->delete();
+                        }
+                        $this->setContactChangesById($item->ObjectId);
                         break;
                 }
 
@@ -60,21 +71,19 @@ class HesabfaWebhook
     }
 
     // use in webhook call when invoice change
-    public function setInvoiceChangesById($id, $action)
+    public function setInvoiceChangesById($id)
     {
-        //ToDo: Delete Order if Action was delete
-        if ($action == 123) {
-            //delete Order from HesabfaModel
-            return;
-        }
-
         $hesabfaApi = new HesabfaApi();
         $invoice = $hesabfaApi->invoiceGetById($id);
-        if ($invoice->Success) {
+        if ($invoice->Success && !empty($invoice->Result)) {
             //1.set new Hesabfa Invoice Code if changes
             $number = $invoice->Result->Number;
             $json = json_decode($invoice->Result->Tag);
-            $id_order = $json->id_order;
+            if (is_object($json)) {
+                $id_order = $json->id_order;
+            } else {
+                $id_order = 0;
+            }
 
             if ($invoice->Result->InvoiceType == 0) {
                 //check if Tag not set in hesabfa
@@ -107,22 +116,21 @@ class HesabfaWebhook
     }
 
     // use in webhook call when contact change
-    public function setContactChangesById($id, $action)
+    public function setContactChangesById($id)
     {
-        //ToDo: Delete Customer if Action was delete
-        if ($action == 33) {
-            //delete customer from HesabfaModel
-            return;
-        }
-
         $hesabfaApi = new HesabfaApi();
         $contact = $hesabfaApi->contactGetById(array($id));
 
-        if ($contact->Success) {
+        if ($contact->Success && !empty($contact->Result)) {
             //1.set new Hesabfa Contact Code if changes
             $code = $contact->Result[0]->Code;
+
             $json = json_decode($contact->Result[0]->Tag);
-            $id_customer = $json->id_customer;
+            if (is_object($json)) {
+                $id_customer = $json->id_customer;
+            } else {
+                $id_customer = 0;
+            }
 
             //check if Tag not set in hesabfa
             if ($id_customer == 0) {
@@ -150,20 +158,19 @@ class HesabfaWebhook
     }
 
     // use in webhook call when product change
-    public function setItemChangesById($id, $action)
+    public function setItemChangesById($id)
     {
-        //ToDo: Delete Product if Action was delete
-        if ($action == 53) {
-            //delete Product from HesabfaModel
-            return;
-        }
-
         $hesabfaApi = new HesabfaApi();
         $item = $hesabfaApi->itemGetById(array($id));
-        if ($item->Success) {
+        if ($item->Success && !empty($item->Result)) {
             $code = $item->Result[0]->Code;
+
             $json = json_decode($item->Result[0]->Tag);
-            $id_product = $json->id_product;
+            if (is_object($json)) {
+                $id_product = $json->id_product;
+            } else {
+                $id_product = 0;
+            }
 
             //check if Tag not set in hesabfa
             if ($id_product == 0) {
@@ -211,9 +218,13 @@ class HesabfaWebhook
     {
         $hesabfaApi = new HesabfaApi();
         $item = $hesabfaApi->itemGet($code);
-        if ($item->Success) {
+        if ($item->Success && !empty($item->Result)) {
             $json = json_decode($item->Result->Tag);
-            $id_product = $json->id_product;
+            if (is_object($json)) {
+                $id_product = $json->id_product;
+            } else {
+                $id_product = 0;
+            }
             //check if Tag not set in hesabfa
             if ($id_product == 0) {
                 $msg = 'Item with code: '. $code .' is not define in OnlineStore';

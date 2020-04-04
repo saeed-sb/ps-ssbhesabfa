@@ -3,7 +3,8 @@
 global $_MODULE;
 $_MODULE = array();
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ddb3af02d282c9c2f2be1a99b95312a7'] = 'نرم‌افزار حسابداری ابری حسابفا';
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_69204ddb1aa9e173f9bea31063e68d39'] = 'اتصال پرستاشاپ به «نرم‌افزار حسابداری ابری حسابفا» ';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_342e49702c7984bf9b0a4584ca3cbd13'] = 'اتصال نرم‌افزار حسابداری ابری حسابفا به پرستاشاپ';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_16434bb224b02f873364c9e6a5a2199e'] = 'برای استفاده از این ماژول، اتصال API لازم است.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6f0c41e10bf2fcf5136f596d3486e684'] = 'تنظیمات API به روزرسانی شد، اتصال موفقیت آمیز بود.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_506424b443dd8ad099c0410a02371fab'] = 'اتصال به حسابفا با خطا مواجه شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_9f49bb9e7442d3b2716dd52a54fad31b'] = 'کد خطا:';
@@ -12,8 +13,11 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_53521a753e7391dd3097826c2e8af253'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ff06e7155572ac98fea068ccc5f7c461'] = 'تنظیمات محصولات به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7a0c95e27f886c2df32dcf5f4091d467'] = 'تنظیمات مشتریان به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7dcacc291836c08efd98b7bf38d589ce'] = 'استخراج محصولات به حسابفا با موفقیت انجام شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_35468843803ad9fe9a691e91180859dd'] = 'قبل از استخراج محصولات، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4a68fe26566d11d826e27ff9d0d82f9c'] = 'استخراج مشتریان به حسابفا با موفقیت انجام شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7ed787ac10292f5e88b1bc3e8a5b5703'] = 'قبل از استخراج مشتریان، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_574254af19dd856bbc3830a549169bdf'] = 'اتصال به حسابفا با خطا مواجه شد. لطفا به تب API رفته و تنظیمات را مجدد بررسی نمایید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_5ccb3957f03f3c76b77183bba33e0278'] = 'فروشگاه شما در محیطی خارج از اینترنت برپا شده است، تغییرات در حسابفا در این فروشگاه اعمال نخواهد شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_34566b65d4252e0b5a48eaf46c64a5d0'] = 'آدرس ایمیل اکانت حسابفا را وارد کنید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ce8ae9da5b7cd6c3df2929543a9af92d'] = 'آدرس ایمیل';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a0addfe6cc5c7b51f6e70380ef14d10b'] = 'رمزعبور حسابفا را وارد کنید';
@@ -21,8 +25,6 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_dc647eb65e6711e155375218212b3964'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_55afccce0251f84fde12274b67f02808'] = 'کلید API را در حسابفا از منوی تنظیمات->تنظیمات مالی->API پیدا کنید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d876ff8da67c3731ae25d8335a4168b4'] = 'کلید API';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_c9cc8cce247e49bae79f15173ce97354'] = 'ذخیره';
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fa80e287b6a3da7b9ebab3e54907bec5'] = 'کد خدمت کادوپیچی در حسابفا را وارد کنید';
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_38049e19399d2ba36c837e3da6e1307a'] = 'کد خدمت کادوپیچی';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_513bc857f9456e595664eeb6f0df0bbd'] = 'به‌روزرسانی قیمت';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7079b73c872abc3f32e1333d2c96eaf9'] = 'به‌روزرسانی قیمت بعد از تغییر در حسابفا';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_00d23a76e43b46dae9ec7aa9dcbebb32'] = 'فعال';
