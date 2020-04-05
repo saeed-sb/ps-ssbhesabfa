@@ -39,8 +39,8 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.7';
-        $this->author = 'Saeed Sattar Beglou';
+        $this->version = '0.8.8';
+        $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
         $this->bootstrap = true;
@@ -119,11 +119,17 @@ class Ssbhesabfa extends Module
         if (((bool)Tools::isSubmit('submitSsbhesabfaModuleConfig')) == true) {
             $this->setConfigFormsValues('Config');
             $connection = $this->setChangeHook();
-            if ($connection->Success) {
-                $output .= $this->displayConfirmation($this->l('API Setting updated. Test Successfully'));
+            //check if internet connection fail
+            if (is_object($connection)) {
+                if ($connection->Success) {
+                    $output .= $this->displayConfirmation($this->l('API Setting updated. Test Successfully'));
+                } else {
+                    $output .= $this->displayError($this->l('Connecting to Hesabfa fail.') .' '. $this->l('Error Code: ') . $connection->ErrorCode .'. '. $this->l('Error Message: ') . $connection->ErrorMessage);
+                }
             } else {
-                $output .= $this->displayError($this->l('Connecting to Hesabfa fail.') .' '. $this->l('Error Code: ') . $connection->ErrorCode .'. '. $this->l('Error Message: ') . $connection->ErrorMessage);
+                $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please check your Internet connection.'));
             }
+
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleBank')) == true) {
             $this->setConfigFormsValues('Bank');
             $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
@@ -140,6 +146,13 @@ class Ssbhesabfa extends Module
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProductsWithQuantity')) == true) {
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                $this->exportProducts(1);
+                $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
+            }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportCustomers')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
                 $this->exportCustomers();
@@ -149,27 +162,28 @@ class Ssbhesabfa extends Module
             }
         }
 
-        //Show error when connection not stabilised
-        if (Configuration::get('SSBHESABFA_LIVE_MODE') != 1) {
-            $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please open the API tab and check your API Settings.'));
-        }
-
         //show error if store installed in local
         $shop_domain = Configuration::get('PS_SHOP_DOMAIN');
         if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
             $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
         }
 
-        $this->context->smarty->assign(array(
-            'current_form_tab' => Tools::getValue('form_tab'),
-            'export_product_form' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Export',
-            'export_customers_form' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Export',
-        ));
-
-        $forms = array('Config', 'Bank', 'Item', 'Contact');
+        //assign smarty vars
+        $forms = array('Bank', 'Config', 'Item', 'Contact');
         foreach ($forms as $form) {
             $html = $this->renderForm($form);
             $this->context->smarty->assign($form, $html);
+        }
+
+        $this->context->smarty->assign(array(
+            'current_form_tab' => Tools::getValue('form_tab'),
+            'export_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Export',
+            'live_mode' => Configuration::get('SSBHESABFA_LIVE_MODE'),
+        ));
+
+        //Show error when connection not stabilised
+        if (Configuration::get('SSBHESABFA_LIVE_MODE') != 1) {
+            $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please open the API tab and check your API Settings.'));
         }
 
         // To load form inside your template
@@ -255,12 +269,16 @@ class Ssbhesabfa extends Module
         $hesabfaApi = new HesabfaApi();
         $banks = $hesabfaApi->settingGetBanks();
 
-        if ($banks->Success) {
+        if (is_object($banks) && $banks->Success) {
             foreach ($banks->Result as $bank) {
-                array_push($bank_options, array(
-                    'id_option' => $bank->Code,
-                    'name' => $bank->Name,
-                ));
+                //show only bank with default currency in hesabfa
+                $default_currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+                if ($bank->Currency == $default_currency->getSign()) {
+                    array_push($bank_options, array(
+                        'id_option' => $bank->Code,
+                        'name' => $bank->Name . ' - ' . $bank->Branch . ' - ' . $bank->AccountNumber,
+                    ));
+                }
             }
 
             foreach ($this->getPaymentMethodsName() as $item) {
@@ -279,14 +297,7 @@ class Ssbhesabfa extends Module
                 array_push($input_array, $input);
             }
         } else {
-            $input = array(
-                'col' => 3,
-                'type' => 'free',
-                'name' => 'notConnected',
-                'label' => $this->l('Bank Maping: Please set API First.'),
-            );
-
-            array_push($input_array, $input);
+            Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
         }
 
         return array(
@@ -521,71 +532,77 @@ class Ssbhesabfa extends Module
         $hesabfa = new HesabfaApi();
         $response = $hesabfa->settingSetChangeHook($url, $hookPassword);
 
-        if ($response->Success) {
-            Configuration::updateValue('SSBHESABFA_LIVE_MODE', 1);
+        if (is_object($response)) {
+            if ($response->Success) {
+                Configuration::updateValue('SSBHESABFA_LIVE_MODE', 1);
 
-            //set the last log ID
-            $changes = $hesabfa->settingGetChanges();
-            if ($changes->Success) {
-                if (Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID') == 0) {
-                    $lastChange = end($changes->Result);
-                    Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
-                }
-            } else {
-                $msg = 'ssbhesabfa - Cannot check the last change ID. Error Message: ' . $changes->ErrorMessage;
-                PrestaShopLogger::addLog($msg, 2, $changes->ErrorCode, null, null, true);
-            }
-
-            //set the Hesabfa default currency
-            $default_currency = $hesabfa->settingGetCurrency();
-            if ($default_currency->Success) {
-                $id_currency = Currency::getIdByIsoCode($default_currency->Result->Currency);
-                if ($id_currency > 0) {
-                    Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $id_currency);
-                } else {
-                    $currency = new Currency();
-                    $currency->iso_code = $default_currency->Result->Currency;
-
-                    if ($currency->add()) {
-                        Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $currency->id);
+                //set the last log ID
+                $changes = $hesabfa->settingGetChanges();
+                if ($changes->Success) {
+                    if (Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID') == 0) {
+                        $lastChange = end($changes->Result);
+                        Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
                     }
-
-                    $msg = 'ssbhesabfa - Hesabfa default currency('. $default_currency->Result->Currency .') added to Online Store';
-                    PrestaShopLogger::addLog($msg, 1, null, null, null, true);
-                }
-            } else {
-                $msg = 'ssbhesabfa - Cannot check the Hesabfa default currency. Error Message: ' . $default_currency->ErrorMessage;
-                PrestaShopLogger::addLog($msg, 2, $default_currency->ErrorCode, null, null, true);
-            }
-
-            //set the Gift wrapping service id
-            if (Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID') == 0) {
-                $hesabfa = new HesabfaApi();
-                $gift_wrapping = $hesabfa->itemSave(array(
-                    'Name' => 'Gift wrapping service',
-                    'ItemType' => 1,
-                    'Tag' => '{"id_product": 0}',
-                ));
-
-                if ($gift_wrapping->Success) {
-                    Configuration::updateValue('SSBHESABFA_ITEM_GIFT_WRAPPING_ID', $gift_wrapping->Result->Code);
-
-                    $msg = 'ssbhesabfa - Hesabfa Giftwrapping service added successfully. Service Code: ' . $gift_wrapping->Result->Code;
-                    PrestaShopLogger::addLog($msg, 1, null, null, null, true);
                 } else {
-                    $msg = 'ssbhesabfa - Cannot set Giftwrapping service code. Error Message: ' . $gift_wrapping->ErrorMessage;
-                    PrestaShopLogger::addLog($msg, 2, $gift_wrapping->ErrorCode, null, null, true);
+                    $msg = 'ssbhesabfa - Cannot check the last change ID. Error Message: ' . $changes->ErrorMessage;
+                    PrestaShopLogger::addLog($msg, 2, $changes->ErrorCode, null, null, true);
                 }
+
+                //set the Hesabfa default currency
+                $default_currency = $hesabfa->settingGetCurrency();
+                if ($default_currency->Success) {
+                    $id_currency = Currency::getIdByIsoCode($default_currency->Result->Currency);
+                    if ($id_currency > 0) {
+                        Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $id_currency);
+                    } else {
+                        $currency = new Currency();
+                        $currency->iso_code = $default_currency->Result->Currency;
+
+                        if ($currency->add()) {
+                            Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $currency->id);
+                        }
+
+                        $msg = 'ssbhesabfa - Hesabfa default currency('. $default_currency->Result->Currency .') added to Online Store';
+                        PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+                    }
+                } else {
+                    $msg = 'ssbhesabfa - Cannot check the Hesabfa default currency. Error Message: ' . $default_currency->ErrorMessage;
+                    PrestaShopLogger::addLog($msg, 2, $default_currency->ErrorCode, null, null, true);
+                }
+
+                //set the Gift wrapping service id
+                if (Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID') == 0) {
+                    $hesabfa = new HesabfaApi();
+                    $gift_wrapping = $hesabfa->itemSave(array(
+                        'Name' => 'Gift wrapping service',
+                        'ItemType' => 1,
+                        'Tag' => '{"id_product": 0}',
+                    ));
+
+                    if ($gift_wrapping->Success) {
+                        Configuration::updateValue('SSBHESABFA_ITEM_GIFT_WRAPPING_ID', $gift_wrapping->Result->Code);
+
+                        $msg = 'ssbhesabfa - Hesabfa Giftwrapping service added successfully. Service Code: ' . $gift_wrapping->Result->Code;
+                        PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+                    } else {
+                        $msg = 'ssbhesabfa - Cannot set Giftwrapping service code. Error Message: ' . $gift_wrapping->ErrorMessage;
+                        PrestaShopLogger::addLog($msg, 2, $gift_wrapping->ErrorCode, null, null, true);
+                    }
+                }
+
+                $msg = 'ssbhesabfa - Hesabfa webHook successfully Set. URL: ' . (string)$response->Result->url;
+                PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+            } else {
+                Configuration::updateValue('SSBHESABFA_LIVE_MODE', 0);
+
+                $msg = 'ssbhesabfa - Cannot set Hesabfa webHook. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, null, null, true);
             }
-
-            $msg = 'ssbhesabfa - Hesabfa webHook successfully Set. URL: ' . (string)$response->Result->url;
-            PrestaShopLogger::addLog($msg, 1, null, null, null, true);
         } else {
-            Configuration::updateValue('SSBHESABFA_LIVE_MODE', 0);
-
-            $msg = 'ssbhesabfa - Cannot set Hesabfa webHook. Error Message: ' . $response->ErrorMessage;
-            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, null, null, true);
+            $msg = 'ssbhesabfa - Cannot set Hesabfa webHook. Please check your Internet connection';
+            PrestaShopLogger::addLog($msg, 2, null, null, null, true);
         }
+
         return $response;
     }
 
@@ -632,7 +649,7 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function setItem($id_product)
+    public function setItem($id_product, $setQuantity = 0)
     {
         if (!isset($id_product)) {
             return false;
@@ -646,6 +663,7 @@ class Ssbhesabfa extends Module
 
         $product = new Product($id_product);
         $itemType = ($product->is_virtual == 1 ? 1 : 0);
+        $quantity = $setQuantity ? $product->quantity : null;
 
         $item = array(
             'Code' => $code,
@@ -653,6 +671,7 @@ class Ssbhesabfa extends Module
             'ItemType' => $itemType,
             'Barcode' => $product->upc,
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
+//            'Quantity' => $quantity,
             'Tag' => '{"id_product": '.$id_product.'}',
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
@@ -675,7 +694,7 @@ class Ssbhesabfa extends Module
                 $msg = 'ssbhesabfa -  Item successfully updated. Item code: ' . $response->Result->Code;
                 PrestaShopLogger::addLog($msg, 1, null, 'Product', $id_product, true);
             }
-            return true;
+            return $response->Result->Code;
         } else {
             $msg = 'ssbhesabfa - Cannot add/update Hesabfa item. Error Message: ' . $response->ErrorMessage;
             PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $id_product, true);
@@ -858,12 +877,13 @@ class Ssbhesabfa extends Module
 
             // add product before insert invoice
             if ($code == null) {
-                $this->setItem($product['product_id']);
-                $code = $this->getItemCodeByProductId($product['product_id']);
+                $code = $this->setItem($product['product_id']);
+                //$code = $this->getItemCodeByProductId($product['product_id']);
             }
 
             //fix remaining discount amount on last item
-            if (end(array_keys($products)) == $key) {
+            $array_key = array_keys($products);
+            if (end($array_key) == $key) {
                 $discount = $order->total_discounts - $total_discounts;
             } else {
                 $discount = ($product['product_price'] * $split);
@@ -1023,11 +1043,11 @@ class Ssbhesabfa extends Module
     }
 
     //Export
-    public function exportProducts()
+    public function exportProducts($setQuantity = 0)
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, true);
         foreach ($products as $key) {
-            $this->setItem($key['id_product']);
+            $this->setItem($key['id_product'], $setQuantity);
         }
     }
 

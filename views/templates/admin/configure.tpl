@@ -52,29 +52,93 @@
             <div class="panel" style="border-top-left-radius: 0px;">
                 <h1>{l s='Hesabfa Accounting' mod='ssbhesabfa'}</h1>
                 <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sed sed risus pretium quam. Tellus elementum sagittis vitae et leo duis ut diam. Posuere lorem ipsum dolor sit amet. Scelerisque felis imperdiet proin fermentum leo vel. Ornare suspendisse sed nisi lacus sed viverra tellus in. Elit scelerisque mauris pellentesque pulvinar. Cursus risus at ultrices mi. Scelerisque viverra mauris in aliquam. Sed euismod nisi porta lorem mollis aliquam ut porttitor leo. Ullamcorper morbi tincidunt ornare massa. Arcu cursus euismod quis viverra nibh. Pellentesque habitant morbi tristique senectus et netus et malesuada fames. Neque convallis a cras semper auctor neque vitae. Erat pellentesque adipiscing commodo elit at imperdiet dui accumsan. Pharetra magna ac placerat vestibulum lectus mauris ultrices eros in. Mattis ullamcorper velit sed ullamcorper morbi tincidunt.' mod='ssbhesabfa'}</p>
+
             </div>
         </div>
         <div class="tab-pane {if $current_form_tab == 'Item'}active{/if}" id="catalog" role="tabpanel" aria-labelledby="catalog-tab">{$Item}</div>
         <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
-        <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">{$Bank}</div>
+        <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">
+            {if $live_mode == true}
+                {$Bank}
+            {else}
+            <div class="panel">
+                <br>
+                <div class="alert alert-info" role="alert">
+                    <p>{l s='Bank Maping Disabled, Please set API First.' mod='ssbhesabfa'}</p>
+                </div>
+            </div>
+            {/if}
+        </div>
         <div class="tab-pane {if $current_form_tab == 'Export'}active{/if}" id="export" role="tabpanel" aria-labelledby="export-tab">
             <div class="panel">
+                <div class="alert alert-info" role="alert">
+                    {l s='Export Products/Customers can take several minutes' mod='ssbhesabfa'}</p>
+                </div>
                 <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
                 <div class="margin-form" style="clear: both;">
-                    <br>
-                    <form action="{$export_product_form|escape:'htmlall':'UTF-8'}" method="post">
-                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProducts" name="submitSsbhesabfaExportProducts" onclick="$('#export_loader').show();">{l s='Export products' mod='ssbhesabfa'}</button>
-                    </form>
-                    <br>
-                    <form action="{$export_customers_form|escape:'htmlall':'UTF-8'}" method="post">
-                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportCustomers" name="submitSsbhesabfaExportCustomers" onclick="$('#export_loader').show();">{l s='Export customers' mod='ssbhesabfa'}</button>
-                    </form>
+                    <!-- Button trigger modal -->
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProducts">
+                        {l s='Export products' mod='ssbhesabfa'}
+                    </button>
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsWithQuantity">
+                        {l s='Export products with Quantity' mod='ssbhesabfa'}
+                    </button>
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportCustomers">
+                        {l s='Export Customers' mod='ssbhesabfa'}
+                    </button>
                     <br><br>
-                    <div class="alert alert-info" role="alert">
-                        {l s='Export Products/Customers can take several minutes' mod='ssbhesabfa'}</p>
+                    <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
+                    <!-- Modal -->
+                    <div class="modal fade" id="exportProducts" tabindex="-1" role="dialog" aria-labelledby="exportProductsLabel" aria-hidden="true">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body">
+                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa?'}</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProducts" name="submitSsbhesabfaExportProducts" onclick="$('#export_loader').show();">{l s='Export products' mod='ssbhesabfa'}</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <br>
+
+                    <div class="modal fade" id="exportProductsWithQuantity" tabindex="-1" role="dialog" aria-labelledby="exportProductsWithQuantityLabel" aria-hidden="true">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body">
+                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa with Quantity?'}</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProductsWithQuantity" name="submitSsbhesabfaExportProductsWithQuantity" onclick="$('#export_loader').show();">{l s='Export products with Quantity' mod='ssbhesabfa'}</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <br>
+
+                    <div class="modal fade" id="exportCustomers" tabindex="-1" role="dialog" aria-labelledby="exportCustomersLabel" aria-hidden="true">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-body">
+                                    <p>{l s='Are you sure you want to add/update all Customers into Hesabfa?'}</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportCustomers" name="submitSsbhesabfaExportCustomers" onclick="$('#export_loader').show();">{l s='Export customers' mod='ssbhesabfa'}</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
             </div>
         </div>
         <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
