@@ -334,6 +334,12 @@ class Ssbhesabfa extends Module
                     ));
                 }
             }
+            if (empty($bank_options)) {
+                $bank_options = array(
+                    'id_option' => 0,
+                    'name' => $this->l('Define at least one bank in Hesabfa'),
+                );
+            }
 
             foreach ($this->getPaymentMethodsName() as $item) {
                 $input = array(
@@ -1139,7 +1145,7 @@ class Ssbhesabfa extends Module
             $this->context->controller->addJqueryUI('ui.datepicker');
         }
     }
-    
+
     //Contact
     public function hookActionObjectCustomerAddAfter($params)
     {
