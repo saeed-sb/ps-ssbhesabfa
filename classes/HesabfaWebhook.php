@@ -36,13 +36,13 @@ class HesabfaWebhook
         $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
         $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
         if ($changes->Success) {
-            var_dump($changes);
             foreach ($changes->Result as $item) {
                 switch ($item->ObjectType) {
                     case 'Invoice':
                         $this->setInvoiceChangesById($item->ObjectId);
                         break;
                     case 'Product':
+                        //if Action was deleted
                         if ($item->Action == 53) {
                             $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
                             $hesabfa = new HesabfaModel($id_obj);
@@ -51,6 +51,7 @@ class HesabfaWebhook
                         $this->setItemChangesById($item->ObjectId);
                         break;
                     case 'Contact':
+                        //if Action was deleted
                         if ($item->Action == 33) {
                             $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
                             $hesabfa = new HesabfaModel($id_obj);

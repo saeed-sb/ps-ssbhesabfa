@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.8';
+        $this->version = '0.8.9';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -65,6 +65,7 @@ class Ssbhesabfa extends Module
 
         foreach (array(
                      'SSBHESABFA_LIVE_MODE' => false,
+                     'SSBHESABFA_DEBUG_MODE' => false,
                      'SSBHESABFA_ACCOUNT_USERNAME' => null,
                      'SSBHESABFA_ACCOUNT_PASSWORD' => null,
                      'SSBHESABFA_ACCOUNT_API' => null,
@@ -81,6 +82,8 @@ class Ssbhesabfa extends Module
         }
 
         return parent::install() &&
+            $this->registerHook('backOfficeHeader') &&
+
             $this->registerHook('actionObjectCustomerAddAfter') &&
             $this->registerHook('actionCustomerAccountUpdate') &&
             $this->registerHook('actionObjectCustomerDeleteBefore') &&
@@ -91,7 +94,7 @@ class Ssbhesabfa extends Module
             $this->registerHook('actionProductDelete') &&
 
             $this->registerHook('actionValidateOrder') &&
-            $this->registerHook('actionPaymentCCAdd');
+            $this->registerHook('actionPaymentConfirmation');
     }
 
     public function uninstall()
@@ -116,6 +119,16 @@ class Ssbhesabfa extends Module
     {
         $output = '';
 
+        //show error if store installed in local
+        $shop_domain = Configuration::get('PS_SHOP_DOMAIN');
+        if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
+            $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
+        }
+
+        require_once(_PS_MODULE_DIR_.$this->name.'/classes/HesabfaUpdate.php');
+        $update = HesabfaUpdate::getInstance($this);
+
+        //Submits
         if (((bool)Tools::isSubmit('submitSsbhesabfaModuleConfig')) == true) {
             $this->setConfigFormsValues('Config');
             $connection = $this->setChangeHook();
@@ -130,6 +143,15 @@ class Ssbhesabfa extends Module
                 $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please check your Internet connection.'));
             }
 
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleUpdate')) == true) {
+            $this->context->smarty->assign(array(
+                'notices' => $update->getNotice(),
+                'need_update' => $update->checkUpdate(),
+            ));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleUpgrade')) == true) {
+            $this->context->smarty->assign(array(
+                'upgrade' => $update->upgrade(),
+            ));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleBank')) == true) {
             $this->setConfigFormsValues('Bank');
             $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
@@ -160,12 +182,31 @@ class Ssbhesabfa extends Module
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Customers.'));
             }
-        }
-
-        //show error if store installed in local
-        $shop_domain = Configuration::get('PS_SHOP_DOMAIN');
-        if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
-            $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportInvoices')) == true) {
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                $from_date = Tools::getValue('SSBHESABFA_SYNC_ORDER_FROM');
+                if ($from_date == null) {
+                    $output .= $this->displayError($this->l('Enter date from'));
+                } elseif (!Validate::isDateFormat($from_date)) {
+                    $output .= $this->displayError($this->l('Enter correct date format.'));
+                } else {
+                    $output .= $this->displayConfirmation($this->l('Orders synced with Hesabfa successfully.'));
+                    $orders_id = $this->syncOrders($from_date);
+                    if (!empty($orders_id)) {
+                        $output .= $this->displayConfirmation($this->l('Orders ID: ') . implode(' - ', $orders_id));
+                    }
+                }
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before sync Invoices.'));
+            }
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaSyncChanges')) == true) {
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
+                new HesabfaWebhook();
+                $output .= $this->displayConfirmation($this->l('Changes synced with Hesabfa successfully.'));
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before sync Changes.'));
+            }
         }
 
         //assign smarty vars
@@ -178,12 +219,25 @@ class Ssbhesabfa extends Module
         $this->context->smarty->assign(array(
             'current_form_tab' => Tools::getValue('form_tab'),
             'export_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Export',
+            'update_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Home',
             'live_mode' => Configuration::get('SSBHESABFA_LIVE_MODE'),
+            'module_ver' => $this->version,
         ));
 
         //Show error when connection not stabilised
         if (Configuration::get('SSBHESABFA_LIVE_MODE') != 1) {
             $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please open the API tab and check your API Settings.'));
+        }
+
+        //Show error when Banks not mapped
+        if (Configuration::get('SSBHESABFA_LIVE_MODE') == 1) {
+            $payment_methods = $this->getPaymentMethodsName();
+            foreach ($payment_methods as $method) {
+                if (!Configuration::get($method['id'])) {
+                    $output .= $this->displayError($this->l('Payment methods not mapped with Banks. Please check setting in Payment Methods tab.'));
+                    break;
+                }
+            }
         }
 
         // To load form inside your template
@@ -606,7 +660,7 @@ class Ssbhesabfa extends Module
         return $response;
     }
 
-    public function getObjectId($type, $id_ps)
+    public static function getObjectId($type, $id_ps)
     {
         if (!isset($type) || !isset($id_ps)) {
             return false;
@@ -620,7 +674,7 @@ class Ssbhesabfa extends Module
         return (int)Db::getInstance()->getValue($sql);
     }
 
-    public function getObjectIdByCode($type, $id_hesabfa)
+    public static function getObjectIdByCode($type, $id_hesabfa)
     {
         if (!isset($type) || !isset($id_hesabfa)) {
             return false;
@@ -671,7 +725,7 @@ class Ssbhesabfa extends Module
             'ItemType' => $itemType,
             'Barcode' => $product->upc,
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-//            'Quantity' => $quantity,
+            'Quantity' => $quantity,
             'Tag' => '{"id_product": '.$id_product.'}',
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
@@ -886,7 +940,7 @@ class Ssbhesabfa extends Module
             if (end($array_key) == $key) {
                 $discount = $order->total_discounts - $total_discounts;
             } else {
-                $discount = ($product['product_price'] * $split);
+                $discount = ($product['product_price'] * $split * $product['product_quantity']);
                 $total_discounts += $discount;
                 $discount += $product['reduction_amount'];
             }
@@ -969,7 +1023,7 @@ class Ssbhesabfa extends Module
         return $price;
     }
 
-    public function getPriceInHesabfaDefaultCurrency($price)
+    public static function getPriceInHesabfaDefaultCurrency($price)
     {
         if (!isset($price)) {
             return false;
@@ -980,44 +1034,43 @@ class Ssbhesabfa extends Module
         return $price;
     }
 
-    public function setOrderPayment($params)
+    public function setOrderPayment($id_order)
     {
-        if (!isset($params)) {
+        if (!isset($id_order)) {
             return false;
         }
 
-        //Skip free order payment
-        if ($params->amount <= 0) {
-            return true;
-        }
-
-        $sql = 'SELECT `id_order` FROM `' . _DB_PREFIX_ . 'orders` 
-                WHERE `reference` = \''. $params->order_reference .'\'
-        ';
-        $result = Db::getInstance()->ExecuteS($sql);
-        $id_order = $result[0]['id_order'];
+        $hesabfa = new HesabfaApi();
         $number = $this->getInvoiceCodeByOrderId((int)$id_order);
 
-        $hesabfa = new HesabfaApi();
-
-        $bank_code = $this->getBankCodeByPaymentName($params->payment_method);
-        if ($bank_code != false) {
-            //fix Hesabfa API error
-            if ($params->transaction_id == '') {
-                $params->transaction_id = 'None';
+        $payments = OrderPayment::getByOrderId($id_order);
+        foreach ($payments as $payment) {
+            //Skip free order payment
+            if ($payment->amount <= 0) {
+                return true;
             }
 
-            $response = $hesabfa->invoiceSavePayment($number, $bank_code, $params->date_add, $params->amount, $params->transaction_id, $params->card_number);
-            if ($response->Success) {
-                $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
-                PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+
+            $bank_code = $this->getBankCodeByPaymentName($payment->payment_method);
+            if ($bank_code != false) {
+                //fix Hesabfa API error
+                if ($payment->transaction_id == '') {
+                    $payment->transaction_id = 'None';
+                }
+
+                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $payment->amount, $payment->transaction_id, $payment->card_number);
+
+                if ($response->Success) {
+                    $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
+                    PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+                } else {
+                    $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment. Error Message: ' . $response->ErrorMessage;
+                    PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Order', $id_order, true);
+                }
             } else {
-                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment. Error Message: ' . $response->ErrorMessage;
-                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Order', $id_order, true);
+                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Bank Code not define.';
+                PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
             }
-        } else {
-            $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Bank Code not define.';
-            PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
         }
     }
 
@@ -1059,7 +1112,34 @@ class Ssbhesabfa extends Module
         }
     }
 
+    public function syncOrders($from_date)
+    {
+        if (!isset($from_date)) {
+            return false;
+        }
+        $orders = Order::getOrdersIdByDate($from_date, date('Y-m-d h:i:s'));
+        $id_orders = array();
+        foreach ($orders as $id_order) {
+            $id_obj = $this->getObjectId('order', $id_order);
+            if (!$id_obj) {
+                if ($this->setOrder($id_order)) {
+                    $this->setOrderPayment($id_order);
+                    array_push($id_orders, $id_order);
+                }
+            }
+        }
+
+        return $id_orders;
+    }
+
     //Hooks
+    public function hookBackOfficeHeader()
+    {
+        if (Tools::getValue('module_name') == $this->name) {
+            $this->context->controller->addJqueryUI('ui.datepicker');
+        }
+    }
+    
     //Contact
     public function hookActionObjectCustomerAddAfter($params)
     {
@@ -1092,15 +1172,14 @@ class Ssbhesabfa extends Module
     public function hookActionValidateOrder($params)
     {
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-            $id_order = Order::getOrderByCartId((int)$params['cart']->id);
-            $this->setOrder((int)$id_order);
+            $this->setOrder((int)$params['order']->id);
         }
     }
 
-    public function hookActionPaymentCCAdd($params)
+    public function hookActionPaymentConfirmation($params)
     {
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-            $this->setOrderPayment($params['paymentCC']);
+            $this->setOrderPayment($params['id_order']);
         }
     }
 

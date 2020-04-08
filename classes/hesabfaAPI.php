@@ -39,7 +39,10 @@ class HesabfaApi
         ), $data);
 
         $data_string = json_encode($data);
-//die(var_dump($data_string));
+        if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+            PrestaShopLogger::addLog($method . ' - ' . $data_string, 1, null, null, null, true);
+        }
+
         $url = 'https://api.hesabfa.com/v1/' . $method;
 
         $ch = curl_init();
