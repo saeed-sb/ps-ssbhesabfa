@@ -26,7 +26,6 @@
 
 include(dirname(__FILE__) . '/../../config/config.inc.php');
 include(dirname(__FILE__) . '/../../init.php');
-include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
 
 
 /* Check security token */
@@ -44,7 +43,11 @@ if ($ssbHesabfa->active) {
     $post = Tools::file_get_contents('php://input');
     $result = json_decode($post);
 
-    if (!isset($result)) {
+    if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+        PrestaShopLogger::addLog('ssbhesabfa - WebHook call - ' . serialize($result), 1, null, null, null, true);
+    }
+
+    if (!is_object($result)) {
         PrestaShopLogger::addLog('ssbhesabfa - Invalid Webhook request.', 2, null, null, null, true);
         die('Invalid request.');
     }
@@ -54,5 +57,6 @@ if ($ssbHesabfa->active) {
         die('Invalid password.');
     }
 
+    include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
     new HesabfaWebhook();
 }

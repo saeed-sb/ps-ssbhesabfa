@@ -45,6 +45,9 @@
         <li class="nav-item {if $current_form_tab == 'Export'}active{/if}">
             <a class="nav-link" id="export-tab" data-toggle="tab" href="#export" role="tab" aria-controls="export" aria-selected="false">{l s='Export' mod='ssbhesabfa'}</a>
         </li>
+        <li class="nav-item {if $current_form_tab == 'Sync'}active{/if}">
+            <a class="nav-link" id="sync-tab" data-toggle="tab" href="#sync" role="tab" aria-controls="sync" aria-selected="false">{l s='Sync' mod='ssbhesabfa'}</a>
+        </li>
 
     </ul>
     <!-- Tab panes -->
@@ -84,6 +87,7 @@
             </div>
             {/if}
         </div>
+        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
         <div class="tab-pane {if $current_form_tab == 'Export'}active{/if}" id="export" role="tabpanel" aria-labelledby="export-tab">
             <div class="panel">
                 <div class="alert alert-info" role="alert">
@@ -154,8 +158,16 @@
                     </div>
 
                 </div>
+                <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
+            </div>
+        </div>
+        <div class="tab-pane {if $current_form_tab == 'Sync'}active{/if}" id="sync" role="tabpanel" aria-labelledby="sync-tab">
+            <div class="panel">
+                <div class="alert alert-info" role="alert">
+                    {l s='Export/Sync can take several minutes.' mod='ssbhesabfa'}</p>
+                </div>
                 <div class="margin-form" style="clear: both;">
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncChanges">
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncChanges" onclick="$('#sync_loader').show();">
                         {l s='Sync Changes' mod='ssbhesabfa'}
                     </button>
                     <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
@@ -167,65 +179,83 @@
                                     <p>{l s='Are you sure you want to Sync all changes with Hesabfa?'}</p>
                                 </div>
                                 <div class="modal-footer">
-                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
                                         <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncChanges" name="submitSsbhesabfaSyncChanges" onclick="$('#export_loader').show();">{l s='Sync Changes' mod='ssbhesabfa'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncChanges" name="submitSsbhesabfaSyncChanges" onclick="$('#sync_loader').show();">{l s='Sync Changes' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
                 <div class="margin-form" style="clear: both;">
-                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-
-                    <div class="col-lg-3">
-                        <div class="row">
-                            <div class="input-group">
-                                <input class="datetimepicker" type="text" id="SSBHESABFA_SYNC_ORDER_FROM" name="SSBHESABFA_SYNC_ORDER_FROM">
-                                <script type="text/javascript">
-                                    $(document).ready(function(){
-                                        $(".datetimepicker").datepicker({
-                                            prevText: '',
-                                            nextText: '',
-                                            dateFormat: 'yy-mm-dd'
-                                        });
-                                    });
-                                </script>
-                            <span class="input-group-addon">
-                                <i class="icon-calendar-empty"></i>
-                            </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-9">
-
-                        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportInvoices">
-                            {l s='Sync Orders' mod='ssbhesabfa'}
-                        </button>
-                    </div>
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncProducts" onclick="$('#sync_loader').show();">
+                        {l s='Sync Products Quantity and Price' mod='ssbhesabfa'}
+                    </button>
                     <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
                     <br>
-                    <div class="modal fade" id="exportInvoices" tabindex="-1" role="dialog" aria-labelledby="exportInvoicesLabel" aria-hidden="true">
+                    <div class="modal fade" id="syncProducts" tabindex="-1" role="dialog" aria-labelledby="syncProductsLabel" aria-hidden="true">
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to Sync all orders with Hesabfa?'}</p>
+                                    <p>{l s='Are you sure you want to Sync all Products price and quantity with Hesabfa?'}</p>
                                 </div>
                                 <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
-                                    <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportInvoices" name="submitSsbhesabfaExportInvoices" onclick="$('#export_loader').show();">{l s='Sync Orders' mod='ssbhesabfa'}</button>
+                                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncProducts" name="submitSsbhesabfaSyncProducts" onclick="$('#sync_loader').show();">{l s='Sync Products' mod='ssbhesabfa'}</button>
+                                    </form>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    </form>
-
                 </div>
-                <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
+                <div class="margin-form" style="clear: both;">
+                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
+                        <div class="col-lg-3">
+                            <div class="row">
+                                <div class="input-group">
+                                    <input class="datetimepicker" type="text" id="SSBHESABFA_SYNC_ORDER_FROM" name="SSBHESABFA_SYNC_ORDER_FROM">
+                                    <script type="text/javascript">
+                                        $(document).ready(function(){
+                                            $(".datetimepicker").datepicker({
+                                                prevText: '',
+                                                nextText: '',
+                                                dateFormat: 'yy-mm-dd'
+                                            });
+                                        });
+                                    </script>
+                                <span class="input-group-addon">
+                                    <i class="icon-calendar-empty"></i>
+                                </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-9">
+
+                            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportInvoices">
+                                {l s='Sync Orders' mod='ssbhesabfa'}
+                            </button>
+                        </div>
+                        <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                        <br>
+                        <div class="modal fade" id="exportInvoices" tabindex="-1" role="dialog" aria-labelledby="exportInvoicesLabel" aria-hidden="true">
+                            <div class="modal-dialog" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-body">
+                                        <p>{l s='Are you sure you want to Sync all orders with Hesabfa?'}</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportInvoices" name="submitSsbhesabfaExportInvoices" onclick="$('#export_loader').show();">{l s='Sync Orders' mod='ssbhesabfa'}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <p id="sync_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
             </div>
         </div>
-        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
     </div>
 </div>

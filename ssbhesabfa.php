@@ -28,8 +28,9 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-include('classes/hesabfaApi.php');
-include('classes/HesabfaModel.php');
+include(dirname(__FILE__) . '/classes/HesabfaApi.php');
+include(dirname(__FILE__) . '/classes/HesabfaModel.php');
+
 
 class Ssbhesabfa extends Module
 {
@@ -39,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.8.9';
+        $this->version = '0.9.0';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -64,8 +65,8 @@ class Ssbhesabfa extends Module
         include(dirname(__FILE__).'/sql/install.php');
 
         foreach (array(
-                     'SSBHESABFA_LIVE_MODE' => false,
-                     'SSBHESABFA_DEBUG_MODE' => false,
+                     'SSBHESABFA_LIVE_MODE' => 0,
+                     'SSBHESABFA_DEBUG_MODE' => 0,
                      'SSBHESABFA_ACCOUNT_USERNAME' => null,
                      'SSBHESABFA_ACCOUNT_PASSWORD' => null,
                      'SSBHESABFA_ACCOUNT_API' => null,
@@ -75,6 +76,7 @@ class Ssbhesabfa extends Module
                      'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => '0',
                      'SSBHESABFA_ITEM_UPDATE_PRICE' => '0',
                      'SSBHESABFA_ITEM_UPDATE_QUANTITY' => '0',
+                     'SSBHESABFA_LAST_LOG_CHECK_ID' => '0',
                  ) as $key => $val) {
             if (!Configuration::updateValue($key, $val)) {
                 return false;
@@ -207,6 +209,13 @@ class Ssbhesabfa extends Module
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before sync Changes.'));
             }
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaSyncProducts')) == true) {
+            if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+                $this->syncProducts();
+                $output .= $this->displayConfirmation($this->l('Products synced with Hesabfa successfully.'));
+            } else {
+                $output .= $this->displayWarning($this->l('The API Connection must be connected before sync Products.'));
+            }
         }
 
         //assign smarty vars
@@ -219,6 +228,7 @@ class Ssbhesabfa extends Module
         $this->context->smarty->assign(array(
             'current_form_tab' => Tools::getValue('form_tab'),
             'export_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Export',
+            'sync_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Sync',
             'update_action_url' => './index.php?tab=AdminModules&configure=ssbhesabfa&token=' . Tools::getAdminTokenLite('AdminModules') . '&tab_module=' . $this->tab . '&module_name=ssbhesabfa&form_tab=Home',
             'live_mode' => Configuration::get('SSBHESABFA_LIVE_MODE'),
             'module_ver' => $this->version,
@@ -334,11 +344,12 @@ class Ssbhesabfa extends Module
                     ));
                 }
             }
+
             if (empty($bank_options)) {
-                $bank_options = array(
+                $bank_options = array(array(
                     'id_option' => 0,
                     'name' => $this->l('Define at least one bank in Hesabfa'),
-                );
+                ));
             }
 
             foreach ($this->getPaymentMethodsName() as $item) {
@@ -541,9 +552,16 @@ class Ssbhesabfa extends Module
         $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
             //don't replace password with null if password not entered
-            if (!($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null)) {
-                Configuration::updateValue($key, Tools::getValue($key));
+            if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null) {
+                break;
             }
+
+            //dont add bank map if bank is not define in hesabfa
+            if (strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false && Tools::getValue($key) == 0) {
+                break;
+            }
+
+            Configuration::updateValue($key, Tools::getValue($key));
         }
     }
 
@@ -1209,6 +1227,23 @@ class Ssbhesabfa extends Module
         }
 
         return $id_orders;
+    }
+
+    public function syncProducts()
+    {
+        $hesabfa = new HesabfaApi();
+        $response = $hesabfa->itemGetItems(array('Take' => 99999999));
+        if ($response->Success) {
+            $products = $response->Result->List;
+            require_once(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
+            foreach ($products as $product) {
+                HesabfaWebhook::setItemChanges($product);
+            }
+        } else {
+            $msg = 'ssbhesabfa - Cannot get bulk item. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
+            return false;
+        }
     }
 
     //Hooks

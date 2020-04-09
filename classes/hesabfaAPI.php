@@ -40,7 +40,7 @@ class HesabfaApi
 
         $data_string = json_encode($data);
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-            PrestaShopLogger::addLog($method . ' - ' . $data_string, 1, null, null, null, true);
+            PrestaShopLogger::addLog('ssbhesabfa - ' . $method . ' - ' . serialize($data_string), 1, null, null, null, true);
         }
 
         $url = 'https://api.hesabfa.com/v1/' . $method;
@@ -58,6 +58,10 @@ class HesabfaApi
 
         $result = curl_exec($ch);
         curl_close($ch);
+
+        if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+            PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
+        }
 
         if ($result == null) {
             return 'No response from Hesabfa';
@@ -194,7 +198,7 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function itemGetItems($queryInfo)
+    public function itemGetItems($queryInfo = null)
     {
         $method = 'item/getitems';
         $data = array(
