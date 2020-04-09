@@ -565,19 +565,18 @@ class Ssbhesabfa extends Module
         }
 
         //ToDo: PrestaPay plugins name
-        if (Module::isInstalled('psf_prestapay')) {
-            $prestapay = Module::getInstanceByName('psf_prestapay');
-
-            /* Check if the module is enabled */
-            if ($prestapay->active) {
-                //die(var_dump($prestapay->getModulePlugins(1)));
-                $psf_prestapay = new psf_prestapay();
-                $plugins = $psf_prestapay->getModulePlugins(1);
-                foreach ($plugins as $plugin) {
-                    $plugin;
-                }
-            }
-        }
+//        if (Module::isInstalled('psf_prestapay')) {
+//            $prestapay = Module::getInstanceByName('psf_prestapay');
+//
+//            /* Check if the module is enabled */
+//            if ($prestapay->active) {
+//                $psf_prestapay = new psf_prestapay();
+//                $plugins = $psf_prestapay->getModulePlugins(1);
+//                foreach ($plugins as $plugin) {
+//                    $plugin;
+//                }
+//            }
+//        }
 
         return $payment_array;
     }
@@ -1105,16 +1104,92 @@ class Ssbhesabfa extends Module
     public function exportProducts($setQuantity = 0)
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, true);
-        foreach ($products as $key) {
-            $this->setItem($key['id_product'], $setQuantity);
+        $items = array();
+        foreach ($products as $item) {
+            //do if customer not exists in hesabfa
+            $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
+            $id_product = $item['id_product'];
+            $id_obj = $this->getObjectId('product', $id_product);
+            if (!$id_obj) {
+                $product = new Product($id_product);
+                $itemType = ($product->is_virtual == 1 ? 1 : 0);
+                $quantity = $setQuantity ? $product->quantity : null;
+
+                array_push($items, array(
+                    'Name' => $product->name[$id_default_lang],
+                    'ItemType' => $itemType,
+                    'Barcode' => $product->upc,
+                    'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
+                    'Quantity' => $quantity,
+                    'Tag' => '{"id_product": '.$id_product.'}',
+                    'NodeFamily' => $this->getCategoryPath($product->id_category_default),
+                    'ProductCode' => $id_product,
+                ));
+            }
+        }
+
+        $hesabfa = new HesabfaApi();
+        $response = $hesabfa->itemBatchSave($items);
+        if ($response->Success) {
+            foreach ($response->Result as $item) {
+                $obj = new HesabfaModel();
+                $obj->id_hesabfa = (int)$item->Code;
+                $obj->obj_type = 'product';
+                $json = json_decode($item->Tag);
+                $obj->id_ps = (int)$json->id_product;
+                $obj->add();
+                $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
+                PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
+            }
+            return true;
+        } else {
+            $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
+            return false;
         }
     }
 
     public function exportCustomers()
     {
         $customers = Customer::getCustomers();
-        foreach ($customers as $customer) {
-            $this->setContact($customer['id_customer']);
+        $data = array();
+        foreach ($customers as $item) {
+            //do if customer not exists in hesabfa
+            $id_customer = $item['id_customer'];
+            $id_obj = $this->getObjectId('customer', $id_customer);
+            if (!$id_obj) {
+                $customer = new Customer($id_customer);
+                array_push($data, array(
+                    'Name' => $customer->firstname . ' ' . $customer->lastname,
+                    'FirstName' => $customer->firstname,
+                    'LastName' => $customer->lastname,
+                    'ContactType' => 1,
+                    'NodeFamily' => 'اشخاص :' . Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
+                    'Email' => $customer->email,
+                    'Tag' => '{"id_customer": '.$id_customer.'}',
+                    'Note' => 'Customer ID in OnlineStore: ' . $id_customer,
+                ));
+            }
+        }
+
+        $hesabfa = new HesabfaApi();
+        $response = $hesabfa->contactBatchSave($data);
+        if ($response->Success) {
+            foreach ($response->Result as $item) {
+                $obj = new HesabfaModel();
+                $obj->id_hesabfa = (int)$item->Code;
+                $obj->obj_type = 'customer';
+                $json = json_decode($item->Tag);
+                $obj->id_ps = (int)$json->id_customer;
+                $obj->add();
+                $msg = 'ssbhesabfa - Contact successfully added. Contact Code: ' . $item->Code;
+                PrestaShopLogger::addLog($msg, 1, null, 'Customer', $json->id_customer, true);
+            }
+            return true;
+        } else {
+            $msg = 'ssbhesabfa - Cannot add bulk contacts. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', null, true);
+            return false;
         }
     }
 
