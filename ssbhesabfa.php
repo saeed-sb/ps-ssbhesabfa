@@ -541,11 +541,9 @@ class Ssbhesabfa extends Module
         $form_values = $this->getConfigFormValues($form);
         foreach (array_keys($form_values) as $key) {
             //don't replace password with null if password not entered
-            if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null) {
-                break;
+            if (!($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null)) {
+                Configuration::updateValue($key, Tools::getValue($key));
             }
-
-            Configuration::updateValue($key, Tools::getValue($key));
         }
     }
 
