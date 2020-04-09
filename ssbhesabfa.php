@@ -74,6 +74,7 @@ class Ssbhesabfa extends Module
                      'SSBHESABFA_CONTACT_ADDRESS_STATUS' => 1,
                      'SSBHESABFA_CONTACT_NODE_FAMILY' => 'Online Store Customer\'s',
                      'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => '0',
+                     'SSBHESABFA_ITEM_BARCODE' => '2',
                      'SSBHESABFA_ITEM_UPDATE_PRICE' => '0',
                      'SSBHESABFA_ITEM_UPDATE_QUANTITY' => '0',
                      'SSBHESABFA_LAST_LOG_CHECK_ID' => '0',
@@ -387,6 +388,34 @@ class Ssbhesabfa extends Module
             'form' => array(
                 'input' => array(
                     array(
+                        'type' => 'select',
+                        'label' => $this->l('Barcode:'),
+                        'desc' => $this->l('Choose which data field selected for Barcode'),
+                        'name' => 'SSBHESABFA_ITEM_BARCODE',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Reference'),
+                                ),
+                                array(
+                                    'id_option' => 2,
+                                    'name' => $this->l('UPC barcode'),
+                                ),
+                                array(
+                                    'id_option' => 3,
+                                    'name' => $this->l('EAN-13 or JAN barcode'),
+                                ),
+                                array(
+                                    'id_option' => 4,
+                                    'name' => $this->l('ISBN'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array(
                         'type' => 'switch',
                         'label' => $this->l('Update Price'),
                         'name' => 'SSBHESABFA_ITEM_UPDATE_PRICE',
@@ -508,6 +537,7 @@ class Ssbhesabfa extends Module
                 break;
             case 'Item':
                 $keys =  array(
+                    'SSBHESABFA_ITEM_BARCODE' => Configuration::get('SSBHESABFA_ITEM_BARCODE'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
                 );
@@ -531,6 +561,7 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
                     'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
 
+                    'SSBHESABFA_ITEM_BARCODE' => Configuration::get('SSBHESABFA_ITEM_BARCODE'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
 
@@ -744,7 +775,7 @@ class Ssbhesabfa extends Module
             'Code' => $code,
             'Name' => $product->name[$id_default_lang],
             'ItemType' => $itemType,
-            'Barcode' => $product->upc,
+            'Barcode' => $this->getBarcode($id_product),
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
             'Quantity' => $quantity,
             'Tag' => '{"id_product": '.$id_product.'}',
@@ -794,6 +825,26 @@ class Ssbhesabfa extends Module
             $category = new Category($id_category, Context::getContext()->language->id);
             $this->categoryArray[] = $category->name;
             return $this->getCategoryPath($category->id_parent);
+        }
+    }
+
+    private function getBarcode($id_product)
+    {
+        if (!isset($id_product)) {
+            return false;
+        }
+
+        $product = new Product($id_product);
+
+        switch (Configuration::get('SSBHESABFA_ITEM_BARCODE')) {
+            case 1:
+                return $product->reference;
+            case 2:
+                return $product->upc;
+            case 3:
+                return $product->ean13;
+            case 4:
+                return $product->isbn;
         }
     }
 
@@ -1134,7 +1185,7 @@ class Ssbhesabfa extends Module
                 array_push($items, array(
                     'Name' => $product->name[$id_default_lang],
                     'ItemType' => $itemType,
-                    'Barcode' => $product->upc,
+                    'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
                     'Quantity' => $quantity,
                     'Tag' => '{"id_product": '.$id_product.'}',

@@ -24,10 +24,6 @@
  *  International Registered Trademark & Property of PrestaShop SA
  */
 
-//include(dirname(__FILE__) . '/../../../config/config.inc.php');
-//include(dirname(__FILE__) . '/../../../init.php');
-//include(dirname(__FILE__) . '/hesabfaApi.php');
-
 class HesabfaWebhook
 {
     public function __construct()
