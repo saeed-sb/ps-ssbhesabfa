@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.0';
+        $this->version = '0.9.1';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -73,11 +73,11 @@ class Ssbhesabfa extends Module
                      'SSBHESABFA_WEBHOOK_PASSWORD' => bin2hex(openssl_random_pseudo_bytes(16)),
                      'SSBHESABFA_CONTACT_ADDRESS_STATUS' => 1,
                      'SSBHESABFA_CONTACT_NODE_FAMILY' => 'Online Store Customer\'s',
-                     'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => '0',
-                     'SSBHESABFA_ITEM_BARCODE' => '2',
-                     'SSBHESABFA_ITEM_UPDATE_PRICE' => '0',
-                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => '0',
-                     'SSBHESABFA_LAST_LOG_CHECK_ID' => '0',
+                     'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => 0,
+                     'SSBHESABFA_ITEM_BARCODE' => 2,
+                     'SSBHESABFA_ITEM_UPDATE_PRICE' => 0,
+                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => 0,
+                     'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
                  ) as $key => $val) {
             if (!Configuration::updateValue($key, $val)) {
                 return false;
@@ -166,22 +166,31 @@ class Ssbhesabfa extends Module
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProducts')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                $this->exportProducts();
-                $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+                if ($this->exportProducts()) {
+                    $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+                } else {
+                    $output .= $this->displayError($this->l('Products exported to Hesabfa fail, Please see logs.'));
+                }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProductsWithQuantity')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                $this->exportProducts(1);
-                $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+                if ($this->exportProducts(1)) {
+                    $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+                } else {
+                    $output .= $this->displayError($this->l('Products exported to Hesabfa fail, Please see logs.'));
+                }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportCustomers')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                $this->exportCustomers();
-                $output .= $this->displayConfirmation($this->l('Customers exported to Hesabfa successfully.'));
+                if ($this->exportCustomers()) {
+                    $output .= $this->displayConfirmation($this->l('Customers exported to Hesabfa successfully.'));
+                } else {
+                    $output .= $this->displayError($this->l('Customers exported to Hesabfa fail, Please see logs.'));
+                }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Customers.'));
             }
@@ -245,7 +254,7 @@ class Ssbhesabfa extends Module
             $payment_methods = $this->getPaymentMethodsName();
             foreach ($payment_methods as $method) {
                 if (!Configuration::get($method['id'])) {
-                    $output .= $this->displayError($this->l('Payment methods not mapped with Banks. Please check setting in Payment Methods tab.'));
+                    $output .= $this->displayError($this->l('Payment methods are not mapped with Banks. Please check setting in Payment Methods tab.'));
                     break;
                 }
             }
@@ -751,7 +760,7 @@ class Ssbhesabfa extends Module
         if (is_object($obj)) {
             return $obj->id_hesabfa;
         } else {
-            return false;
+            return null;
         }
     }
 
@@ -762,10 +771,7 @@ class Ssbhesabfa extends Module
         }
 
         $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
-        $code = null;
-        if ($this->getItemCodeByProductId($id_product) != false) {
-            $code = $this->getItemCodeByProductId($id_product);
-        }
+        $code = $this->getItemCodeByProductId($id_product);
 
         $product = new Product($id_product);
         $itemType = ($product->is_virtual == 1 ? 1 : 0);
@@ -777,7 +783,7 @@ class Ssbhesabfa extends Module
             'ItemType' => $itemType,
             'Barcode' => $this->getBarcode($id_product),
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-            'Quantity' => $quantity,
+            'OpeningQuantity' => $quantity,
             'Tag' => '{"id_product": '.$id_product.'}',
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
@@ -1089,7 +1095,7 @@ class Ssbhesabfa extends Module
         }
 
         $order = new Order($id_order);
-        $price = $price / (int)$order->conversion_rate;
+        $price = $price * (int)$order->conversion_rate;
         $price = $this->getPriceInHesabfaDefaultCurrency($price);
 
         return $price;
@@ -1102,7 +1108,7 @@ class Ssbhesabfa extends Module
         }
 
         $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
-        $price = $price / (int)$currency->conversion_rate;
+        $price = $price * (int)$currency->conversion_rate;
         return $price;
     }
 
@@ -1130,7 +1136,7 @@ class Ssbhesabfa extends Module
                     $payment->transaction_id = 'None';
                 }
 
-                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $payment->amount, $payment->transaction_id, $payment->card_number);
+                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, $payment->card_number);
 
                 if ($response->Success) {
                     $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
@@ -1170,7 +1176,7 @@ class Ssbhesabfa extends Module
     //Export
     public function exportProducts($setQuantity = 0)
     {
-        $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, true);
+        $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
         foreach ($products as $item) {
             //do if customer not exists in hesabfa
@@ -1187,7 +1193,7 @@ class Ssbhesabfa extends Module
                     'ItemType' => $itemType,
                     'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-                    'Quantity' => $quantity,
+                    'OpeningQuantity' => $quantity,
                     'Tag' => '{"id_product": '.$id_product.'}',
                     'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                     'ProductCode' => $id_product,

@@ -55,7 +55,8 @@
         <div class="tab-pane {if $current_form_tab == null || $current_form_tab == 'Home'}active{/if}" id="home" role="tabpanel" aria-labelledby="home-tab">
             <div class="panel" style="border-top-left-radius: 0px;">
                 <h1>{l s='Hesabfa Accounting' mod='ssbhesabfa'}</h1>
-                <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sed sed risus pretium quam. Tellus elementum sagittis vitae et leo duis ut diam. Posuere lorem ipsum dolor sit amet. Scelerisque felis imperdiet proin fermentum leo vel. Ornare suspendisse sed nisi lacus sed viverra tellus in. Elit scelerisque mauris pellentesque pulvinar. Cursus risus at ultrices mi. Scelerisque viverra mauris in aliquam. Sed euismod nisi porta lorem mollis aliquam ut porttitor leo. Ullamcorper morbi tincidunt ornare massa. Arcu cursus euismod quis viverra nibh. Pellentesque habitant morbi tristique senectus et netus et malesuada fames. Neque convallis a cras semper auctor neque vitae. Erat pellentesque adipiscing commodo elit at imperdiet dui accumsan. Pharetra magna ac placerat vestibulum lectus mauris ultrices eros in. Mattis ullamcorper velit sed ullamcorper morbi tincidunt.' mod='ssbhesabfa'}</p>
+                <p>{l s='This module helps connect your (online) store to Hesabfa online accounting software. By using this module, saving products, contacts, and orders in your store will also save them automatically in your Hesabfa account. Besides that, just after a client pays a bill, the receipt document will be stored in Hesabfa as well. Of course, you have to register your account in Hesabfa first. To do so, visit Hesabfa at the link here www.hesabfa.com and sign up for free. After you signed up and entered your account, choose your business, then in the settings menu/API, you can find the API keys for the business and import them to the module’s settings. Now your module is ready to use.' mod='ssbhesabfa'}</p>
+                <p>{l s='For more information and a full guide to how to use Hesabfa and PerstaShop module, visit Hesabfa’s website and go to the “Accounting School” menu.' mod='ssbhesabfa'}</p>
 
                 <div class="row">
                     <div class="col-lg-4">
@@ -113,6 +114,7 @@
                         </div>
                     </div>
 
+                    <!--
                     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsWithQuantity">
                         {l s='Export products with Quantity' mod='ssbhesabfa'}
                     </button>
@@ -131,6 +133,7 @@
                             </div>
                         </div>
                     </div>
+                    -->
                     <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
                     <br>
                 </div>

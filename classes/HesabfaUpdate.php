@@ -113,7 +113,7 @@ class HesabfaUpdate
         }
         if ($remote_version === false) {
             $html .= $this->ssbhesabfa->displayConfirmation(
-                sprintf($this->ssbhesabfa->l('Your theme is already the latest version.'), $remote_version)
+                sprintf($this->ssbhesabfa->l('Your module is already the latest version.'), $remote_version)
             );
         }
         $notices = $this->getInfoByKey('notice');
@@ -159,7 +159,7 @@ class HesabfaUpdate
             return $this->ssbhesabfa->displayError($this->ssbhesabfa->l('Unable to check update.'));
         }
         if ($remote_version === false) {
-            return $this->ssbhesabfa->displayConfirmation($this->ssbhesabfa->l('Your theme is already the latest version.'));
+            return $this->ssbhesabfa->displayConfirmation($this->ssbhesabfa->l('Your module is already the latest version.'));
         }
         $sandbox = _PS_CACHE_DIR_.'sandbox/';
         // Test sandbox is writeable ?
