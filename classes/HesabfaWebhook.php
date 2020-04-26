@@ -33,34 +33,37 @@ class HesabfaWebhook
         $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
         if ($changes->Success) {
             foreach ($changes->Result as $item) {
-                switch ($item->ObjectType) {
-                    case 'Invoice':
-                        $this->setInvoiceChangesById($item->ObjectId);
-                        break;
-                    case 'Product':
-                        //if Action was deleted
-                        if ($item->Action == 53) {
-                            $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
-                            $hesabfa = new HesabfaModel($id_obj);
-                            $hesabfa->delete();
-                        }
-                        $this->setItemChangesById($item->ObjectId);
-                        break;
-                    case 'Contact':
-                        //if Action was deleted
-                        if ($item->Action == 33) {
-                            $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
-                            $hesabfa = new HesabfaModel($id_obj);
-                            $hesabfa->delete();
-                        }
-                        $this->setContactChangesById($item->ObjectId);
-                        break;
+                if (!$item->API) {
+                    switch ($item->ObjectType) {
+                        case 'Invoice':
+                            $this->setInvoiceChangesById($item->ObjectId);
+                            break;
+                        case 'Product':
+                            //if Action was deleted
+                            if ($item->Action == 53) {
+                                $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
+                                $hesabfa = new HesabfaModel($id_obj);
+                                $hesabfa->delete();
+                            }
+                            $this->setItemChangesById($item->ObjectId);
+                            break;
+                        case 'Contact':
+                            //if Action was deleted
+                            if ($item->Action == 33) {
+                                $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
+                                $hesabfa = new HesabfaModel($id_obj);
+                                $hesabfa->delete();
+                            }
+                            $this->setContactChangesById($item->ObjectId);
+                            break;
+                    }
                 }
                 $lastChange = $item->Id;
+
+                //set LastChange ID
+                Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange);
             }
 
-            //set LastChange ID
-            Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange);
         } else {
             PrestaShopLogger::addLog('ssbhesabfa - Cannot check last changes. Error Message: ' . $changes->ErrorMessage, 2, $changes->ErrorCode, null, null, true);
         }
