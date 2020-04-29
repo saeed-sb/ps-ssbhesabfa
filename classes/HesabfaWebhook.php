@@ -215,11 +215,19 @@ class HesabfaWebhook
             //3.set new Quantity
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
                 if ($item->Stock != $product->quantity) {
-                    $old_quantity = $product->quantity;
-                    $product->quantity = $item->Stock;
-                    $product->update();
 
                     StockAvailable::setQuantity($id_product, null, $item->Stock);
+
+                    $old_quantity = $product->quantity;
+                    //TODO: Check why this object not update the quantity
+//                    $product->quantity = $item->Stock;
+//                    $product->update();
+
+                    $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
+                    SET `quantity` = '. $item->Stock . '
+                    WHERE `id_product` = ' . $id_product
+                    ;
+                    Db::getInstance()->execute($sql);
 
                     $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
                     PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
