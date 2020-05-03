@@ -28,7 +28,7 @@
 class HesabfaUpdate
 {
     private static $instance;
-    private $data_url = 'http://hesabfa.sattarbeglou.com/prestashop_module_info.json';
+    private $data_url = 'https://hesabfa.com/file/prestashop_module_info.json';
     public $ssbhesabfa;
     public $token;
 

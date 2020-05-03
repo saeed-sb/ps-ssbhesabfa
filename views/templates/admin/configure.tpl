@@ -63,7 +63,7 @@
                         <form action="{$update_action_url|escape:'htmlall':'UTF-8'}" method="post">
                             <button {if isset($need_update)}style="display: none" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpdate" name="submitSsbhesabfaModuleUpdate" onclick="">{l s='Check Update' mod='ssbhesabfa'}</button>
                             <button {if !isset($need_update) || $need_update == false || is_null($need_update)}style="display: none;" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpgrade" name="submitSsbhesabfaModuleUpgrade" onclick="">{l s='Upgrade Module' mod='ssbhesabfa'}</button>
-                            {l s='Module Version: v'}{$module_ver}
+                            {l s='Module Version: v' mod='ssbhesabfa'}{$module_ver}
                         </form>
                         <br>
                         {if isset($notices)}{$notices}{/if}
@@ -134,7 +134,7 @@
                         </div>
                     </div>
                     -->
-                    <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                    <p>{l s='Export and add all online store products to Hesabfa' mod='ssbhesabfa'}<br></p>
                     <br>
                 </div>
                 <div class="margin-form" style="clear: both;">
@@ -142,7 +142,7 @@
                         {l s='Export Customers' mod='ssbhesabfa'}
                     </button>
 
-                    <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                    <p>{l s='Export and add all online store customers to Hesabfa' mod='ssbhesabfa'}<br></p>
                     <br>
                     <div class="modal fade" id="exportCustomers" tabindex="-1" role="dialog" aria-labelledby="exportCustomersLabel" aria-hidden="true">
                         <div class="modal-dialog" role="document">
@@ -173,7 +173,7 @@
                     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncChanges" onclick="$('#sync_loader').show();">
                         {l s='Sync Changes' mod='ssbhesabfa'}
                     </button>
-                    <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                    <p>{l s='Sync all Hesabfa changes with Online Store' mod='ssbhesabfa'}<br></p>
                     <br>
                     <div class="modal fade" id="syncChanges" tabindex="-1" role="dialog" aria-labelledby="syncChangesLabel" aria-hidden="true">
                         <div class="modal-dialog" role="document">
@@ -195,7 +195,7 @@
                     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncProducts" onclick="$('#sync_loader').show();">
                         {l s='Sync Products Quantity and Price' mod='ssbhesabfa'}
                     </button>
-                    <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                    <p>{l s='Sync quantity and price of products in hesabfa with online store' mod='ssbhesabfa'}<br></p>
                     <br>
                     <div class="modal fade" id="syncProducts" tabindex="-1" role="dialog" aria-labelledby="syncProductsLabel" aria-hidden="true">
                         <div class="modal-dialog" role="document">
@@ -240,7 +240,7 @@
                                 {l s='Sync Orders' mod='ssbhesabfa'}
                             </button>
                         </div>
-                        <p>{l s='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor' mod='ssbhesabfa'}<br></p>
+                        <p>{l s='Sync/Add orders in online store with hesabfa from above date' mod='ssbhesabfa'}<br></p>
                         <br>
                         <div class="modal fade" id="exportInvoices" tabindex="-1" role="dialog" aria-labelledby="exportInvoicesLabel" aria-hidden="true">
                             <div class="modal-dialog" role="document">

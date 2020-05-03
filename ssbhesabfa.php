@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.1';
+        $this->version = '0.9.2';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -347,7 +347,7 @@ class Ssbhesabfa extends Module
             foreach ($banks->Result as $bank) {
                 //show only bank with default currency in hesabfa
                 $default_currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
-                if ($bank->Currency == $default_currency->getSign()) {
+                if ($bank->Currency == $default_currency->iso_code) {
                     array_push($bank_options, array(
                         'id_option' => $bank->Code,
                         'name' => $bank->Name . ' - ' . $bank->Branch . ' - ' . $bank->AccountNumber,
