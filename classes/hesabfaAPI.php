@@ -63,6 +63,9 @@ class HesabfaApi
             PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
         }
 
+        //Maximum request per minutes is 60 times,
+        sleep(1);
+
         if ($result == null) {
             return 'No response from Hesabfa';
         } else {

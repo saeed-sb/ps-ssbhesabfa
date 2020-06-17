@@ -31,7 +31,6 @@ if (!defined('_PS_VERSION_')) {
 include(dirname(__FILE__) . '/classes/HesabfaApi.php');
 include(dirname(__FILE__) . '/classes/HesabfaModel.php');
 
-
 class Ssbhesabfa extends Module
 {
     protected $config_form = false;
@@ -50,7 +49,6 @@ class Ssbhesabfa extends Module
 
         $this->displayName = $this->l('Hesabfa Online Accounting');
         $this->description = $this->l('Connect Hesabfa Online Accounting to Prestashop');
-
 
         $live_mode = Configuration::get('SSBHESABFA_LIVE_MODE');
         if (isset($live_mode) && $live_mode == false) {
