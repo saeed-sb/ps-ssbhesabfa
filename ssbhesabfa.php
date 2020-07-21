@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.2';
+        $this->version = '0.9.3';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -667,16 +667,16 @@ class Ssbhesabfa extends Module
                     $id_currency = Currency::getIdByIsoCode($default_currency->Result->Currency);
                     if ($id_currency > 0) {
                         Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $id_currency);
-                    } else {
+                    } elseif (_PS_VERSION_ > 1.7) {
                         $currency = new Currency();
                         $currency->iso_code = $default_currency->Result->Currency;
 
                         if ($currency->add()) {
                             Configuration::updateValue('SSBHESABFA_HESABFA_DEFAULT_CURRENCY', $currency->id);
-                        }
 
-                        $msg = 'ssbhesabfa - Hesabfa default currency('. $default_currency->Result->Currency .') added to Online Store';
-                        PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+                            $msg = 'ssbhesabfa - Hesabfa default currency('. $default_currency->Result->Currency .') added to Online Store';
+                            PrestaShopLogger::addLog($msg, 1, null, null, null, true);
+                        }
                     }
                 } else {
                     $msg = 'ssbhesabfa - Cannot check the Hesabfa default currency. Error Message: ' . $default_currency->ErrorMessage;
@@ -774,10 +774,11 @@ class Ssbhesabfa extends Module
         $product = new Product($id_product);
         $itemType = ($product->is_virtual == 1 ? 1 : 0);
         $quantity = $setQuantity ? $product->quantity : null;
+        $name = substr($product->name[$id_default_lang],0,99);
 
         $item = array(
             'Code' => $code,
-            'Name' => $product->name[$id_default_lang],
+            'Name' => $name,
             'ItemType' => $itemType,
             'Barcode' => $this->getBarcode($id_product),
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
@@ -1176,18 +1177,20 @@ class Ssbhesabfa extends Module
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
+        $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
+
         foreach ($products as $item) {
-            //do if customer not exists in hesabfa
-            $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
+            //do if product not exists in hesabfa
             $id_product = $item['id_product'];
             $id_obj = $this->getObjectId('product', $id_product);
             if (!$id_obj) {
                 $product = new Product($id_product);
                 $itemType = ($product->is_virtual == 1 ? 1 : 0);
                 $quantity = $setQuantity ? $product->quantity : null;
+                $name = substr($product->name[$id_default_lang],0,99);
 
                 array_push($items, array(
-                    'Name' => $product->name[$id_default_lang],
+                    'Name' => $name,
                     'ItemType' => $itemType,
                     'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
