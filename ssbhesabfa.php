@@ -774,7 +774,7 @@ class Ssbhesabfa extends Module
         $product = new Product($id_product);
         $itemType = ($product->is_virtual == 1 ? 1 : 0);
         $quantity = $setQuantity ? $product->quantity : null;
-        $name = substr($product->name[$id_default_lang],0,99);
+        $name = mb_substr($product->name[$id_default_lang],0,99);
 
         $item = array(
             'Code' => $code,
@@ -1187,7 +1187,7 @@ class Ssbhesabfa extends Module
                 $product = new Product($id_product);
                 $itemType = ($product->is_virtual == 1 ? 1 : 0);
                 $quantity = $setQuantity ? $product->quantity : null;
-                $name = substr($product->name[$id_default_lang],0,99);
+                $name = mb_substr($product->name[$id_default_lang],0,99);
 
                 array_push($items, array(
                     'Name' => $name,
