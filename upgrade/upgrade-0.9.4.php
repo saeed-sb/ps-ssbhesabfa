@@ -29,12 +29,12 @@ if (!defined('_PS_VERSION_')) {
 }
 
 function upgrade_module_0_9_4($module) {
-    if (!Configuration::updateValue('SSBHESABFA_INVOICE_RETURN_STATUE', 6) || !Configuration::updateValue('SSBHESABFA_INVOICE_REFERENCE_TYPE', 0)) {
+    if (!Configuration::updateValue('SSBHESABFA_INVOICE_RETURN_STATUE', 6) || !Configuration::updateValue('SSBHESABFA_INVOICE_REFERENCE_TYPE', 1)) {
         return false;
     }
 
-    if (!$module->isRegisteredInHook('hookActionOrderStatusPostUpdate')) {
-        $module->registerHook('hookActionOrderStatusPostUpdate');
+    if (!$module->isRegisteredInHook('actionOrderStatusPostUpdate')) {
+        $module->registerHook('actionOrderStatusPostUpdate');
     }
 
     return true;

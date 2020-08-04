@@ -14,6 +14,7 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_240cf5899a9d3f1449892c07d7dda83e'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_53521a753e7391dd3097826c2e8af253'] = 'تنظیمات روش‌های پرداخت به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ff06e7155572ac98fea068ccc5f7c461'] = 'تنظیمات محصولات به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7a0c95e27f886c2df32dcf5f4091d467'] = 'تنظیمات مشتریان به روزرسانی شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_5941e2012f5455d006f03fa7d624e049'] = 'تنظیمات فاکتور به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7dcacc291836c08efd98b7bf38d589ce'] = 'استخراج محصولات به حسابفا با موفقیت انجام شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_35468843803ad9fe9a691e91180859dd'] = 'قبل از استخراج محصولات، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4a68fe26566d11d826e27ff9d0d82f9c'] = 'استخراج مشتریان به حسابفا با موفقیت انجام شد.';
@@ -104,6 +105,7 @@ $_MODULE['<{ssbhesabfa}prestashop>configure_a3984a8c36e88e83703c27e8ca220e98'] =
 $_MODULE['<{ssbhesabfa}prestashop>configure_0441d064860599d5d6a9bf5c291f2042'] = 'افزودن تمامی محصولات فروشگاه آنلاین در حسابفا';
 $_MODULE['<{ssbhesabfa}prestashop>configure_7dc1ae2bef1d1bb7e729a1926291f19b'] = 'خروجی مشتریان';
 $_MODULE['<{ssbhesabfa}prestashop>configure_2810afba6c3e433fa21ceebaac5c87d8'] = 'افزودن تمامی مشتریان فروشگاه آنلاین در حسابفا';
+$_MODULE['<{ssbhesabfa}prestashop>configure_43379613a9c4a5ad458120e78ca07fca'] = 'جهت افزودن/ویرایش تمام مشتریان در حسابفا اطمینان دارید؟';
 $_MODULE['<{ssbhesabfa}prestashop>configure_4713ef5f2d6fc1e8f088c850e696a04b'] = 'خروجی مشتریان';
 $_MODULE['<{ssbhesabfa}prestashop>configure_b6c8c935041d548782063e009a66f7b5'] = 'همسان‌سازی تغییرات';
 $_MODULE['<{ssbhesabfa}prestashop>configure_80d77207d3d99d85fd41162c91f3d25e'] = 'همسان‌سازی تمامی تعییرات حسابفا با فروشگاه آن‌لاین';

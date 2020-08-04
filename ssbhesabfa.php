@@ -98,7 +98,7 @@ class Ssbhesabfa extends Module
 
             $this->registerHook('actionValidateOrder') &&
             $this->registerHook('actionPaymentConfirmation') &&
-            $this->registerHook('hookActionOrderStatusPostUpdate');
+            $this->registerHook('actionOrderStatusPostUpdate');
     }
 
     public function uninstall()
@@ -165,6 +165,9 @@ class Ssbhesabfa extends Module
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleContact')) == true) {
             $this->setConfigFormsValues('Contact');
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleInvoice')) == true) {
+            $this->setConfigFormsValues('Invoice');
+            $output .= $this->displayConfirmation($this->l('Invoice Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProducts')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
                 $exportProducts = $this->exportProducts();
@@ -1556,6 +1559,17 @@ class Ssbhesabfa extends Module
     public function hookActionObjectCustomerDeleteBefore($params)
     {
         $hesabfa = new HesabfaModel($this->getObjectId('customer', $params['customer']->id));
+
+        $hesabfaApi = new HesabfaApi();
+        $response = $hesabfaApi->contactDelete($hesabfa->id_hesabfa);
+        if ($response->Success) {
+            $msg = 'ssbhesabfa - Contact successfully deleted.';
+            PrestaShopLogger::addLog($msg, 1, null, 'Customer', $params['customer']->id, true);
+        } else {
+            $msg = 'ssbhesabfa - Cannot delete item in hesabfa. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $params['customer']->id, true);
+        }
+
         $hesabfa->delete();
     }
 
@@ -1578,6 +1592,12 @@ class Ssbhesabfa extends Module
     {
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $this->setOrderPayment($params['id_order']);
+        }
+    }
+
+    public function hookActionOrderStatusPostUpdate($params) {
+        if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
+            $this->setOrder($params['id_order'], 2);
         }
     }
 
@@ -1611,11 +1631,5 @@ class Ssbhesabfa extends Module
         }
 
         $hesabfa->delete();
-    }
-
-    public function hookActionOrderStatusPostUpdate($params) {
-        if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
-            $this->setOrder($params['id_order'], 2);
-        }
     }
 }
