@@ -41,6 +41,7 @@ class HesabfaApi
         $data_string = json_encode($data);
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - ' . $method . ' - ' . serialize($data_string), 1, null, null, null, true);
+            var_dump($method.$data_string);
         }
 
         $url = 'https://api.hesabfa.com/v1/' . $method;
@@ -236,6 +237,16 @@ class HesabfaApi
         $method = 'item/delete';
         $data = array(
             'code' => $code,
+        );
+
+        return $this->apiRequest($method, $data);
+    }
+
+    public function itemUpdateOpeningQuantity($items)
+    {
+        $method = 'item/UpdateOpeningQuantity';
+        $data = array(
+            'items' => $items,
         );
 
         return $this->apiRequest($method, $data);

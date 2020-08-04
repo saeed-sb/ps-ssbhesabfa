@@ -36,6 +36,9 @@
         <li class="nav-item {if $current_form_tab == 'Contact'}active{/if}">
             <a class="nav-link" id="customers-tab" data-toggle="tab" href="#customers" role="tab" aria-controls="customers" aria-selected="false">{l s='Customers' mod='ssbhesabfa'}</a>
         </li>
+        <li class="nav-item {if $current_form_tab == 'Invoice'}active{/if}">
+            <a class="nav-link" id="invoice-tab" data-toggle="tab" href="#invoice" role="tab" aria-controls="invoice" aria-selected="false">{l s='Invoice' mod='ssbhesabfa'}</a>
+        </li>
         <li class="nav-item {if $current_form_tab == 'Bank'}active{/if}">
             <a class="nav-link" id="payment-tab" data-toggle="tab" href="#payment" role="tab" aria-controls="payment" aria-selected="false">{l s='Payment Methods' mod='ssbhesabfa'}</a>
         </li>
@@ -76,6 +79,7 @@
         </div>
         <div class="tab-pane {if $current_form_tab == 'Item'}active{/if}" id="catalog" role="tabpanel" aria-labelledby="catalog-tab">{$Item}</div>
         <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
+        <div class="tab-pane {if $current_form_tab == 'Invoice'}active{/if}" id="invoice" role="tabpanel" aria-labelledby="invoice-tab">{$Invoice}</div>
         <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">
             {if $live_mode == true}
                 {$Bank}
@@ -102,19 +106,17 @@
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa?'}</p>
+                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa?' mod='ssbhesabfa'}</p>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProducts" name="submitSsbhesabfaExportProducts" onclick="$('#export_loader').show();">{l s='Export products' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <!--
                     <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsWithQuantity">
                         {l s='Export products with Quantity' mod='ssbhesabfa'}
                     </button>
@@ -122,18 +124,24 @@
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa with Quantity?'}</p>
+                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa with Quantity?' mod='ssbhesabfa'}</p>
+                                    <p>{l s='با فراخوانی این متد موجودی اول دوره کالاها در تراز افتتاحیه ثبت خواهد شد. همچنین سند افتتاحیه به تناسب اطلاعات ویرایش خواهد شد. بنابراین پیش از فراخوانی این متد مطمئن باشید که سهامداران در سیستم تعریف شده باشند.' mod='ssbhesabfa'}</p>
+                                    <h6>{l s='نکات مهم:'  mod='ssbhesabfa'}</h6>
+                                    <ul>
+                                        <li>{l s='این عمل فقط در اولین سال مالی امکان پذیر است.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='فقط موجودی کالاهایی که ارسال می شوند به روز خواهند شد و موجودی سایر کالاهایی که هم اکنون در تراز افتتاحیه ثبت شده اند تغییری نخواهند کرد.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='دقت شود که این متد فقط در شروع سال مالی فراخوانی شود. فراخوانی این متد در اواسط سال مالی ممکن است باعث بروز اختلال در موجودی سیستم شود.' mod='ssbhesabfa'}</li>
+                                    </ul>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProductsWithQuantity" name="submitSsbhesabfaExportProductsWithQuantity" onclick="$('#export_loader').show();">{l s='Export products with Quantity' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    -->
                     <p>{l s='Export and add all online store products to Hesabfa' mod='ssbhesabfa'}<br></p>
                     <br>
                 </div>
@@ -148,11 +156,11 @@
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Customers into Hesabfa?'}</p>
+                                    <p>{l s='Are you sure you want to add/update all Customers into Hesabfa?' mod='ssbhesabfa'}</p>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportCustomers" name="submitSsbhesabfaExportCustomers" onclick="$('#export_loader').show();">{l s='Export customers' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
@@ -179,11 +187,11 @@
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to Sync all changes with Hesabfa?'}</p>
+                                    <p>{l s='Are you sure you want to Sync all changes with Hesabfa?' mod='ssbhesabfa'}</p>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncChanges" name="submitSsbhesabfaSyncChanges" onclick="$('#sync_loader').show();">{l s='Sync Changes' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
@@ -201,7 +209,7 @@
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
-                                    <p>{l s='Are you sure you want to Sync all Products price and quantity with Hesabfa?'}</p>
+                                    <p>{l s='Are you sure you want to Sync all Products price and quantity with Hesabfa?' mod='ssbhesabfa'}</p>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
@@ -246,10 +254,10 @@
                             <div class="modal-dialog" role="document">
                                 <div class="modal-content">
                                     <div class="modal-body">
-                                        <p>{l s='Are you sure you want to Sync all orders with Hesabfa?'}</p>
+                                        <p>{l s='Are you sure you want to Sync all orders with Hesabfa?' mod='ssbhesabfa'}</p>
                                     </div>
                                     <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportInvoices" name="submitSsbhesabfaExportInvoices" onclick="$('#export_loader').show();">{l s='Sync Orders' mod='ssbhesabfa'}</button>
                                     </div>
                                 </div>

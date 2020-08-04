@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.3';
+        $this->version = '0.9.4';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -76,6 +76,8 @@ class Ssbhesabfa extends Module
                      'SSBHESABFA_ITEM_UPDATE_PRICE' => 0,
                      'SSBHESABFA_ITEM_UPDATE_QUANTITY' => 0,
                      'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
+                     'SSBHESABFA_INVOICE_RETURN_STATUE' => 6,
+                     'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
                  ) as $key => $val) {
             if (!Configuration::updateValue($key, $val)) {
                 return false;
@@ -95,7 +97,8 @@ class Ssbhesabfa extends Module
             $this->registerHook('actionProductDelete') &&
 
             $this->registerHook('actionValidateOrder') &&
-            $this->registerHook('actionPaymentConfirmation');
+            $this->registerHook('actionPaymentConfirmation') &&
+            $this->registerHook('hookActionOrderStatusPostUpdate');
     }
 
     public function uninstall()
@@ -164,30 +167,33 @@ class Ssbhesabfa extends Module
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProducts')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                if ($this->exportProducts()) {
+                $exportProducts = $this->exportProducts();
+                if ($exportProducts) {
                     $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
                 } else {
-                    $output .= $this->displayError($this->l('Products exported to Hesabfa fail, Please see logs.'));
+                    $output .= $this->displayError($exportProducts);
                 }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProductsWithQuantity')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                if ($this->exportProducts(1)) {
+                $exportProductsWithQuantity = $this->exportProducts(true);
+                if ($exportProductsWithQuantity) {
                     $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
                 } else {
-                    $output .= $this->displayError($this->l('Products exported to Hesabfa fail, Please see logs.'));
+                    $output .= $this->displayError($exportProductsWithQuantity);
                 }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportCustomers')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                if ($this->exportCustomers()) {
+                $exportCustomer = $this->exportCustomers();
+                if ($exportCustomer) {
                     $output .= $this->displayConfirmation($this->l('Customers exported to Hesabfa successfully.'));
                 } else {
-                    $output .= $this->displayError($this->l('Customers exported to Hesabfa fail, Please see logs.'));
+                    $output .= $this->displayError($exportCustomer);
                 }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Customers.'));
@@ -227,7 +233,7 @@ class Ssbhesabfa extends Module
         }
 
         //assign smarty vars
-        $forms = array('Bank', 'Config', 'Item', 'Contact');
+        $forms = array('Bank', 'Config', 'Item', 'Contact', 'Invoice');
         foreach ($forms as $form) {
             $html = $this->renderForm($form);
             $this->context->smarty->assign($form, $html);
@@ -337,7 +343,10 @@ class Ssbhesabfa extends Module
     {
         $input_array = array();
 
-        $bank_options = array();
+        $bank_options = array(array(
+                'id_option' => -1,
+                'name' => $this->l('No need to set!'),
+            ));
         $hesabfaApi = new HesabfaApi();
         $banks = $hesabfaApi->settingGetBanks();
 
@@ -351,13 +360,6 @@ class Ssbhesabfa extends Module
                         'name' => $bank->Name . ' - ' . $bank->Branch . ' - ' . $bank->AccountNumber,
                     ));
                 }
-            }
-
-            if (empty($bank_options)) {
-                $bank_options = array(array(
-                    'id_option' => 0,
-                    'name' => $this->l('Define at least one bank in Hesabfa'),
-                ));
             }
 
             foreach ($this->getPaymentMethodsName() as $item) {
@@ -382,6 +384,59 @@ class Ssbhesabfa extends Module
         return array(
             'form' => array(
                 'input' => $input_array,
+                'submit' => array(
+                    'title' => $this->l('Save'),
+                ),
+            ),
+        );
+    }
+
+    protected function getInvoiceForm()
+    {
+        $options = array();
+        $order_states = OrderState::getOrderStates(Context::getContext()->language->id);
+        foreach ($order_states as $order_state) {
+            array_push($options, array(
+                'id_option' => $order_state['id_order_state'],
+                'name' => $order_state['name'],
+            ));
+        }
+
+        return array(
+            'form' => array(
+                'input' => array(
+                    array(
+                        'type' => 'select',
+                        'label' => $this->l('Invoice reference'),
+                        'desc' => $this->l('Choose invoice reference source'),
+                        'name' => 'SSBHESABFA_INVOICE_REFERENCE_TYPE',
+                        'options' => array(
+                            'query' => array(
+                                array(
+                                    'id_option' => 0,
+                                    'name' => $this->l('Order ID'),
+                                ),
+                                array(
+                                    'id_option' => 1,
+                                    'name' => $this->l('Order Reference'),
+                                ),
+                            ),
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array (
+                        'type' => 'select',
+                        'name' => 'SSBHESABFA_INVOICE_RETURN_STATUE',
+                        'label' => $this->l('Return sale invoice status'),
+                        'desc' => $this->l('In what custom status should the return invoice be issued?'),
+                        'options' => array(
+                            'query' => $options,
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                ),
                 'submit' => array(
                     'title' => $this->l('Save'),
                 ),
@@ -512,25 +567,6 @@ class Ssbhesabfa extends Module
         );
     }
 
-    protected function getInvoiceForm()
-    {
-        $currency_options = array();
-        foreach (Currency::getCurrencies() as $currency) {
-            array_push($currency_options, array(
-                'id_option' => $currency['id_currency'],
-                'name' => $currency['name'],
-            ));
-        }
-
-        return array(
-            'form' => array(
-                'submit' => array(
-                    'title' => $this->l('Save'),
-                ),
-            ),
-        );
-    }
-
     //Configuration form Values
     protected function getConfigFormValues($form = null)
     {
@@ -555,6 +591,12 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
                 );
                 break;
+            case 'Invoice':
+                $keys =  array(
+                    'SSBHESABFA_INVOICE_RETURN_STATUE' => Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE'),
+                    'SSBHESABFA_INVOICE_REFERENCE_TYPE' => Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE'),
+                );
+                break;
             case 'Bank':
                 $keys = array();
                 $paymentsName = $this->getPaymentMethodsName();
@@ -574,6 +616,9 @@ class Ssbhesabfa extends Module
 
                     'SSBHESABFA_CONTACT_ADDRESS_STATUS' => Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS'),
                     'SSBHESABFA_CONTACT_NODE_FAMILY' => Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
+
+                    'SSBHESABFA_INVOICE_RETURN_STATUE' => Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE'),
+                    'SSBHESABFA_INVOICE_REFERENCE_TYPE' => Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE'),
                 );
 
                 //Get config form value in Payment Method's tab
@@ -689,7 +734,7 @@ class Ssbhesabfa extends Module
                     $gift_wrapping = $hesabfa->itemSave(array(
                         'Name' => 'Gift wrapping service',
                         'ItemType' => 1,
-                        'Tag' => '{"id_product": 0}',
+                        'Tag' => json_encode(array('id_product' => 0)),
                     ));
 
                     if ($gift_wrapping->Success) {
@@ -783,7 +828,7 @@ class Ssbhesabfa extends Module
             'Barcode' => $this->getBarcode($id_product),
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
             'OpeningQuantity' => $quantity,
-            'Tag' => '{"id_product": '.$id_product.'}',
+            'Tag' => json_encode(array('id_product' => $id_product)),
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
         );
@@ -884,8 +929,8 @@ class Ssbhesabfa extends Module
                 'LastName' => $customer->lastname,
                 'ContactType' => 1,
                 'NodeFamily' => 'اشخاص :' . Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
-                'Email' => $customer->email,
-                'Tag' => '{"id_customer": '.$id_customer.'}',
+                'Email' => $this->validEmail($customer->email) ? $customer->email : null,
+                'Tag' => json_encode(array('id_customer' => $id_customer)),
                 'Note' => 'Customer ID in OnlineStore: ' . $id_customer,
             )
         );
@@ -943,8 +988,8 @@ class Ssbhesabfa extends Module
                 'PostalCode' => preg_replace("/[^0-9]/", '', $address->postcode),
                 'Phone' => preg_replace("/[^0-9]/", "", $address->phone),
                 'Mobile' => preg_replace("/[^0-9]/", "", $address->phone_mobile),
-                'Email' => $customer->email,
-                'Tag' => '{"id_customer": '.$id_customer.'}',
+                'Email' => $this->validEmail($customer->email) ? $customer->email : null,
+                'Tag' => json_encode(array('id_customer' => $id_customer)),
             )
         );
 
@@ -962,6 +1007,71 @@ class Ssbhesabfa extends Module
         }
     }
 
+    public function validEmail($email)
+    {
+        $isValid = true;
+        $atIndex = strrpos($email, "@");
+        if (is_bool($atIndex) && !$atIndex)
+        {
+            $isValid = false;
+        }
+        else
+        {
+            $domain = substr($email, $atIndex+1);
+            $local = substr($email, 0, $atIndex);
+            $localLen = strlen($local);
+            $domainLen = strlen($domain);
+            if ($localLen < 1 || $localLen > 64)
+            {
+                // local part length exceeded
+                $isValid = false;
+            }
+            else if ($domainLen < 1 || $domainLen > 255)
+            {
+                // domain part length exceeded
+                $isValid = false;
+            }
+            else if ($local[0] == '.' || $local[$localLen-1] == '.')
+            {
+                // local part starts or ends with '.'
+                $isValid = false;
+            }
+            else if (preg_match('/\\.\\./', $local))
+            {
+                // local part has two consecutive dots
+                $isValid = false;
+            }
+            else if (!preg_match('/^[A-Za-z0-9\\-\\.]+$/', $domain))
+            {
+                // character not valid in domain part
+                $isValid = false;
+            }
+            else if (preg_match('/\\.\\./', $domain))
+            {
+                // domain part has two consecutive dots
+                $isValid = false;
+            }
+            else if
+            (!preg_match('/^(\\\\.|[A-Za-z0-9!#%&`_=\\/$\'*+?^{}|~.-])+$/',
+                str_replace("\\\\","",$local)))
+            {
+                // character not valid in local part unless
+                // local part is quoted
+                if (!preg_match('/^"(\\\\"|[^"])+"$/',
+                    str_replace("\\\\","",$local)))
+                {
+                    $isValid = false;
+                }
+            }
+//            if ($isValid && !(checkdnsrr($domain,"MX") || checkdnsrr($domain,"A")))
+//            {
+//                // domain not found in DNS
+//                $isValid = false;
+//            }
+        }
+        return $isValid;
+    }
+
     //Invoice
     public function getInvoiceCodeByOrderId($id_order)
     {
@@ -969,7 +1079,7 @@ class Ssbhesabfa extends Module
         return $obj->id_hesabfa;
     }
 
-    public function setOrder($id_order)
+    public function setOrder($id_order, $orderType = 0)
     {
         if (!isset($id_order)) {
             return false;
@@ -998,8 +1108,10 @@ class Ssbhesabfa extends Module
         //Splitting total discount to each item
         $split = 0;
         $total_discounts = 0;
+        $order_total_discount = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_discounts, $id_order);
+        $order_total_products = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_products, $id_order);
         if ($order->total_discounts > 0) {
-            $split = $order->total_discounts / $order->total_products;
+            $split = $order_total_discount / $order_total_products;
         }
 
         $products = $order->getProducts();
@@ -1015,12 +1127,16 @@ class Ssbhesabfa extends Module
             //fix remaining discount amount on last item
             $array_key = array_keys($products);
             if (end($array_key) == $key) {
-                $discount = $order->total_discounts - $total_discounts;
+                $discount = $order_total_discount - $total_discounts;
             } else {
-                $discount = ($product['product_price'] * $split * $product['product_quantity']);
+                $product_price = $this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order);
+
+                $discount = ($product_price * $split * $product['product_quantity']);
                 $total_discounts += $discount;
-                $discount += $product['reduction_amount'];
             }
+
+            $reduction_amount = $this->getOrderPriceInHesabfaDefaultCurrency($product['reduction_amount'], $id_order);
+            $discount += $reduction_amount;
 
             $item = array (
                 'RowNumber' => $i,
@@ -1028,7 +1144,7 @@ class Ssbhesabfa extends Module
                 'Description' => $product['product_name'],
                 'Quantity' => (int)$product['product_quantity'],
                 'UnitPrice' => (float)$this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order),
-                'Discount' => (float)$this->getOrderPriceInHesabfaDefaultCurrency($discount, $id_order),
+                'Discount' => (float)$discount,
                 'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
             );
             array_push($items, $item);
@@ -1048,15 +1164,26 @@ class Ssbhesabfa extends Module
         }
 
         $number = $this->getInvoiceCodeByOrderId($id_order);
+        switch ($orderType) {
+            case 0:
+                $date = $order->date_add;
+                break;
+            case 2:
+                $date = $order->date_upd;
+                break;
+            default:
+                $date = $order->date_add;
+        }
+
         $data = array (
             'Number' => $number,
-            'InvoiceType' => 0,
+            'InvoiceType' => $orderType,
             'ContactCode' => $this->getContactCodeByCustomerId($order->id_customer),
-            'Date' => $order->date_add,
-            'DueDate' => $order->date_add,
-            'Reference' => $order->reference,
+            'Date' => $date,
+            'DueDate' => $date,
+            'Reference' => Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE') ? $order->reference : $id_order,
             'Status' => 2,
-            'Tag' => '{"id_order": '.$id_order.'}',
+            'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $this->getOrderPriceInHesabfaDefaultCurrency($order->total_shipping_tax_incl, $id_order),
             'InvoiceItems' => $items,
         );
@@ -1066,17 +1193,44 @@ class Ssbhesabfa extends Module
         if ($response->Success) {
             $obj = new HesabfaModel();
             $obj->id_hesabfa = (int)$response->Result->Number;
-            $obj->obj_type = 'order';
+
+            switch ($orderType) {
+                case 0:
+                    $obj->obj_type = 'order';
+                    break;
+                case 2:
+                    $obj->obj_type = 'returnOrder';
+                    break;
+            }
+
             $obj->id_ps = $id_order;
             if ($number == null) {
                 $obj->add();
-                $msg = 'ssbhesabfa - Invoice successfully added. Invoice number: ' . $response->Result->Number;
-                PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+                switch ($orderType) {
+                    case 0:
+                        $msg = 'ssbhesabfa - Invoice successfully added. Invoice number: ' . $response->Result->Number;
+                        PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+                        break;
+                    case 2:
+                        $msg = 'ssbhesabfa - Return sale Invoice successfully added. Invoice number: ' . $response->Result->Number;
+                        PrestaShopLogger::addLog($msg, 1, null, 'ReturnOrder', $id_order, true);
+                        break;
+                }
             } else {
-                $obj->id_ssb_hesabfa = $this->getObjectId('order', $id_order);
-                $obj->update();
-                $msg = 'ssbhesabfa - Invoice successfully updated. Invoice number: ' . $response->Result->Number;
-                PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+                switch ($orderType) {
+                    case 0:
+                        $obj->id_ssb_hesabfa = $this->getObjectId('order', $id_order);
+                        $obj->update();
+                        $msg = 'ssbhesabfa - Invoice successfully updated. Invoice number: ' . $response->Result->Number;
+                        PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+                        break;
+                    case 2:
+                        $obj->id_ssb_hesabfa = $this->getObjectId('returnOrder', $id_order);
+                        $obj->update();
+                        $msg = 'ssbhesabfa - Return sale Invoice successfully updated. Invoice number: ' . $response->Result->Number;
+                        PrestaShopLogger::addLog($msg, 1, null, 'ReturnOrder', $id_order, true);
+                        break;
+                }
             }
 
             return true;
@@ -1127,9 +1281,10 @@ class Ssbhesabfa extends Module
                 return true;
             }
 
-
             $bank_code = $this->getBankCodeByPaymentName($payment->payment_method);
-            if ($bank_code != false) {
+            if ($bank_code == -1) {
+                return true;
+            } elseif ($bank_code != false) {
                 //fix Hesabfa API error
                 if ($payment->transaction_id == '') {
                     $payment->transaction_id = 'None';
@@ -1186,7 +1341,6 @@ class Ssbhesabfa extends Module
             if (!$id_obj) {
                 $product = new Product($id_product);
                 $itemType = ($product->is_virtual == 1 ? 1 : 0);
-                $quantity = $setQuantity ? $product->quantity : null;
                 $name = mb_substr($product->name[$id_default_lang],0,99);
 
                 array_push($items, array(
@@ -1194,32 +1348,90 @@ class Ssbhesabfa extends Module
                     'ItemType' => $itemType,
                     'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-                    'OpeningQuantity' => $quantity,
-                    'Tag' => '{"id_product": '.$id_product.'}',
+                    'Tag' => json_encode(array('id_product' => $id_product)),
                     'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                     'ProductCode' => $id_product,
                 ));
             }
         }
 
-        $hesabfa = new HesabfaApi();
-        $response = $hesabfa->itemBatchSave($items);
-        if ($response->Success) {
-            foreach ($response->Result as $item) {
-                $obj = new HesabfaModel();
-                $obj->id_hesabfa = (int)$item->Code;
-                $obj->obj_type = 'product';
-                $json = json_decode($item->Tag);
-                $obj->id_ps = (int)$json->id_product;
-                $obj->add();
-                $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
-                PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
+        if (!empty($items)) {
+            $hesabfa = new HesabfaApi();
+            $response = $hesabfa->itemBatchSave($items);
+            if ($response->Success) {
+                foreach ($response->Result as $item) {
+                    $obj = new HesabfaModel();
+                    $obj->id_hesabfa = (int)$item->Code;
+                    $obj->obj_type = 'product';
+                    $json = json_decode($item->Tag);
+                    $obj->id_ps = (int)$json->id_product;
+                    $obj->add();
+                    $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
+                    PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
+                }
+
+                //set openingQuantity
+                if ($setQuantity == true) {
+                    $result = $this->setOpeningQuantity($products);
+                    if ($result != true) {
+                        return $result;
+                    }
+                }
+
+                return true;
+            } else {
+                $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
+                return $msg . ' Error Code: ' . $response->ErrorCode;
             }
-            return true;
         } else {
-            $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
-            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
-            return false;
+            $msg = 'ssbhesabfa - No product available for export.';
+            PrestaShopLogger::addLog($msg, 2, null, 'Product', null, true);
+            return $msg;
+        }
+    }
+
+    public function setOpeningQuantity($products) {
+        $items = array();
+
+        foreach ($products as $item) {
+            //do if product exists in hesabfa
+            $id_obj = $this->getObjectId('product', $item['id_product']);
+            if ($id_obj != false) {
+                $product = new Product($item['id_product']);
+                $obj = new HesabfaModel($id_obj);
+                $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product']);
+
+                if (is_object($product) && is_object($obj) && $quantity > 0 && $product->price > 0) {
+                    array_push($items, array(
+                        'Code' => $obj->id_hesabfa,
+                        'Quantity' => $quantity,
+                        'UnitPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
+                    ));
+                }
+            }
+        }
+
+        //call API when at least one product exists
+        if (!empty($items)) {
+            $hesabfa = new HesabfaApi();
+            $response = $hesabfa->itemUpdateOpeningQuantity($items);
+            if ($response->Success) {
+                $msg = 'ssbhesabfa - Opening quantity successfully added.';
+                PrestaShopLogger::addLog($msg, 1, null, 'Product', null, true);
+
+                return true;
+            } else {
+                $msg = 'ssbhesabfa - Cannot set Opening quantity. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
+
+                return $msg . ' Error Code: ' . $response->ErrorCode;
+            }
+        } else {
+            $msg = 'ssbhesabfa - No product available for set Opening quantity.';
+            PrestaShopLogger::addLog($msg, 2, null, 'Product', null, true);
+
+            return $msg;
         }
     }
 
@@ -1239,31 +1451,38 @@ class Ssbhesabfa extends Module
                     'LastName' => $customer->lastname,
                     'ContactType' => 1,
                     'NodeFamily' => 'اشخاص :' . Configuration::get('SSBHESABFA_CONTACT_NODE_FAMILY'),
-                    'Email' => $customer->email,
-                    'Tag' => '{"id_customer": '.$id_customer.'}',
+                    'Email' => $this->validEmail($customer->email) ? $customer->email : null,
+                    'Tag' => json_encode(array('id_customer' => $id_customer)),
                     'Note' => 'Customer ID in OnlineStore: ' . $id_customer,
                 ));
             }
         }
 
-        $hesabfa = new HesabfaApi();
-        $response = $hesabfa->contactBatchSave($data);
-        if ($response->Success) {
-            foreach ($response->Result as $item) {
-                $obj = new HesabfaModel();
-                $obj->id_hesabfa = (int)$item->Code;
-                $obj->obj_type = 'customer';
-                $json = json_decode($item->Tag);
-                $obj->id_ps = (int)$json->id_customer;
-                $obj->add();
-                $msg = 'ssbhesabfa - Contact successfully added. Contact Code: ' . $item->Code;
-                PrestaShopLogger::addLog($msg, 1, null, 'Customer', $json->id_customer, true);
+        //call API when at least one customer exists
+        if (!empty($data)) {
+            $hesabfa = new HesabfaApi();
+            $response = $hesabfa->contactBatchSave($data);
+            if ($response->Success) {
+                foreach ($response->Result as $item) {
+                    $obj = new HesabfaModel();
+                    $obj->id_hesabfa = (int)$item->Code;
+                    $obj->obj_type = 'customer';
+                    $json = json_decode($item->Tag);
+                    $obj->id_ps = (int)$json->id_customer;
+                    $obj->add();
+                    $msg = 'ssbhesabfa - Contact successfully added. Contact Code: ' . $item->Code;
+                    PrestaShopLogger::addLog($msg, 1, null, 'Customer', $json->id_customer, true);
+                }
+                return true;
+            } else {
+                $msg = $this->l('ssbhesabfa - Cannot add bulk contacts. Error Message: ') . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', null, true);
+                return $msg . ' Error Code: ' . $response->ErrorCode;
             }
-            return true;
         } else {
-            $msg = 'ssbhesabfa - Cannot add bulk contacts. Error Message: ' . $response->ErrorMessage;
-            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', null, true);
-            return false;
+            $msg = $this->l('ssbhesabfa - No customer exists for export.');
+            PrestaShopLogger::addLog($msg, 2, null, 'Customer', null, true);
+            return $msg;
         }
     }
 
@@ -1272,6 +1491,7 @@ class Ssbhesabfa extends Module
         if (!isset($from_date)) {
             return false;
         }
+
         $orders = Order::getOrdersIdByDate($from_date, date('Y-m-d h:i:s'));
         $id_orders = array();
         foreach ($orders as $id_order) {
@@ -1280,6 +1500,11 @@ class Ssbhesabfa extends Module
                 if ($this->setOrder($id_order)) {
                     $this->setOrderPayment($id_order);
                     array_push($id_orders, $id_order);
+                }
+
+                $order = new Order($id_order);
+                if ($order->current_state == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
+                    $this->setOrder($id_order, 2);
                 }
             }
         }
@@ -1303,6 +1528,7 @@ class Ssbhesabfa extends Module
             return false;
         }
     }
+
 
     //Hooks
     public function hookBackOfficeHeader()
@@ -1373,6 +1599,23 @@ class Ssbhesabfa extends Module
     public function hookActionProductDelete($params)
     {
         $hesabfa = new HesabfaModel($this->getObjectId('product', $params['product']->id));
+
+        $hesabfaApi = new HesabfaApi();
+        $response = $hesabfaApi->itemDelete($hesabfa->id_hesabfa);
+        if ($response->Success) {
+            $msg = 'ssbhesabfa - Item successfully deleted.';
+            PrestaShopLogger::addLog($msg, 1, null, 'Product', $params['product']->id, true);
+        } else {
+            $msg = 'ssbhesabfa - Cannot delete Item in hesabfa. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $params['product']->id, true);
+        }
+
         $hesabfa->delete();
+    }
+
+    public function hookActionOrderStatusPostUpdate($params) {
+        if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
+            $this->setOrder($params['id_order'], 2);
+        }
     }
 }
