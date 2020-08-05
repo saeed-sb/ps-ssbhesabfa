@@ -125,12 +125,12 @@
                             <div class="modal-content">
                                 <div class="modal-body">
                                     <p>{l s='Are you sure you want to add/update all Products into Hesabfa with Quantity?' mod='ssbhesabfa'}</p>
-                                    <p>{l s='با فراخوانی این متد موجودی اول دوره کالاها در تراز افتتاحیه ثبت خواهد شد. همچنین سند افتتاحیه به تناسب اطلاعات ویرایش خواهد شد. بنابراین پیش از فراخوانی این متد مطمئن باشید که سهامداران در سیستم تعریف شده باشند.' mod='ssbhesabfa'}</p>
-                                    <h6>{l s='نکات مهم:'  mod='ssbhesabfa'}</h6>
+                                    <p>{l s='As you invoke this method, the inventory is saved in the opening balance. Also, the opening balance would be edited corresponding to the information. Therefore make sure you have already defined the stockholders.' mod='ssbhesabfa'}</p>
+                                    <h6>{l s='Notice:'  mod='ssbhesabfa'}</h6>
                                     <ul>
-                                        <li>{l s='این عمل فقط در اولین سال مالی امکان پذیر است.' mod='ssbhesabfa'}</li>
-                                        <li>{l s='فقط موجودی کالاهایی که ارسال می شوند به روز خواهند شد و موجودی سایر کالاهایی که هم اکنون در تراز افتتاحیه ثبت شده اند تغییری نخواهند کرد.' mod='ssbhesabfa'}</li>
-                                        <li>{l s='دقت شود که این متد فقط در شروع سال مالی فراخوانی شود. فراخوانی این متد در اواسط سال مالی ممکن است باعث بروز اختلال در موجودی سیستم شود.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='This process is available in the first fiscal year.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='Only the products which are shipped would be updated, and the inventory for other products remains unchanged.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='Remember to only invoke this method at the beginning of the fiscal year. Invoking the method during the fiscal year might disrupt the system.' mod='ssbhesabfa'}</li>
                                     </ul>
                                 </div>
                                 <div class="modal-footer">
