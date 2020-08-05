@@ -28,7 +28,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-include(dirname(__FILE__) . '/classes/HesabfaApi.php');
+include(dirname(__FILE__) . '/classes/HesabfaAPI.php');
 include(dirname(__FILE__) . '/classes/HesabfaModel.php');
 
 class Ssbhesabfa extends Module

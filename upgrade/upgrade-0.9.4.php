@@ -37,5 +37,10 @@ function upgrade_module_0_9_4($module) {
         $module->registerHook('actionOrderStatusPostUpdate');
     }
 
+    if (!unlink(_PS_MODULE_DIR_.$this->name.'/classes/HesabfaApi.php')) {
+        return false;
+    }
+    unlink(_PS_MODULE_DIR_.$this->name.'/classes/hesabfaAPI.php');
+
     return true;
 }
