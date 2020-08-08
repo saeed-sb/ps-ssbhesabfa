@@ -128,7 +128,7 @@ class Ssbhesabfa extends Module
         if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
             $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
         }
-        
+
         require_once(_PS_MODULE_DIR_.$this->name.'/classes/HesabfaUpdate.php');
         $update = HesabfaUpdate::getInstance($this);
 
@@ -209,10 +209,12 @@ class Ssbhesabfa extends Module
                     $output .= $this->displayError($this->l('Enter correct date format.'));
                 } else {
                     $orders_id = $this->syncOrders($from_date);
-                    if (empty($orders_id)) {
+                    if (is_array($orders_id) && empty($orders_id)) {
                         $output .= $this->displayConfirmation($this->l('No orders synced.'));
-                    } else {
+                    } elseif (is_array($orders_id) && !empty($orders_id)) {
                         $output .= $this->displayConfirmation($this->l('Orders synced with Hesabfa successfully. Orders ID: ') . implode(' - ', $orders_id));
+                    } elseif ($orders_id != false) {
+                        $output .= $this->displayError($orders_id);
                     }
                 }
             } else {
@@ -1532,8 +1534,12 @@ class Ssbhesabfa extends Module
 
     public function syncOrders($from_date)
     {
-        if (!isset($from_date) || !$this->isDateInFiscalYear($from_date)) {
+        if (!isset($from_date)) {
             return false;
+        }
+
+        if (!$this->isDateInFiscalYear($from_date)) {
+            return $this->l('The date entered is not within the fiscal year.');
         }
 
         $orders = Order::getOrdersIdByDate($from_date, date('Y-m-d h:i:s'));
