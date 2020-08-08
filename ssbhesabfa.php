@@ -39,7 +39,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.4';
+        $this->version = '0.9.5';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -128,7 +128,7 @@ class Ssbhesabfa extends Module
         if ($shop_domain === '127.0.0.1' || $shop_domain === 'localhost') {
             $output .= $this->displayWarning($this->l('Your store is installed on localhost, Hesabfa changes will not be applied to the store.'));
         }
-
+        
         require_once(_PS_MODULE_DIR_.$this->name.'/classes/HesabfaUpdate.php');
         $update = HesabfaUpdate::getInstance($this);
 
@@ -146,7 +146,6 @@ class Ssbhesabfa extends Module
             } else {
                 $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please check your Internet connection.'));
             }
-
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleUpdate')) == true) {
             $this->context->smarty->assign(array(
                 'notices' => $update->getNotice(),
@@ -179,13 +178,13 @@ class Ssbhesabfa extends Module
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
             }
-        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProductsWithQuantity')) == true) {
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaSetOpeningQuantity')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-                $exportProductsWithQuantity = $this->exportProducts(true);
-                if ($exportProductsWithQuantity) {
-                    $output .= $this->displayConfirmation($this->l('Products exported to Hesabfa successfully.'));
+                $setOpeningQuantity = $this->setOpeningQuantity();
+                if ($setOpeningQuantity) {
+                    $output .= $this->displayConfirmation($this->l('Products Opening Quantity exported to Hesabfa successfully.'));
                 } else {
-                    $output .= $this->displayError($exportProductsWithQuantity);
+                    $output .= $this->displayError($setOpeningQuantity);
                 }
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before export Products.'));
@@ -209,10 +208,11 @@ class Ssbhesabfa extends Module
                 } elseif (!Validate::isDateFormat($from_date)) {
                     $output .= $this->displayError($this->l('Enter correct date format.'));
                 } else {
-                    $output .= $this->displayConfirmation($this->l('Orders synced with Hesabfa successfully.'));
                     $orders_id = $this->syncOrders($from_date);
-                    if (!empty($orders_id)) {
-                        $output .= $this->displayConfirmation($this->l('Orders ID: ') . implode(' - ', $orders_id));
+                    if (empty($orders_id)) {
+                        $output .= $this->displayConfirmation($this->l('No orders synced.'));
+                    } else {
+                        $output .= $this->displayConfirmation($this->l('Orders synced with Hesabfa successfully. Orders ID: ') . implode(' - ', $orders_id));
                     }
                 }
             } else {
@@ -256,8 +256,15 @@ class Ssbhesabfa extends Module
             $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please open the API tab and check your API Settings.'));
         }
 
-        //Show error when Banks not mapped
         if (Configuration::get('SSBHESABFA_LIVE_MODE') == 1) {
+
+            //Show error when current date not in Fiscal year
+            if (!$this->isDateInFiscalYear(date('Y-m-d H:i:s'))) {
+                $output .= $this->displayError($this->l('The fiscal year has passed or not arrived. Please check the fiscal year settings in Hesabfa'));
+                Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
+            }
+
+            //Show error when Banks not mapped
             $payment_methods = $this->getPaymentMethodsName();
             foreach ($payment_methods as $method) {
                 if (!Configuration::get($method['id'])) {
@@ -795,6 +802,23 @@ class Ssbhesabfa extends Module
         return (int)Db::getInstance()->getValue($sql);
     }
 
+    public function isDateInFiscalYear($date) {
+        $hesabfaApi = new HesabfaApi();
+        $fiscalYear = $hesabfaApi->settingGetFiscalYear();
+
+        if ($fiscalYear->Success) {
+            $fiscalYearStartTimeStamp = strtotime($fiscalYear->Result->StartDate);
+            $fiscalYearEndTimeStamp = strtotime($fiscalYear->Result->EndDate);
+            $dateTimeStamp = strtotime($date);
+
+            if ($dateTimeStamp >= $fiscalYearStartTimeStamp && $dateTimeStamp <= $fiscalYearEndTimeStamp) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
     //Items
     public function getItemCodeByProductId($id_product)
     {
@@ -924,10 +948,17 @@ class Ssbhesabfa extends Module
         }
 
         $customer = new Customer($id_customer);
+
+        //check if customer name is null
+        $name = $customer->firstname . ' ' . $customer->lastname;
+        if (empty($customer->firstname) && empty($customer->lastname)) {
+            $name = 'Guest Customer';
+        }
+
         $data = array (
             array(
                 'Code' => $code,
-                'Name' => $customer->firstname . ' ' . $customer->lastname,
+                'Name' => $name,
                 'FirstName' => $customer->firstname,
                 'LastName' => $customer->lastname,
                 'ContactType' => 1,
@@ -1082,7 +1113,7 @@ class Ssbhesabfa extends Module
         return $obj->id_hesabfa;
     }
 
-    public function setOrder($id_order, $orderType = 0)
+    public function setOrder($id_order, $orderType = 0, $reference = null)
     {
         if (!isset($id_order)) {
             return false;
@@ -1129,24 +1160,29 @@ class Ssbhesabfa extends Module
 
             //fix remaining discount amount on last item
             $array_key = array_keys($products);
+            $product_price = $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'], $id_order);
+
             if (end($array_key) == $key) {
                 $discount = $order_total_discount - $total_discounts;
             } else {
-                $product_price = $this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order);
-
                 $discount = ($product_price * $split * $product['product_quantity']);
                 $total_discounts += $discount;
             }
 
-            $reduction_amount = $this->getOrderPriceInHesabfaDefaultCurrency($product['reduction_amount'], $id_order);
+            $reduction_amount = $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'] - $product['product_price'], $id_order);
             $discount += $reduction_amount;
+
+            //fix if total discount greater than product price
+            if ($discount > $product_price) {
+                $discount = $product_price;
+            }
 
             $item = array (
                 'RowNumber' => $i,
                 'ItemCode' => (int)$code,
                 'Description' => $product['product_name'],
                 'Quantity' => (int)$product['product_quantity'],
-                'UnitPrice' => (float)$this->getOrderPriceInHesabfaDefaultCurrency($product['product_price'], $id_order),
+                'UnitPrice' => (float)$product_price,
                 'Discount' => (float)$discount,
                 'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
             );
@@ -1178,13 +1214,17 @@ class Ssbhesabfa extends Module
                 $date = $order->date_add;
         }
 
+        if ($reference === null) {
+            $reference = Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE') ? $order->reference : $id_order;
+        }
+
         $data = array (
             'Number' => $number,
             'InvoiceType' => $orderType,
             'ContactCode' => $this->getContactCodeByCustomerId($order->id_customer),
             'Date' => $date,
             'DueDate' => $date,
-            'Reference' => Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE') ? $order->reference : $id_order,
+            'Reference' => $reference,
             'Status' => 2,
             'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $this->getOrderPriceInHesabfaDefaultCurrency($order->total_shipping_tax_incl, $id_order),
@@ -1331,7 +1371,8 @@ class Ssbhesabfa extends Module
     }
 
     //Export
-    public function exportProducts($setQuantity = 0)
+
+    public function exportProducts()
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
@@ -1373,14 +1414,6 @@ class Ssbhesabfa extends Module
                     PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
                 }
 
-                //set openingQuantity
-                if ($setQuantity == true) {
-                    $result = $this->setOpeningQuantity($products);
-                    if ($result != true) {
-                        return $result;
-                    }
-                }
-
                 return true;
             } else {
                 $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
@@ -1394,7 +1427,8 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function setOpeningQuantity($products) {
+    public function setOpeningQuantity() {
+        $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
 
         foreach ($products as $item) {
@@ -1448,8 +1482,15 @@ class Ssbhesabfa extends Module
             $id_obj = $this->getObjectId('customer', $id_customer);
             if (!$id_obj) {
                 $customer = new Customer($id_customer);
+
+                //check if customer name is null
+                $name = $customer->firstname . ' ' . $customer->lastname;
+                if (empty($customer->firstname) && empty($customer->lastname)) {
+                    $name = 'Guest Customer';
+                }
+
                 array_push($data, array(
-                    'Name' => $customer->firstname . ' ' . $customer->lastname,
+                    'Name' => $name,
                     'FirstName' => $customer->firstname,
                     'LastName' => $customer->lastname,
                     'ContactType' => 1,
@@ -1491,7 +1532,7 @@ class Ssbhesabfa extends Module
 
     public function syncOrders($from_date)
     {
-        if (!isset($from_date)) {
+        if (!isset($from_date) || !$this->isDateInFiscalYear($from_date)) {
             return false;
         }
 
@@ -1507,7 +1548,8 @@ class Ssbhesabfa extends Module
 
                 $order = new Order($id_order);
                 if ($order->current_state == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
-                    $this->setOrder($id_order, 2);
+                    $obj = new HesabfaModel($id_obj);
+                    $this->setOrder($id_order, 2, $obj->id_hesabfa);
                 }
             }
         }
@@ -1597,7 +1639,8 @@ class Ssbhesabfa extends Module
 
     public function hookActionOrderStatusPostUpdate($params) {
         if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
-            $this->setOrder($params['id_order'], 2);
+            $obj = new HesabfaModel($id_obj = $this->getObjectId('order', $params['id_order']));
+            $this->setOrder($params['id_order'], 2, $obj->id_hesabfa);
         }
     }
 

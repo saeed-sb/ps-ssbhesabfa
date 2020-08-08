@@ -117,10 +117,12 @@
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsWithQuantity">
-                        {l s='Export products with Quantity' mod='ssbhesabfa'}
+                    <p>{l s='Export and add all online store products to Hesabfa' mod='ssbhesabfa'}<br></p>
+                    <br>
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsOpeningQuntity">
+                        {l s='Export products Opening Quantity' mod='ssbhesabfa'}
                     </button>
-                    <div class="modal fade" id="exportProductsWithQuantity" tabindex="-1" role="dialog" aria-labelledby="exportProductsWithQuantityLabel" aria-hidden="true">
+                    <div class="modal fade" id="exportProductsOpeningQuntity" tabindex="-1" role="dialog" aria-labelledby="exportProductsOpeningQuntityLabel" aria-hidden="true">
                         <div class="modal-dialog" role="document">
                             <div class="modal-content">
                                 <div class="modal-body">
@@ -131,18 +133,19 @@
                                         <li>{l s='This process is available in the first fiscal year.' mod='ssbhesabfa'}</li>
                                         <li>{l s='Only the products which are shipped would be updated, and the inventory for other products remains unchanged.' mod='ssbhesabfa'}</li>
                                         <li>{l s='Remember to only invoke this method at the beginning of the fiscal year. Invoking the method during the fiscal year might disrupt the system.' mod='ssbhesabfa'}</li>
+                                        <li>{l s='Export products before run this job.' mod='ssbhesabfa'}</li>
                                     </ul>
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
                                         <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProductsWithQuantity" name="submitSsbhesabfaExportProductsWithQuantity" onclick="$('#export_loader').show();">{l s='Export products with Quantity' mod='ssbhesabfa'}</button>
+                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSetOpeningQuantity" name="submitSsbhesabfaSetOpeningQuantity" onclick="$('#export_loader').show();">{l s='Export products Opening Quantity' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <p>{l s='Export and add all online store products to Hesabfa' mod='ssbhesabfa'}<br></p>
+                    <p>{l s='Export the products quantity and record the \'products opening quantity\' in the Hesabfa' mod='ssbhesabfa'}<br></p>
                     <br>
                 </div>
                 <div class="margin-form" style="clear: both;">

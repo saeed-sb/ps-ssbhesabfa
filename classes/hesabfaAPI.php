@@ -367,4 +367,11 @@ class HesabfaApi
 
         return $this->apiRequest($method);
     }
+
+    public function settingGetFiscalYear()
+    {
+        $method = 'setting/GetFiscalYear';
+
+        return $this->apiRequest($method);
+    }
 }
