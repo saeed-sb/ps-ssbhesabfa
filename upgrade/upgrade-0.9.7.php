@@ -28,14 +28,29 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-function upgrade_module_0_9_4($module)
+function upgrade_module_0_9_7($module)
 {
-    if (!Configuration::updateValue('SSBHESABFA_INVOICE_RETURN_STATUE', 6) || !Configuration::updateValue('SSBHESABFA_INVOICE_REFERENCE_TYPE', 1)) {
+    $query = 'ALTER TABLE `' . _DB_PREFIX_ . 'ssb_hesabfa`
+              ADD `id_ps_attribute` INT(10) NOT NULL DEFAULT \'0\' AFTER `id_ps`;';
+
+    if (Db::getInstance()->execute($query) == false) {
         return false;
     }
 
-    if (!$module->isRegisteredInHook('actionOrderStatusPostUpdate')) {
-        $module->registerHook('actionOrderStatusPostUpdate');
+    if (!$module->isRegisteredInHook('actionProductAttributeAdd')) {
+        $module->registerHook('actionProductAttributeAdd');
+    }
+
+    if (!$module->isRegisteredInHook('actionProductAttributeUpdate')) {
+        $module->registerHook('actionProductAttributeUpdate');
+    }
+
+    if (!$module->isRegisteredInHook('actionProductAttributeDelete')) {
+        $module->registerHook('actionProductAttributeDelete');
+    }
+
+    if (!$module->isRegisteredInHook('displayAdminProductsExtra')) {
+        $module->registerHook('displayAdminProductsExtra');
     }
 
     if (file_exists(_PS_MODULE_DIR_.$module->name.'/classes/HesabfaApi.php')) {

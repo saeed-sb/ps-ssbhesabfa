@@ -66,12 +66,12 @@
                         <form action="{$update_action_url|escape:'htmlall':'UTF-8'}" method="post">
                             <button {if isset($need_update)}style="display: none" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpdate" name="submitSsbhesabfaModuleUpdate" onclick="">{l s='Check Update' mod='ssbhesabfa'}</button>
                             <button {if !isset($need_update) || $need_update == false || is_null($need_update)}style="display: none;" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpgrade" name="submitSsbhesabfaModuleUpgrade" onclick="">{l s='Upgrade Module' mod='ssbhesabfa'}</button>
-                            {l s='Module Version: v' mod='ssbhesabfa'}{$module_ver}
+                            {l s='Module Version: v' mod='ssbhesabfa'}{$module_ver|escape:'htmlall':'UTF-8'}
                         </form>
                         <br>
-                        {if isset($notices)}{$notices}{/if}
+                        {if isset($notices)}{$notices|escape:'htmlall':'UTF-8'}{/if}
                         {if isset($upgrade) && $upgrade == true}
-                            {$upgrade}
+                            {$upgrade|escape:'htmlall':'UTF-8'}
                         {/if}
                     </div>
                 </div>
@@ -216,7 +216,7 @@
                                 </div>
                                 <div class="modal-footer">
                                     <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close'}</button>
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
                                         <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncProducts" name="submitSsbhesabfaSyncProducts" onclick="$('#sync_loader').show();">{l s='Sync Products' mod='ssbhesabfa'}</button>
                                     </form>
                                 </div>

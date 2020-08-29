@@ -68,6 +68,7 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_5e265341e34a3ca524d9fff7efee6b84'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1a4a61c0830c32baf0c535a61fe72566'] = 'خدمات کادوپیچی';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_2da27a15a575e8d3eb520334ccb23ee6'] = 'امکان خروجی دسته‌جمعی مشتریان وجود ندارد. شرح خطا:';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4784f52fb1ba8065645da3b99d790d4b'] = 'مشتری برای خروجی گرفتن وجود ندارد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_b4c50708b666ea9df027e2660091ffe0'] = 'تاریخ وارد شده در بازه سال مالی فعلی نیست.';
 $_MODULE['<{ssbhesabfa}prestashop>hesabfaupdate_0729c8cdc9473ed4c6892c735c9fd651'] = 'امکان دریافت اطلاعات از حسابفا مقدور نیست.';
 $_MODULE['<{ssbhesabfa}prestashop>hesabfaupdate_f602f31cfd78769f8b319adc91151039'] = 'نسخه جدید %s در دسترس است.';
 $_MODULE['<{ssbhesabfa}prestashop>hesabfaupdate_102dd415941587db9221a17114161e40'] = 'شما از آخرین نسخه ماژول استفاده می‌کنید.';
@@ -121,3 +122,7 @@ $_MODULE['<{ssbhesabfa}prestashop>configure_cde5429dbfd8a853fb33c58da02cea9a'] =
 $_MODULE['<{ssbhesabfa}prestashop>configure_31bb5929dfddc4a33bfb7d035e4d7be0'] = 'همسان‌سازی سفارشات';
 $_MODULE['<{ssbhesabfa}prestashop>configure_2713e25ce6e6a3c830f7242aabf4a7d4'] = 'همسان‌سازی سفارشات فروشگاه آن‌لاین با حسابفا از تاریخ فوق';
 $_MODULE['<{ssbhesabfa}prestashop>configure_eb359169350c3b03d099cb3923845c3f'] = 'از همسان‌سازی تمام سفارشات با حسابفا اطمینان دارید؟';
+$_MODULE['<{ssbhesabfa}prestashop>adminproductsextra_46c843f3b29bd1a718f646a1644a8fbb'] = 'در صورتیکه قبلا این کالا در حسابفا تعریف شده است، کد حسابداری را در قسمت زیر وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>adminproductsextra_004a4fe2bdd8234e9bbf4a497986627c'] = 'کد حسابداری کالا (پایه)';
+$_MODULE['<{ssbhesabfa}prestashop>adminproductsextra_47ac923d219501859fb68fed8c8db77b'] = 'ترکیبات';
+$_MODULE['<{ssbhesabfa}prestashop>adminproductsextra_36487b12a758b26331f4c385f64cb951'] = 'کد حسابداری کالا (ترکیب)';

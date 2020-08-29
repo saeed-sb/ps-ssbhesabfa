@@ -63,7 +63,6 @@ class HesabfaWebhook
                 //set LastChange ID
                 Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange);
             }
-
         } else {
             PrestaShopLogger::addLog('ssbhesabfa - Cannot check last changes. Error Message: ' . $changes->ErrorMessage, 2, $changes->ErrorCode, null, null, true);
         }
@@ -167,11 +166,14 @@ class HesabfaWebhook
             return;
         }
 
+        $id_product = 0;
+        $id_attribute = 0;
+
+        //set ids if set
         $json = json_decode($item->Tag);
         if (is_object($json)) {
             $id_product = $json->id_product;
-        } else {
-            $id_product = 0;
+            $id_attribute = $json->id_attribute;
         }
 
         //check if Tag not set in hesabfa
@@ -183,7 +185,7 @@ class HesabfaWebhook
         }
 
         //check if product exist in prestashop
-        $id_obj = Ssbhesabfa::getObjectId('product', $id_product);
+        $id_obj = Ssbhesabfa::getObjectId('product', $id_product, $id_attribute);
         if ($id_obj > 0) {
             $hesabfa = new HesabfaModel($id_obj);
             $product = new Product($id_product);
@@ -200,37 +202,68 @@ class HesabfaWebhook
 
             //2.set new Price
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
-                //ToDo check currency calculate
-                $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
-                if ($item->SellPrice != $price) {
-                    $old_price = $product->price;
-                    $product->price = $item->SellPrice;
-                    $product->update();
+                if ($id_attribute != 0) {
+                    //ToDo check currency calculate
+                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
+                    if ($item->SellPrice != $price) {
+                        $old_price = $product->price;
+                        $product->price = $item->SellPrice;
+                        $product->update();
 
-                    $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
-                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
+                } else {
+                    $combination = new Combination($id_attribute);
+                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price + $combination->price);
+                    if ($item->SellPrice != $price) {
+                        $old_price = $product->price + $combination->price;
+                        $combination->price = $item->SellPrice - $product->price;
+                        $combination->update();
+
+                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
                 }
             }
 
             //3.set new Quantity
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
-                if ($item->Stock != $product->quantity) {
+                if ($id_attribute != 0) {
+                    if ($item->Stock != $product->quantity) {
+                        StockAvailable::setQuantity($id_product, null, $item->Stock);
 
-                    StockAvailable::setQuantity($id_product, null, $item->Stock);
-
-                    $old_quantity = $product->quantity;
-                    //TODO: Check why this object not update the quantity
+                        $old_quantity = $product->quantity;
+                        //TODO: Check why this object not update the quantity
 //                    $product->quantity = $item->Stock;
 //                    $product->update();
 
-                    $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
-                    SET `quantity` = '. $item->Stock . '
-                    WHERE `id_product` = ' . $id_product
-                    ;
-                    Db::getInstance()->execute($sql);
+                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
+                                SET `quantity` = '. $item->Stock . '
+                                WHERE `id_product` = ' . $id_product;
+                        Db::getInstance()->execute($sql);
 
-                    $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
-                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
+                } else {
+                    $combination = new Combination($id_attribute);
+                    if ($item->Stock != $combination->quantity) {
+                        StockAvailable::setQuantity($id_product, $id_attribute, $item->Stock);
+
+                        $old_quantity = $combination->quantity;
+                        //TODO: Check why this object not update the quantity
+//                    $combination->quantity = $item->Stock;
+//                    $combination->update();
+
+                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
+                                SET `quantity` = '. $item->Stock . '
+                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
+                        Db::getInstance()->execute($sql);
+
+                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
                 }
             }
         }

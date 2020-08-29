@@ -35,6 +35,7 @@ class HesabfaModel extends ObjectModel
             'obj_type' => ['type' => self::TYPE_STRING, 'db_type' => 'varchar(32)'],
             'id_hesabfa' => ['type' => self::TYPE_INT, 'db_type' => 'int(10)', 'validate' => 'isUnsignedInt'],
             'id_ps' => ['type' => self::TYPE_INT, 'db_type' => 'int(10)', 'validate' => 'isUnsignedInt'],
+            'id_ps_attribute' => ['type' => self::TYPE_INT, 'db_type' => 'int(10)', 'validate' => 'isUnsignedInt'],
         ],
     ];
 
@@ -42,4 +43,5 @@ class HesabfaModel extends ObjectModel
     public $obj_type;
     public $id_hesabfa;
     public $id_ps;
+    public $id_ps_attribute;
 }

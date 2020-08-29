@@ -34,12 +34,13 @@ include(dirname(__FILE__) . '/classes/HesabfaModel.php');
 class Ssbhesabfa extends Module
 {
     protected $config_form = false;
+    public $id_default_lang;
 
     public function __construct()
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.5';
+        $this->version = '0.9.7';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -56,6 +57,8 @@ class Ssbhesabfa extends Module
         }
 
         $this->ps_versions_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
+
+        $this->id_default_lang = Configuration::get('PS_LANG_DEFAULT');
     }
 
     public function install()
@@ -86,6 +89,7 @@ class Ssbhesabfa extends Module
 
         return parent::install() &&
             $this->registerHook('backOfficeHeader') &&
+            $this->registerHook('displayAdminProductsExtra') &&
 
             $this->registerHook('actionObjectCustomerAddAfter') &&
             $this->registerHook('actionCustomerAccountUpdate') &&
@@ -95,6 +99,10 @@ class Ssbhesabfa extends Module
             $this->registerHook('actionProductAdd') &&
             $this->registerHook('actionProductUpdate') &&
             $this->registerHook('actionProductDelete') &&
+
+            $this->registerHook('actionProductAttributeAdd') &&
+            $this->registerHook('actionProductAttributeUpdate') &&
+            $this->registerHook('actionProductAttributeDelete') &&
 
             $this->registerHook('actionValidateOrder') &&
             $this->registerHook('actionPaymentConfirmation') &&
@@ -259,7 +267,6 @@ class Ssbhesabfa extends Module
         }
 
         if (Configuration::get('SSBHESABFA_LIVE_MODE') == 1) {
-
             //Show error when current date not in Fiscal year
             if (!$this->isDateInFiscalYear(date('Y-m-d H:i:s'))) {
                 $output .= $this->displayError($this->l('The fiscal year has passed or not arrived. Please check the fiscal year settings in Hesabfa'));
@@ -776,7 +783,7 @@ class Ssbhesabfa extends Module
         return $response;
     }
 
-    public static function getObjectId($type, $id_ps)
+    public static function getObjectId($type, $id_ps, $id_ps_attribute = 0)
     {
         if (!isset($type) || !isset($id_ps)) {
             return false;
@@ -784,7 +791,7 @@ class Ssbhesabfa extends Module
 
         $sql = 'SELECT `id_ssb_hesabfa` 
                     FROM `' . _DB_PREFIX_ . 'ssb_hesabfa`
-                    WHERE `id_ps` = '. $id_ps .' AND `obj_type` = \''. $type .'\'
+                    WHERE `id_ps` = '. $id_ps .' AND `id_ps_attribute` = \''. $id_ps_attribute .'\' AND `obj_type` = \''. $type .'\'
                     ';
 
         return (int)Db::getInstance()->getValue($sql);
@@ -804,7 +811,8 @@ class Ssbhesabfa extends Module
         return (int)Db::getInstance()->getValue($sql);
     }
 
-    public function isDateInFiscalYear($date) {
+    public function isDateInFiscalYear($date)
+    {
         $hesabfaApi = new HesabfaApi();
         $fiscalYear = $hesabfaApi->settingGetFiscalYear();
 
@@ -822,13 +830,13 @@ class Ssbhesabfa extends Module
     }
 
     //Items
-    public function getItemCodeByProductId($id_product)
+    public function getItemCodeByProductId($id_product, $id_attribute = 0)
     {
         if (!isset($id_product)) {
             return false;
         }
 
-        $obj = new HesabfaModel($this->getObjectId('product', $id_product));
+        $obj = new HesabfaModel($this->getObjectId('product', $id_product, $id_attribute));
         if (is_object($obj)) {
             return $obj->id_hesabfa;
         } else {
@@ -836,32 +844,51 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function setItem($id_product, $setQuantity = 0)
+    public function setItem($id_product)
     {
         if (!isset($id_product)) {
             return false;
         }
 
-        $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
-        $code = $this->getItemCodeByProductId($id_product);
-
         $product = new Product($id_product);
         $itemType = ($product->is_virtual == 1 ? 1 : 0);
-        $quantity = $setQuantity ? $product->quantity : null;
-        $name = mb_substr($product->name[$id_default_lang],0,99);
 
+        //add base product
+        $code = $this->getItemCodeByProductId($id_product);
         $item = array(
             'Code' => $code,
-            'Name' => $name,
+            'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
             'ItemType' => $itemType,
             'Barcode' => $this->getBarcode($id_product),
             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-            'OpeningQuantity' => $quantity,
             'Tag' => json_encode(array('id_product' => $id_product)),
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
         );
+        $this->saveItem($item, $id_product);
 
+        if ($product->hasAttributes() > 0) {
+            //Combinations
+            $combinations = $product->getAttributesResume($this->id_default_lang);
+            foreach ($combinations as $combination) {
+                $code = $this->getItemCodeByProductId($id_product, $combination['id_product_attribute']);
+                $item = array(
+                    'Code' => $code,
+                    'Name' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
+                    'ItemType' => $itemType,
+                    'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
+                    'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
+                    'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
+                    'NodeFamily' => $this->getCategoryPath($product->id_category_default),
+                    'ProductCode' => $id_product,
+                );
+                $this->saveItem($item, $id_product, $combination['id_product_attribute']);
+            }
+        }
+    }
+
+    private function saveItem($item, $id_product, $id_attribute = 0)
+    {
         $hesabfa = new HesabfaApi();
         $response = $hesabfa->itemSave($item);
         if ($response->Success) {
@@ -869,7 +896,8 @@ class Ssbhesabfa extends Module
             $obj->id_hesabfa = (int)$response->Result->Code;
             $obj->obj_type = 'product';
             $obj->id_ps = $id_product;
-            if ($code == null) {
+            $obj->id_ps_attribute = $id_attribute;
+            if ($item['Code'] == null) {
                 $obj->add();
                 $msg = 'ssbhesabfa - Item successfully added. Item code: ' . $response->Result->Code;
                 PrestaShopLogger::addLog($msg, 1, null, 'Product', $id_product, true);
@@ -907,7 +935,7 @@ class Ssbhesabfa extends Module
         }
     }
 
-    private function getBarcode($id_product)
+    private function getBarcode($id_product, $id_attribute = 0)
     {
         if (!isset($id_product)) {
             return false;
@@ -915,16 +943,32 @@ class Ssbhesabfa extends Module
 
         $product = new Product($id_product);
 
-        switch (Configuration::get('SSBHESABFA_ITEM_BARCODE')) {
-            case 1:
-                return $product->reference;
-            case 2:
-                return $product->upc;
-            case 3:
-                return $product->ean13;
-            case 4:
-                return $product->isbn;
+        if ($id_attribute == 0) {
+            switch (Configuration::get('SSBHESABFA_ITEM_BARCODE')) {
+                case 1:
+                    return $product->reference;
+                case 2:
+                    return $product->upc;
+                case 3:
+                    return $product->ean13;
+                case 4:
+                    return $product->isbn;
+            }
+        } else {
+            $product_attribute = $product->getAttributeCombinationsById($id_attribute, $this->id_default_lang);
+            switch (Configuration::get('SSBHESABFA_ITEM_BARCODE')) {
+                case 1:
+                    return $product_attribute[0]['reference'];
+                case 2:
+                    return $product_attribute[0]['upc'];
+                case 3:
+                    return $product_attribute[0]['ean13'];
+                case 4:
+                    return $product_attribute[0]['isbn'];
+            }
         }
+
+        return false;
     }
 
     //Contact
@@ -1047,55 +1091,35 @@ class Ssbhesabfa extends Module
     {
         $isValid = true;
         $atIndex = strrpos($email, "@");
-        if (is_bool($atIndex) && !$atIndex)
-        {
+        if (is_bool($atIndex) && !$atIndex) {
             $isValid = false;
-        }
-        else
-        {
-            $domain = substr($email, $atIndex+1);
-            $local = substr($email, 0, $atIndex);
-            $localLen = strlen($local);
-            $domainLen = strlen($domain);
-            if ($localLen < 1 || $localLen > 64)
-            {
+        } else {
+            $domain = Tools::substr($email, $atIndex+1);
+            $local = Tools::substr($email, 0, $atIndex);
+            $localLen = Tools::strlen($local);
+            $domainLen = Tools::strlen($domain);
+            if ($localLen < 1 || $localLen > 64) {
                 // local part length exceeded
                 $isValid = false;
-            }
-            else if ($domainLen < 1 || $domainLen > 255)
-            {
+            } else if ($domainLen < 1 || $domainLen > 255) {
                 // domain part length exceeded
                 $isValid = false;
-            }
-            else if ($local[0] == '.' || $local[$localLen-1] == '.')
-            {
+            } else if ($local[0] == '.' || $local[$localLen-1] == '.') {
                 // local part starts or ends with '.'
                 $isValid = false;
-            }
-            else if (preg_match('/\\.\\./', $local))
-            {
+            } else if (preg_match('/\\.\\./', $local)) {
                 // local part has two consecutive dots
                 $isValid = false;
-            }
-            else if (!preg_match('/^[A-Za-z0-9\\-\\.]+$/', $domain))
-            {
+            } else if (!preg_match('/^[A-Za-z0-9\\-\\.]+$/', $domain)) {
                 // character not valid in domain part
                 $isValid = false;
-            }
-            else if (preg_match('/\\.\\./', $domain))
-            {
+            } else if (preg_match('/\\.\\./', $domain)) {
                 // domain part has two consecutive dots
                 $isValid = false;
-            }
-            else if
-            (!preg_match('/^(\\\\.|[A-Za-z0-9!#%&`_=\\/$\'*+?^{}|~.-])+$/',
-                str_replace("\\\\","",$local)))
-            {
+            } else if (!preg_match('/^(\\\\.|[A-Za-z0-9!#%&`_=\\/$\'*+?^{}|~.-])+$/', str_replace("\\\\", "", $local))) {
                 // character not valid in local part unless
                 // local part is quoted
-                if (!preg_match('/^"(\\\\"|[^"])+"$/',
-                    str_replace("\\\\","",$local)))
-                {
+                if (!preg_match('/^"(\\\\"|[^"])+"$/', str_replace("\\\\", "", $local))) {
                     $isValid = false;
                 }
             }
@@ -1144,15 +1168,31 @@ class Ssbhesabfa extends Module
         //Splitting total discount to each item
         $split = 0;
         $total_discounts = 0;
+
+        //skip free shipping discount amount
         $order_total_discount = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_discounts, $id_order);
+        $shipping = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_shipping_tax_incl, $id_order);
+
+        $sql = 'SELECT `free_shipping` 
+                    FROM `' . _DB_PREFIX_ . 'order_cart_rule`
+                    WHERE `id_order` = '. $id_order;
+        $result = Db::getInstance()->executeS($sql);
+
+        foreach ($result as $item) {
+            if ($item['free_shipping']) {
+                $order_total_discount = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_discounts - $order->total_shipping_tax_incl, $id_order);
+                $shipping = 0;
+            }
+        }
+
         $order_total_products = $this->getOrderPriceInHesabfaDefaultCurrency($order->total_products, $id_order);
-        if ($order->total_discounts > 0) {
+        if ($order_total_discount > 0) {
             $split = $order_total_discount / $order_total_products;
         }
 
         $products = $order->getProducts();
         foreach ($products as $key => $product) {
-            $code = $this->getItemCodeByProductId($product['product_id']);
+            $code = $this->getItemCodeByProductId($product['product_id'], $product['product_attribute_id']);
 
             // add product before insert invoice
             if ($code == null) {
@@ -1229,7 +1269,8 @@ class Ssbhesabfa extends Module
             'Reference' => $reference,
             'Status' => 2,
             'Tag' => json_encode(array('id_order' => $id_order)),
-            'Freight' => $this->getOrderPriceInHesabfaDefaultCurrency($order->total_shipping_tax_incl, $id_order),
+//            'Freight' => $this->getOrderPriceInHesabfaDefaultCurrency($order->total_shipping_tax_incl, $id_order),
+            'Freight' => $shipping,
             'InvoiceItems' => $items,
         );
 
@@ -1378,26 +1419,44 @@ class Ssbhesabfa extends Module
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
-        $id_default_lang = Configuration::get('PS_LANG_DEFAULT');
 
         foreach ($products as $item) {
             //do if product not exists in hesabfa
             $id_product = $item['id_product'];
+            $product = new Product($id_product);
+
             $id_obj = $this->getObjectId('product', $id_product);
             if (!$id_obj) {
-                $product = new Product($id_product);
-                $itemType = ($product->is_virtual == 1 ? 1 : 0);
-                $name = mb_substr($product->name[$id_default_lang],0,99);
-
                 array_push($items, array(
-                    'Name' => $name,
-                    'ItemType' => $itemType,
+                    'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
+                    'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
                     'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
                     'Tag' => json_encode(array('id_product' => $id_product)),
                     'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                     'ProductCode' => $id_product,
                 ));
+            }
+
+            //add combinations
+            if ($product->hasAttributes() > 0) {
+                //Combinations
+                $combinations = $product->getAttributesResume($this->id_default_lang);
+
+                foreach ($combinations as $combination) {
+                    $id_obj = $this->getObjectId('product', $id_product, $combination['id_product_attribute']);
+                    if (!$id_obj) {
+                        array_push($items, array(
+                            'Name' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
+                            'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
+                            'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
+                            'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
+                            'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
+                            'NodeFamily' => $this->getCategoryPath($product->id_category_default),
+                            'ProductCode' => $id_product,
+                        ));
+                    }
+                }
             }
         }
 
@@ -1411,6 +1470,7 @@ class Ssbhesabfa extends Module
                     $obj->obj_type = 'product';
                     $json = json_decode($item->Tag);
                     $obj->id_ps = (int)$json->id_product;
+                    $obj->id_ps_attribute = (int)$json->id_attribute;
                     $obj->add();
                     $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
                     PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
@@ -1429,28 +1489,50 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function setOpeningQuantity() {
+    public function setOpeningQuantity()
+    {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'name', 'ASC', false, false);
         $items = array();
 
         foreach ($products as $item) {
-            //do if product exists in hesabfa
-            $id_obj = $this->getObjectId('product', $item['id_product']);
-            if ($id_obj != false) {
-                $product = new Product($item['id_product']);
-                $obj = new HesabfaModel($id_obj);
-                $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product']);
+            $product = new Product($item['id_product']);
 
-                if (is_object($product) && is_object($obj) && $quantity > 0 && $product->price > 0) {
-                    array_push($items, array(
-                        'Code' => $obj->id_hesabfa,
-                        'Quantity' => $quantity,
-                        'UnitPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
-                    ));
+            if ($product->hasAttributes() == 0) {
+                //do if product exists in hesabfa
+                $id_obj = $this->getObjectId('product', $item['id_product']);
+                if ($id_obj != false) {
+                    $obj = new HesabfaModel($id_obj);
+                    $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product']);
+
+                    if (is_object($product) && is_object($obj) && $quantity > 0 && $product->price > 0) {
+                        array_push($items, array(
+                            'Code' => $obj->id_hesabfa,
+                            'Quantity' => $quantity,
+                            'UnitPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
+                        ));
+                    }
+                }
+            } else {
+                //Combinations
+                $combinations = $product->getAttributesResume($this->id_default_lang);
+
+                foreach ($combinations as $combination) {
+                    $id_obj = $this->getObjectId('product', $item['id_product'], $combination['id_product_attribute']);
+                    if ($id_obj != false) {
+                        $obj = new HesabfaModel($id_obj);
+                        $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product'], $combination['id_product_attribute']);
+
+                        if (is_object($obj) && $quantity > 0 && $product->price + $combination['price'] > 0) {
+                            array_push($items, array(
+                                'Code' => $obj->id_hesabfa,
+                                'Quantity' => $quantity,
+                                'UnitPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
+                            ));
+                        }
+                    }
                 }
             }
         }
-
         //call API when at least one product exists
         if (!empty($items)) {
             $hesabfa = new HesabfaApi();
@@ -1589,6 +1671,37 @@ class Ssbhesabfa extends Module
         }
     }
 
+    public function hookDisplayAdminProductsExtra($params)
+    {
+        $code = $this->getItemCodeByProductId($params['id_product']);
+        $this->context->smarty->assign(array(
+            'hesabfa_item_code' => $code,
+        ));
+
+        $product = new Product($params['id_product']);
+
+        if ($product->hasAttributes() > 0) {
+            $combinations = array();
+            $attributes = $product->getAttributesResume($this->id_default_lang);
+
+            foreach ($attributes as $attribute) {
+                $code = $this->getItemCodeByProductId($params['id_product'], $attribute['id_product_attribute']);
+                $tmp = array(
+                    'name' => $attribute['attribute_designation'],
+                    'hesabfa_item_code' => $code,
+                    'id_hesabfa_item_code' => "ssbhesabfa_hesabfa_item_code_" . $attribute['id_product_attribute'],
+                );
+                array_push($combinations, $tmp);
+            }
+        }
+
+        $this->context->smarty->assign(array(
+        'combinations' => $combinations,
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/AdminProductsExtra.tpl');
+    }
+
     //Contact
     public function hookActionObjectCustomerAddAfter($params)
     {
@@ -1643,9 +1756,10 @@ class Ssbhesabfa extends Module
         }
     }
 
-    public function hookActionOrderStatusPostUpdate($params) {
+    public function hookActionOrderStatusPostUpdate($params)
+    {
         if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
-            $obj = new HesabfaModel($id_obj = $this->getObjectId('order', $params['id_order']));
+            $obj = new HesabfaModel($this->getObjectId('order', $params['id_order']));
             $this->setOrder($params['id_order'], 2, $obj->id_hesabfa);
         }
     }
@@ -1661,6 +1775,32 @@ class Ssbhesabfa extends Module
     public function hookActionProductUpdate($params)
     {
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+            $base_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_0');
+            if (ValidateCore::isUnsignedInt($base_item_code) != false && $base_item_code != '') {
+                $obj_id = $this->getObjectId('product', $params['product']->id);
+                if ($obj_id != false) {
+                    $obj = new HesabfaModel($obj_id);
+                    $obj->id_hesabfa = $base_item_code;
+                    $obj->update();
+                }
+            }
+
+            if ($params['product']->hasAttributes() > 0) {
+                //Combinations
+                $combinations = $params['product']->getAttributesResume($this->id_default_lang);
+                foreach ($combinations as $combination) {
+                    $attribute_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_' . $combination['id_product_attribute']);
+                    if (ValidateCore::isUnsignedInt($attribute_item_code) != false && $attribute_item_code != '') {
+                        $obj_id = $this->getObjectId('product', $params['product']->id, $combination['id_product_attribute']);
+                        if ($obj_id != false) {
+                            $obj = new HesabfaModel($obj_id);
+                            $obj->id_hesabfa = $attribute_item_code;
+                            $obj->update();
+                        }
+                    }
+                }
+            }
+
             $this->hookActionProductAdd($params);
         }
     }
@@ -1677,6 +1817,37 @@ class Ssbhesabfa extends Module
         } else {
             $msg = 'ssbhesabfa - Cannot delete Item in hesabfa. Error Message: ' . $response->ErrorMessage;
             PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $params['product']->id, true);
+        }
+
+        $hesabfa->delete();
+    }
+
+    public function hookActionProductAttributeAdd($params)
+    {
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+//            $this->setItem($params['product']->id);
+        }
+    }
+
+    public function hookActionProductAttributeUpdate($params)
+    {
+        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+            $this->hookActionProductAttributeAdd($params);
+        }
+    }
+
+    public function hookActionProductAttributeDelete($params)
+    {
+        $hesabfa = new HesabfaModel($this->getObjectId('product', $params['id_product'], $params['id_product_attribute']));
+
+        $hesabfaApi = new HesabfaApi();
+        $response = $hesabfaApi->itemDelete($hesabfa->id_hesabfa);
+        if ($response->Success) {
+            $msg = 'ssbhesabfa - Item (Combination) successfully deleted.';
+            PrestaShopLogger::addLog($msg, 1, null, 'Product', $params['id_product'], true);
+        } else {
+            $msg = 'ssbhesabfa - Cannot delete Item (Combination) in hesabfa. Error Message: ' . $response->ErrorMessage;
+            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $params['id_product'], true);
         }
 
         $hesabfa->delete();

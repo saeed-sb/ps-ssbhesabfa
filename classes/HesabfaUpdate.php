@@ -1,5 +1,4 @@
 <?php
-
 /**
  * 2007-2020 PrestaShop
  *
@@ -69,14 +68,15 @@ class HesabfaUpdate
     public function getInfoByKey($key)
     {
         $data = $this->makeCall();
-        if(!$data || !is_array($data))
+        if (!$data || !is_array($data)) {
             return false;
+        }
         return key_exists($key, $data) ? $data[$key] : false;
     }
 
     public function checkUpdate()
     {
-        if (Configuration::get('SSBHESABFA_LAST_CHECK_UPDATE') === false || (time() - Configuration::get('SSBHESABFA_LAST_CHECK_UPDATE')) > 86400){
+        if (Configuration::get('SSBHESABFA_LAST_CHECK_UPDATE') === false || (time() - Configuration::get('SSBHESABFA_LAST_CHECK_UPDATE')) > 86400) {
             Configuration::updateValue('SSBHESABFA_LAST_CHECK_UPDATE', time());
         }
 
@@ -118,7 +118,7 @@ class HesabfaUpdate
         }
         $notices = $this->getInfoByKey('notice');
         if ($notices) {
-            foreach($notices AS $val) {
+            foreach ($notices as $val) {
                 if (!isset($val['text']) || !$val['text']) {
                     continue;
                 }
@@ -126,7 +126,7 @@ class HesabfaUpdate
                     $html .= $this->ssbhesabfa->displayError($val['text']);
                 } elseif ($val['type'] == 'info') {
                     $html .= $this->ssbhesabfa->displayConfirmation($val['text']);
-                } else{
+                } else {
                     $html .= $val['text'];
                 }
             }
@@ -138,8 +138,8 @@ class HesabfaUpdate
     {
         $html = '';
         $ads = $this->getInfoByKey('ad');
-        if($ads){
-            foreach($ads AS $val) {
+        if ($ads) {
+            foreach ($ads as $val) {
                 if (isset($val['html']) && $val['html']) {
                     $html .= $val['html'];
                 }
@@ -164,9 +164,7 @@ class HesabfaUpdate
         $sandbox = _PS_CACHE_DIR_.'sandbox/';
         // Test sandbox is writeable ?
         if (!$tmpfile = tempnam($sandbox, 'TMP0')) {
-            return sprintf(
-                $this->ssbhesabfa->displayError($this->ssbhesabfa->l('Please ensure the %s folder is writable.')), $sandbox
-            );
+            return $this->ssbhesabfa->displayError(sprintf($this->ssbhesabfa->l('Please ensure the %s folder is writable.')), $sandbox);
         }
         @unlink($tmpfile);
 
