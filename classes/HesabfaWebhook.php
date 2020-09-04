@@ -190,10 +190,11 @@ class HesabfaWebhook
             $hesabfa = new HesabfaModel($id_obj);
             $product = new Product($id_product);
 
-            //1.set new Hesabfa Item Code if changes
+//            1.set new Hesabfa Item Code if changes
             if ($hesabfa->id_hesabfa != $item->Code) {
                 $id_hesabfa_old = $hesabfa->id_hesabfa;
                 $hesabfa->id_hesabfa = (int)$item->Code;
+                //ToDo: update all product attribute too
                 $hesabfa->update();
 
                 $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $item->Code;

@@ -49,8 +49,10 @@ function upgrade_module_0_9_7($module)
         $module->registerHook('actionProductAttributeDelete');
     }
 
-    if (!$module->isRegisteredInHook('displayAdminProductsExtra')) {
-        $module->registerHook('displayAdminProductsExtra');
+    if (version_compare(_PS_VERSION_, '1.7.0.0', '>=')) {
+        if (!$module->isRegisteredInHook('displayAdminProductsExtra')) {
+            $module->registerHook('displayAdminProductsExtra');
+        }
     }
 
     if (file_exists(_PS_MODULE_DIR_.$module->name.'/classes/HesabfaApi.php')) {

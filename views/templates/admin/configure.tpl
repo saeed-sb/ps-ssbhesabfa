@@ -69,9 +69,9 @@
                             {l s='Module Version: v' mod='ssbhesabfa'}{$module_ver|escape:'htmlall':'UTF-8'}
                         </form>
                         <br>
-                        {if isset($notices)}{$notices|escape:'htmlall':'UTF-8'}{/if}
+                        {if isset($notices)}{$notices}{/if}
                         {if isset($upgrade) && $upgrade == true}
-                            {$upgrade|escape:'htmlall':'UTF-8'}
+                            {$upgrade}
                         {/if}
                     </div>
                 </div>
