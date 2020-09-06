@@ -36,6 +36,7 @@ class HesabfaWebhook
                 if (!$item->API) {
                     switch ($item->ObjectType) {
                         case 'Invoice':
+                            //ToDo: check if invoice deleted then sync deleted products.
                             $this->setInvoiceChangesById($item->ObjectId);
                             break;
                         case 'Product':
@@ -211,7 +212,7 @@ class HesabfaWebhook
                         $combination->price = $item->SellPrice - $product->price;
                         $combination->update();
 
-                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
+                        $msg = "Item $id_product-$id_attribute price changed. Old Price: $old_price. New Price: $item->SellPrice";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 } else {
@@ -222,7 +223,7 @@ class HesabfaWebhook
                         $product->price = $item->SellPrice;
                         $product->update();
 
-                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
+                        $msg = "Item $id_product price changed. Old Price: $old_price. New Price: $item->SellPrice";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 }
@@ -231,38 +232,38 @@ class HesabfaWebhook
             //3.set new Quantity
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
                 if ($id_attribute != 0) {
-                    $combination = new Combination($id_attribute);
-                    if ($item->Stock != $combination->quantity) {
+                    $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product, $id_attribute);
+                    if ($item->Stock != $current_quantity) {
                         StockAvailable::setQuantity($id_product, $id_attribute, $item->Stock);
 
-                        $old_quantity = $combination->quantity;
                         //TODO: Check why this object not update the quantity
-//                    $combination->quantity = $item->Stock;
-//                    $combination->update();
+//                        $combination = new Combination($id_attribute);
+//                        $combination->quantity = $item->Stock;
+//                        $combination->update();
 
-                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
-                                SET `quantity` = '. $item->Stock . '
-                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
-                        Db::getInstance()->execute($sql);
+//                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
+//                                SET `quantity` = '. $item->Stock . '
+//                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
+//                        Db::getInstance()->execute($sql);
 
-                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
+                        $msg = "Item $id_product-$id_attribute quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 } else {
-                    if ($item->Stock != $product->quantity) {
+                    $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product);
+                    if ($item->Stock != $current_quantity) {
                         StockAvailable::setQuantity($id_product, null, $item->Stock);
 
-                        $old_quantity = $product->quantity;
                         //TODO: Check why this object not update the quantity
 //                    $product->quantity = $item->Stock;
 //                    $product->update();
 
-                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
-                                SET `quantity` = '. $item->Stock . '
-                                WHERE `id_product` = ' . $id_product;
-                        Db::getInstance()->execute($sql);
+//                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
+//                                SET `quantity` = '. $item->Stock . '
+//                                WHERE `id_product` = ' . $id_product;
+//                        Db::getInstance()->execute($sql);
 
-                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
+                        $msg = "Item $id_product quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 }
