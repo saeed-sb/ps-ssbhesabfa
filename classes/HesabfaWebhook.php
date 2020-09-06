@@ -204,17 +204,6 @@ class HesabfaWebhook
             //2.set new Price
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
                 if ($id_attribute != 0) {
-                    //ToDo check currency calculate
-                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
-                    if ($item->SellPrice != $price) {
-                        $old_price = $product->price;
-                        $product->price = $item->SellPrice;
-                        $product->update();
-
-                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
-                    }
-                } else {
                     $combination = new Combination($id_attribute);
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price + $combination->price);
                     if ($item->SellPrice != $price) {
@@ -225,29 +214,23 @@ class HesabfaWebhook
                         $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
+                } else {
+                    //ToDo check currency calculate
+                    $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
+                    if ($item->SellPrice != $price) {
+                        $old_price = $product->price;
+                        $product->price = $item->SellPrice;
+                        $product->update();
+
+                        $msg = 'Item Price changed. Old Price: ' . $old_price . '. New Price: ' . $item->SellPrice;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
                 }
             }
 
             //3.set new Quantity
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
                 if ($id_attribute != 0) {
-                    if ($item->Stock != $product->quantity) {
-                        StockAvailable::setQuantity($id_product, null, $item->Stock);
-
-                        $old_quantity = $product->quantity;
-                        //TODO: Check why this object not update the quantity
-//                    $product->quantity = $item->Stock;
-//                    $product->update();
-
-                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
-                                SET `quantity` = '. $item->Stock . '
-                                WHERE `id_product` = ' . $id_product;
-                        Db::getInstance()->execute($sql);
-
-                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
-                    }
-                } else {
                     $combination = new Combination($id_attribute);
                     if ($item->Stock != $combination->quantity) {
                         StockAvailable::setQuantity($id_product, $id_attribute, $item->Stock);
@@ -260,6 +243,23 @@ class HesabfaWebhook
                         $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
                                 SET `quantity` = '. $item->Stock . '
                                 WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
+                        Db::getInstance()->execute($sql);
+
+                        $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                    }
+                } else {
+                    if ($item->Stock != $product->quantity) {
+                        StockAvailable::setQuantity($id_product, null, $item->Stock);
+
+                        $old_quantity = $product->quantity;
+                        //TODO: Check why this object not update the quantity
+//                    $product->quantity = $item->Stock;
+//                    $product->update();
+
+                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
+                                SET `quantity` = '. $item->Stock . '
+                                WHERE `id_product` = ' . $id_product;
                         Db::getInstance()->execute($sql);
 
                         $msg = 'Item Quantity changed. Old qty: ' . $old_quantity . '. New qty: ' . $item->Stock;

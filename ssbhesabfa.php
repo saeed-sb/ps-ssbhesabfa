@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.7';
+        $this->version = '0.9.8';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -1212,11 +1212,11 @@ class Ssbhesabfa extends Module
             }
 
             $reduction_amount = $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'] - $product['product_price'], $id_order);
-            $discount += $reduction_amount;
+            $discount += $reduction_amount * $product['product_quantity'];
 
             //fix if total discount greater than product price
-            if ($discount > $product_price) {
-                $discount = $product_price;
+            if ($discount > $product_price * $product['product_quantity']) {
+                $discount = $product_price * $product['product_quantity'];
             }
 
             $item = array (

@@ -55,13 +55,5 @@ function upgrade_module_0_9_7($module)
         }
     }
 
-    if (file_exists(_PS_MODULE_DIR_.$module->name.'/classes/HesabfaApi.php')) {
-        unlink(_PS_MODULE_DIR_.$module->name.'/classes/HesabfaApi.php');
-    }
-
-    if (file_exists(_PS_MODULE_DIR_.$module->name.'/classes/hesabfaAPI.php')) {
-        unlink(_PS_MODULE_DIR_.$module->name.'/classes/hesabfaAPI.php');
-    }
-
     return true;
 }
