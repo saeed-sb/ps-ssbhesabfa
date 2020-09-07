@@ -241,10 +241,10 @@ class HesabfaWebhook
 //                        $combination->quantity = $item->Stock;
 //                        $combination->update();
 
-//                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
-//                                SET `quantity` = '. $item->Stock . '
-//                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
-//                        Db::getInstance()->execute($sql);
+                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
+                                SET `quantity` = '. $item->Stock . '
+                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
+                        Db::getInstance()->execute($sql);
 
                         $msg = "Item $id_product-$id_attribute quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
@@ -258,10 +258,10 @@ class HesabfaWebhook
 //                    $product->quantity = $item->Stock;
 //                    $product->update();
 
-//                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
-//                                SET `quantity` = '. $item->Stock . '
-//                                WHERE `id_product` = ' . $id_product;
-//                        Db::getInstance()->execute($sql);
+                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
+                                SET `quantity` = '. $item->Stock . '
+                                WHERE `id_product` = ' . $id_product;
+                        Db::getInstance()->execute($sql);
 
                         $msg = "Item $id_product quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
