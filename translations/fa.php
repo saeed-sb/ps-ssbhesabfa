@@ -25,9 +25,9 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_dd7d119feb169bc75e8c30bc549052eb'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4e28c35cc9d0a92bb7a3d67c1378d64f'] = 'هیچ سفارشی همسان‌سازی نشد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_340781f607666441e2952dd909bf87fc'] = 'همسان‌سازی سفارشات با حسابفا موفقیت آمیز بود. شماره سفارشات: ';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_48f275b8bf07d204065f7f2711e0cb72'] = 'قبل از همسان‌سازی سفارشات، ابتدا اتصال API را برقرار نمایید';
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6d87590bb2b93f41888eaef43591fdeb'] = 'استخراج مشتریان به حسابفا با موفقیت انجام شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6d87590bb2b93f41888eaef43591fdeb'] = 'همسان‌سازی تغییرات با حسابفا موفقیت آمیز بود.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d658bd89a2377c89e42907dbcf9ebfdf'] = 'قبل از همسان‌سازی تغییرات، ابتدا اتصال API را برقرار نمایید';
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f6e6e22dd377f0b134fc906ca26e3560'] = 'استخراج مشتریان به حسابفا با موفقیت انجام شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f6e6e22dd377f0b134fc906ca26e3560'] = 'همسان‌سازی محصولات با حسابفا موفقیت آمیز بود.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1edf5f2aa44f35f65e7c5249aac91e37'] = 'قبل از همسان‌سازی محصولات، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_574254af19dd856bbc3830a549169bdf'] = 'اتصال به حسابفا با خطا مواجه شد. لطفا به تب API رفته و تنظیمات را مجدد بررسی نمایید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3fbdb7ffa63139318fa5c4ac3adc3974'] = 'سال مالی گذشته و/یا فرا نرسیده است، لطفا تنظیمات سال مالی در حسابفا را بررسی کنید.';
