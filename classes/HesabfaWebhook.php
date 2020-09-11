@@ -174,7 +174,9 @@ class HesabfaWebhook
         $json = json_decode($item->Tag);
         if (is_object($json)) {
             $id_product = $json->id_product;
-            $id_attribute = $json->id_attribute;
+            if (isset($json->id_attribute)) {
+                $id_attribute = $json->id_attribute;
+            }
         }
 
         //check if Tag not set in hesabfa
@@ -208,8 +210,8 @@ class HesabfaWebhook
                     $combination = new Combination($id_attribute);
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price + $combination->price);
                     if ($item->SellPrice != $price) {
-                        $old_price = $product->price + $combination->price;
-                        $combination->price = $item->SellPrice - $product->price;
+                        $old_price = $price;
+                        $combination->price = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice) - $product->price;
                         $combination->update();
 
                         $msg = "Item $id_product-$id_attribute price changed. Old Price: $old_price. New Price: $item->SellPrice";
@@ -219,8 +221,8 @@ class HesabfaWebhook
                     //ToDo check currency calculate
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
                     if ($item->SellPrice != $price) {
-                        $old_price = $product->price;
-                        $product->price = $item->SellPrice;
+                        $old_price = $price;
+                        $product->price = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice);
                         $product->update();
 
                         $msg = "Item $id_product price changed. Old Price: $old_price. New Price: $item->SellPrice";

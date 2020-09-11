@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.8';
+        $this->version = '0.9.9';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -714,7 +714,8 @@ class Ssbhesabfa extends Module
                 Configuration::updateValue('SSBHESABFA_LIVE_MODE', 1);
 
                 //set the last log ID
-                $changes = $hesabfa->settingGetChanges();
+                $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
+                $changes = $hesabfa->settingGetChanges($lastChange);
                 if ($changes->Success) {
                     if (Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID') == 0) {
                         $lastChange = end($changes->Result);
@@ -860,11 +861,15 @@ class Ssbhesabfa extends Module
             'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
             'ItemType' => $itemType,
             'Barcode' => $this->getBarcode($id_product),
-            'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
             'Tag' => json_encode(array('id_product' => $id_product)),
             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
             'ProductCode' => $id_product,
         );
+
+        if (!Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
+            $item['SellPrice'] = $this->getPriceInHesabfaDefaultCurrency($product->price);
+        }
+
         $this->saveItem($item, $id_product);
 
         if ($product->hasAttributes() > 0) {
@@ -877,11 +882,15 @@ class Ssbhesabfa extends Module
                     'Name' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
                     'ItemType' => $itemType,
                     'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
-                    'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
                     'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
                     'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                     'ProductCode' => $id_product,
                 );
+
+                if (!Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
+                    $item['SellPrice'] = $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']);
+                }
+
                 $this->saveItem($item, $id_product, $combination['id_product_attribute']);
             }
         }
@@ -1347,7 +1356,18 @@ class Ssbhesabfa extends Module
         }
 
         $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
-        $price = $price * (int)$currency->conversion_rate;
+        $price *= $currency->conversion_rate;
+        return $price;
+    }
+
+    public static function getPriceInPrestashopDefaultCurrency($price)
+    {
+        if (!isset($price)) {
+            return false;
+        }
+
+        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+        $price /= $currency->conversion_rate;
         return $price;
     }
 

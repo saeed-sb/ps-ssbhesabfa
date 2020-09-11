@@ -39,6 +39,7 @@ class HesabfaApi
         ), $data);
 
         $data_string = json_encode($data);
+
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - ' . $method . ' - ' . serialize($data_string), 1, null, null, null, true);
             var_dump($method.$data_string);
@@ -61,7 +62,8 @@ class HesabfaApi
         curl_close($ch);
 
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-            PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
+            PrestaShopLogger::addLog('ssbhesabfa - Result: ' . print_r($result), 1, null, null, null, true);
+            var_dump($result);
         }
 
         //Maximum request per minutes is 60 times,
