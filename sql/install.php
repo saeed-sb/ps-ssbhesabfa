@@ -29,7 +29,7 @@ $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa` (
     `obj_type` varchar(32) NOT NULL,
     `id_hesabfa` int(11) UNSIGNED NOT NULL,
     `id_ps` int(11) UNSIGNED NOT NULL,
-    `id_ps_attribute` INT(10) NOT NULL DEFAULT \'0\'
+    `id_ps_attribute` INT(10) NOT NULL DEFAULT 0,
     PRIMARY KEY  (`id_ssb_hesabfa`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
 

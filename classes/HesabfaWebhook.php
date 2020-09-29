@@ -26,6 +26,11 @@
 
 class HesabfaWebhook
 {
+    public $invoicesObjectId = array();
+    public $invoiceItemsCode = array();
+    public $itemsObjectId = array();
+    public $contactsObjectId = array();
+
     public function __construct()
     {
         $hesabfaApi = new HesabfaApi();
@@ -36,8 +41,11 @@ class HesabfaWebhook
                 if (!$item->API) {
                     switch ($item->ObjectType) {
                         case 'Invoice':
-                            //ToDo: check if invoice deleted then sync deleted products.
-                            $this->setInvoiceChangesById($item->ObjectId);
+                            $this->invoicesObjectId[] = $item->ObjectId;
+                            foreach (explode(',', $item->Extra) as $item) {
+                                $this->invoiceItemsCode[] = $item;
+                            }
+
                             break;
                         case 'Product':
                             //if Action was deleted
@@ -45,8 +53,11 @@ class HesabfaWebhook
                                 $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
                                 $hesabfa = new HesabfaModel($id_obj);
                                 $hesabfa->delete();
+
+                                break;
                             }
-                            $this->setItemChangesById($item->ObjectId);
+
+                            $this->itemsObjectId[] = $item->ObjectId;
                             break;
                         case 'Contact':
                             //if Action was deleted
@@ -54,106 +65,164 @@ class HesabfaWebhook
                                 $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
                                 $hesabfa = new HesabfaModel($id_obj);
                                 $hesabfa->delete();
+
+                                break;
                             }
-                            $this->setContactChangesById($item->ObjectId);
+
+                            $this->contactsObjectId[] = $item->ObjectId;
                             break;
                     }
                 }
-                $lastChange = $item->Id;
-
-                //set LastChange ID
-                Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange);
             }
+
+
+            $this->setChanges();
+            //set LastChange ID
+            $lastChange = end($changes->Result);
+            if (is_object($lastChange)) {
+                Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
+            }
+
         } else {
             PrestaShopLogger::addLog('ssbhesabfa - Cannot check last changes. Error Message: ' . $changes->ErrorMessage, 2, $changes->ErrorCode, null, null, true);
         }
     }
 
-    // use in webhook call when invoice change
-    public function setInvoiceChangesById($id)
-    {
-        $hesabfaApi = new HesabfaApi();
-        $invoice = $hesabfaApi->invoiceGetById($id);
-        if ($invoice->Success && !empty($invoice->Result)) {
-            //1.set new Hesabfa Invoice Code if changes
-            $number = $invoice->Result->Number;
-            $json = json_decode($invoice->Result->Tag);
-            if (is_object($json)) {
-                $id_order = $json->id_order;
-            } else {
-                $id_order = 0;
+    public function setChanges() {
+        //Invoices
+        if (!empty($this->invoicesObjectId)) {
+            $invoices = $this->getObjectsByIdList($this->invoicesObjectId, 'invoice');
+            if ($invoices != false) {
+                foreach ($invoices as $invoice) {
+                    $this->setInvoiceChanges($invoice);
+                }
             }
+        }
 
-            if ($invoice->Result->InvoiceType == 0) {
-                //check if Tag not set in hesabfa
-                if ($id_order == 0) {
+        //Contacts
+        if (!empty($this->contactsObjectId)) {
+            $contacts = $this->getObjectsByIdList($this->contactsObjectId, 'contact');
+            if ($contacts != false) {
+                foreach ($contacts as $contact) {
+                    $this->setContactChanges($contact);
+                }
+            }
+        }
+
+        //Items
+        $items = array();
+        if (!empty($this->itemsObjectId)) {
+            $objects = $this->getObjectsByIdList($this->itemsObjectId, 'item');
+            if ($objects != false) {
+                foreach ($objects as $object) {
+                    array_push($items, $object);
+                }
+            }
+        }
+
+        if (!empty($this->invoiceItemsCode)) {
+            $objects = $this->getObjectsByCodeList($this->invoiceItemsCode);
+            if ($objects != false) {
+                foreach ($objects as $object) {
+                    array_push($items, $object);
+                }
+            }
+        }
+
+        if (!empty($items)) {
+            foreach ($items as $item) {
+                $this->setItemChanges($item);
+            }
+        }
+
+        return true;
+    }
+
+    public function setInvoiceChanges($invoice)
+    {
+        if (!is_object($invoice)) {
+            return false;
+        }
+
+        //1.set new Hesabfa Invoice Code if changes
+        $number = $invoice->Number;
+        $json = json_decode($invoice->Tag);
+        if (is_object($json)) {
+            $id_order = $json->id_order;
+        } else {
+            $id_order = 0;
+        }
+
+        if ($invoice->InvoiceType == 0) {
+            //check if Tag not set in hesabfa
+            if ($id_order == 0) {
+                if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
                     $msg = 'This invoice is not define in OnlineStore';
                     PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'Order', $number, true);
-                } else {
-                    //check if order exist in prestashop
-                    $id_obj = Ssbhesabfa::getObjectId('order', $id_order);
-                    if ($id_obj > 0) {
-                        $hesabfa = new HesabfaModel($id_obj);
-                        if ($hesabfa->id_hesabfa != $number) {
-                            $id_hesabfa_old = $hesabfa->id_hesabfa;
-                            //ToDo: number must int, what can i do
-                            $hesabfa->id_hesabfa = $number;
-                            $hesabfa->update();
+                }
+            } else {
+                //check if order exist in prestashop
+                $id_obj = Ssbhesabfa::getObjectId('order', $id_order);
+                if ($id_obj > 0) {
+                    $hesabfa = new HesabfaModel($id_obj);
+                    if ($hesabfa->id_hesabfa != $number) {
+                        $id_hesabfa_old = $hesabfa->id_hesabfa;
+                        //ToDo: number must int, what can i do
+                        $hesabfa->id_hesabfa = $number;
+                        $hesabfa->update();
 
-                            $msg = 'Invoice Number changed. Old Number: ' . $id_hesabfa_old . '. New ID: ' . $number;
-                            PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
-                        }
+                        $msg = 'Invoice Number changed. Old Number: ' . $id_hesabfa_old . '. New ID: ' . $number;
+                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
                     }
                 }
             }
-
-            //2&3.check the change quantity and Price of Invoice items
-            foreach ($invoice->Result->InvoiceItems as $invoiceItem) {
-                $this->setItemChangesByCode($invoiceItem->Item->Code);
-            }
         }
+
+        return true;
     }
 
-    // use in webhook call when contact change
-    public function setContactChangesById($id)
+    public function setContactChanges($contact)
     {
-        $hesabfaApi = new HesabfaApi();
-        $contact = $hesabfaApi->contactGetById(array($id));
+        if (!is_object($contact)) {
+            return false;
+        }
 
-        if ($contact->Success && !empty($contact->Result)) {
-            //1.set new Hesabfa Contact Code if changes
-            $code = $contact->Result[0]->Code;
+        //1.set new Hesabfa Contact Code if changes
+        $code = $contact->Code;
 
-            $json = json_decode($contact->Result[0]->Tag);
-            if (is_object($json)) {
-                $id_customer = $json->id_customer;
-            } else {
-                $id_customer = 0;
-            }
+        $json = json_decode($contact->Tag);
+        if (is_object($json)) {
+            $id_customer = $json->id_customer;
+        } else {
+            $id_customer = 0;
+        }
 
-            //check if Tag not set in hesabfa
-            if ($id_customer == 0) {
+        //check if Tag not set in hesabfa
+        if ($id_customer == 0) {
+            if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
                 $msg = 'This Customer is not define in OnlineStore';
                 PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'customer', $code, true);
-
-                return false;
             }
 
-            //check if customer exist in prestashop
-            $id_obj = Ssbhesabfa::getObjectId('customer', $id_customer);
-            if ($id_obj > 0) {
-                $hesabfa = new HesabfaModel($id_obj);
-                if ($hesabfa->id_hesabfa != $code) {
-                    $id_hesabfa_old = $hesabfa->id_hesabfa;
+            return false;
+        }
 
-                    $hesabfa->id_hesabfa = (int)$code;
-                    $hesabfa->update();
+        //check if customer exist in prestashop
+        $id_obj = Ssbhesabfa::getObjectId('customer', $id_customer);
+        if ($id_obj > 0) {
+            $hesabfa = new HesabfaModel($id_obj);
+            if ($hesabfa->id_hesabfa != $code) {
+                $id_hesabfa_old = $hesabfa->id_hesabfa;
 
-                    $msg = 'Contact Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
-                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
-                }
+                $hesabfa->id_hesabfa = (int)$code;
+                $hesabfa->update();
+
+                $msg = 'Contact Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
+                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
             }
         }
+
+        return true;
     }
 
     public static function setItemChanges($item)
@@ -164,7 +233,7 @@ class HesabfaWebhook
 
         //do nothing if product is GiftWrapping item
         if (Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID') == $item->Code) {
-            return;
+            return true;
         }
 
         $id_product = 0;
@@ -181,27 +250,28 @@ class HesabfaWebhook
 
         //check if Tag not set in hesabfa
         if ($id_product == 0) {
-            $msg = 'Item with code: '. $item->Code .' is not define in OnlineStore';
-            PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'product', $item->Code, true);
+            if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+                $msg = 'Item with code: '. $item->Code .' is not define in OnlineStore';
+                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'product', $item->Code, true);
+            }
 
             return false;
         }
 
-        //check if product exist in prestashop
         $id_obj = Ssbhesabfa::getObjectId('product', $id_product, $id_attribute);
         if ($id_obj > 0) {
             $hesabfa = new HesabfaModel($id_obj);
+            //ToDo: if product not exists in PS then return
             $product = new Product($id_product);
 
-//            1.set new Hesabfa Item Code if changes
+            //1.set new Hesabfa Item Code if changes
             if ($hesabfa->id_hesabfa != $item->Code) {
                 $id_hesabfa_old = $hesabfa->id_hesabfa;
                 $hesabfa->id_hesabfa = (int)$item->Code;
-                //ToDo: update all product attribute too
                 $hesabfa->update();
 
                 $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $item->Code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product.'-'.$id_attribute, true);
             }
 
             //2.set new Price
@@ -218,7 +288,6 @@ class HesabfaWebhook
                         PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 } else {
-                    //ToDo check currency calculate
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
                     if ($item->SellPrice != $price) {
                         $old_price = $price;
@@ -237,6 +306,7 @@ class HesabfaWebhook
                     $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product, $id_attribute);
                     if ($item->Stock != $current_quantity) {
                         StockAvailable::setQuantity($id_product, $id_attribute, $item->Stock);
+//                        StockAvailable::updateQuantity($id_product, $id_attribute, $item->Stock);
 
                         //TODO: Check why this object not update the quantity
 //                        $combination = new Combination($id_attribute);
@@ -255,6 +325,7 @@ class HesabfaWebhook
                     $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product);
                     if ($item->Stock != $current_quantity) {
                         StockAvailable::setQuantity($id_product, null, $item->Stock);
+//                        StockAvailable::updateQuantity($id_product, null, $item->Stock);
 
                         //TODO: Check why this object not update the quantity
 //                    $product->quantity = $item->Stock;
@@ -270,26 +341,50 @@ class HesabfaWebhook
                     }
                 }
             }
+            return true;
         }
+        return false;
     }
 
-    // use in webhook call when product change
-    public function setItemChangesById($id)
-    {
+    public function getObjectsByIdList($idList, $type) {
         $hesabfaApi = new HesabfaApi();
-        $item = $hesabfaApi->itemGetById(array($id));
-        if ($item->Success && !empty($item->Result)) {
-            $this->setItemChanges($item->Result[0]);
+        switch ($type) {
+            case 'item':
+                $result = $hesabfaApi->itemGetById($idList);
+                break;
+            case 'contact':
+                $result = $hesabfaApi->contactGetById($idList);
+                break;
+            case 'invoice':
+                $result = $hesabfaApi->invoiceGetById($idList);
+                break;
+            default:
+                return false;
         }
+
+        if (is_object($result) && $result->Success) {
+            return $result->Result;
+        }
+
+        return false;
     }
 
-    // use in webhook call (in setInvoiceChangesById function) when invoice change
-    public function setItemChangesByCode($code)
-    {
+    public function getObjectsByCodeList($codeList) {
+        $queryInfo = array(
+            'Filters' => array(array(
+                'Property' => 'Code',
+                'Operator' => 'in',
+                'Value' => $codeList,
+            ))
+        );
+
         $hesabfaApi = new HesabfaApi();
-        $item = $hesabfaApi->itemGet($code);
-        if ($item->Success && !empty($item->Result)) {
-            $this->setItemChanges($item->Result);
+        $result = $hesabfaApi->itemGetItems($queryInfo);
+
+        if (is_object($result) && $result->Success) {
+            return $result->Result->List;
         }
+
+        return false;
     }
 }

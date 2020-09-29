@@ -57,6 +57,7 @@ if ($ssbHesabfa->active) {
         die('Invalid password.');
     }
 
+    PrestaShopLogger::addLog('ssbhesabfa - Webhook call from Hesabfa.', 1, null, null, null, true);
     include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
     new HesabfaWebhook();
 }

@@ -41,8 +41,8 @@ class HesabfaApi
         $data_string = json_encode($data);
 
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-            PrestaShopLogger::addLog('ssbhesabfa - ' . $method . ' - ' . serialize($data_string), 1, null, null, null, true);
-            var_dump($method.$data_string);
+            PrestaShopLogger::addLog('ssbhesabfa - Method:' . $method . ' - DataString: ' . serialize($data_string), 1, null, null, null, true);
+//            var_dump('ssbhesabfa - Method:' . $method . ' - DataString: ' .$data_string);
         }
 
         $url = 'https://api.hesabfa.com/v1/' . $method;
@@ -62,12 +62,12 @@ class HesabfaApi
         curl_close($ch);
 
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-            PrestaShopLogger::addLog('ssbhesabfa - Result: ' . print_r($result), 1, null, null, null, true);
-            var_dump($result);
+            PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
+//            var_dump('ssbhesabfa - Result: ' . print_r($result));
         }
 
         //Maximum request per minutes is 60 times,
-        sleep(1);
+//        sleep(1);
 
         if ($result == null) {
             return 'No response from Hesabfa';
