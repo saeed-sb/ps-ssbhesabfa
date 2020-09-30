@@ -42,8 +42,8 @@ class HesabfaWebhook
                     switch ($item->ObjectType) {
                         case 'Invoice':
                             $this->invoicesObjectId[] = $item->ObjectId;
-                            foreach (explode(',', $item->Extra) as $item) {
-                                $this->invoiceItemsCode[] = $item;
+                            foreach (explode(',', $item->Extra) as $invoiceItem) {
+                                $this->invoiceItemsCode[] = $invoiceItem;
                             }
 
                             break;

@@ -846,7 +846,7 @@ class Ssbhesabfa extends Module
 
             //add base product
             $code = $this->getItemCodeByProductId($id_product, 0);
-            $items[] = array(
+            $item = array(
                 'Code' => $code,
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
@@ -860,6 +860,8 @@ class Ssbhesabfa extends Module
             if (!Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
                 $item['SellPrice'] = $this->getPriceInHesabfaDefaultCurrency($product->price);
             }
+
+            $items[] = $item;
 
             if ($product->hasAttributes() > 0) {
                 //Combinations
@@ -923,7 +925,7 @@ class Ssbhesabfa extends Module
                     PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
                 }
             }
-            return $response->Result->Code;
+            return true;
         } else {
             $msg = 'ssbhesabfa - Cannot add/update Hesabfa items. Error Message: ' . $response->ErrorMessage;
             PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Products', null, true);
@@ -1080,7 +1082,7 @@ class Ssbhesabfa extends Module
                 $msg = 'ssbhesabfa - Contact successfully updated. Contact Code: ' . $response->Result[0]->Code;
                 PrestaShopLogger::addLog($msg, 1, null, 'Customer', $id_customer, true);
             }
-            return true;
+            return $response->Result[0]->Code;
         } else {
             $msg = 'ssbhesabfa - Cannot add/update item. Error Message: ' . $response->ErrorMessage;
             PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $id_customer, true);
