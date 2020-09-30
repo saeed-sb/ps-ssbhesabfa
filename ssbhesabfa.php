@@ -1216,8 +1216,10 @@ class Ssbhesabfa extends Module
                 $items[] = $product['product_id'];
             }
         }
-        if (!$this->setItems($items)) {
-            return false;
+        if (!empty($items)) {
+            if (!$this->setItems($items)) {
+                return false;
+            }
         }
 
         //skip free shipping discount amount
