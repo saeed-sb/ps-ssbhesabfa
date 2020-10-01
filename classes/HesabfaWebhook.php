@@ -43,7 +43,9 @@ class HesabfaWebhook
                         case 'Invoice':
                             $this->invoicesObjectId[] = $item->ObjectId;
                             foreach (explode(',', $item->Extra) as $invoiceItem) {
-                                $this->invoiceItemsCode[] = $invoiceItem;
+                                if ($invoiceItem != ''){
+                                    $this->invoiceItemsCode[] = $invoiceItem;
+                                }
                             }
 
                             break;
@@ -75,6 +77,11 @@ class HesabfaWebhook
                 }
             }
 
+            //remove duplicate values
+            $this->invoiceItemsCode = array_unique($this->invoiceItemsCode);
+            $this->contactsObjectId = array_unique($this->contactsObjectId);
+            $this->itemsObjectId = array_unique($this->itemsObjectId);
+            $this->invoicesObjectId = array_unique($this->invoicesObjectId);
 
             $this->setChanges();
             //set LastChange ID
