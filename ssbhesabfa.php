@@ -105,7 +105,8 @@ class Ssbhesabfa extends Module
 
             $this->registerHook('actionValidateOrder') &&
             $this->registerHook('actionPaymentConfirmation') &&
-            $this->registerHook('actionOrderStatusPostUpdate');
+            $this->registerHook('actionOrderStatusPostUpdate') &&
+            $this->registerHook('actionOrderEdited');
     }
 
     public function uninstall()
@@ -1856,6 +1857,11 @@ class Ssbhesabfa extends Module
                 $this->setOrder($params['id_order'], 2, $obj->id_hesabfa);
             }
         }
+    }
+
+    public function hookActionOrderEdited($params)
+    {
+        $this->hookActionValidateOrder($params);
     }
 
     //Item
