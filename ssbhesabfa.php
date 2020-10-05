@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.1';
+        $this->version = '0.9.10';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -991,12 +991,14 @@ class Ssbhesabfa extends Module
 
     public function getItemCodeByProductId($id_product, $id_attribute = 0)
     {
-        $obj = new HesabfaModel($this->getObjectId('product', $id_product, $id_attribute));
-        if (is_object($obj)) {
-            return $obj->id_hesabfa;
-        } else {
-            return null;
+        $obj_id = $this->getObjectId('product', $id_product, $id_attribute);
+        if ($obj_id > 0) {
+            $obj = new HesabfaModel($obj_id);
+            if (is_object($obj)) {
+                return $obj->id_hesabfa;
+            }
         }
+        return null;
     }
 
     public static function getProductAttributesObjectId($id_ps)
@@ -1026,8 +1028,13 @@ class Ssbhesabfa extends Module
             return false;
         }
 
-        $obj = new HesabfaModel($this->getObjectId('customer', $id_customer));
-        return $obj->id_hesabfa;
+        $obj_id = $this->getObjectId('customer', $id_customer);
+        if ($obj_id > 0) {
+            $obj = new HesabfaModel($obj_id);
+            return $obj->id_hesabfa;
+        }
+
+        return false;
     }
 
     public function setContact($id_customer)
@@ -1037,8 +1044,9 @@ class Ssbhesabfa extends Module
         }
 
         $code = null;
-        if ($this->getContactCodeByCustomerId($id_customer) != false) {
-            $code = $this->getContactCodeByCustomerId($id_customer);
+        $tmp = $this->getContactCodeByCustomerId($id_customer);
+        if ($tmp != false) {
+            $code = $tmp;
         }
 
         $customer = new Customer($id_customer);
@@ -1189,6 +1197,13 @@ class Ssbhesabfa extends Module
             return false;
         }
 
+        $number = $this->getInvoiceCodeByOrderId($id_order);
+
+        //return if saleInvoice not set before
+        if ($number == null && $orderType == 2) {
+            return false;
+        }
+
         $order = new Order($id_order);
 
         //set customer if not exists
@@ -1294,8 +1309,6 @@ class Ssbhesabfa extends Module
                 'Tax' => $this->getOrderPriceInHesabfaDefaultCurrency(($order->total_wrapping_tax_incl - $order->total_wrapping_tax_excl), $id_order),
             ));
         }
-
-        $number = $this->getInvoiceCodeByOrderId($id_order);
 
         switch ($orderType) {
             case 0:
@@ -1403,7 +1416,7 @@ class Ssbhesabfa extends Module
                     $payment->transaction_id = 'None';
                 }
 
-                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, $payment->card_number);
+                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id);
 
                 if ($response->Success) {
                     $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
@@ -1421,8 +1434,13 @@ class Ssbhesabfa extends Module
 
     public function getInvoiceCodeByOrderId($id_order)
     {
-        $obj = new HesabfaModel($this->getObjectId('order', $id_order));
-        return $obj->id_hesabfa;
+        $obj_id = $this->getObjectId('order', $id_order);
+        if ($obj_id > 0) {
+            $obj = new HesabfaModel($obj_id);
+            return $obj->id_hesabfa;
+        }
+
+        return null;
     }
 
     public function getOrderPriceInHesabfaDefaultCurrency($price, $id_order)
@@ -1568,7 +1586,7 @@ class Ssbhesabfa extends Module
             if ($product->hasAttributes() == 0) {
                 //do if product exists in hesabfa
                 $id_obj = $this->getObjectId('product', $item['id_product'], 0);
-                if ($id_obj != false) {
+                if ($id_obj > 0) {
                     $obj = new HesabfaModel($id_obj);
                     $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product']);
 
@@ -1586,7 +1604,7 @@ class Ssbhesabfa extends Module
 
                 foreach ($combinations as $combination) {
                     $id_obj = $this->getObjectId('product', $item['id_product'], $combination['id_product_attribute']);
-                    if ($id_obj != false) {
+                    if ($id_obj > 0) {
                         $obj = new HesabfaModel($id_obj);
                         $quantity = StockAvailable::getQuantityAvailableByProduct($item['id_product'], $combination['id_product_attribute']);
 
@@ -1789,19 +1807,22 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectCustomerDeleteBefore($params)
     {
-        $hesabfa = new HesabfaModel($this->getObjectId('customer', $params['customer']->id));
+        $obj_id = $this->getObjectId('customer', $params['customer']->id);
+        if ($obj_id > 0) {
+            $hesabfa = new HesabfaModel($obj_id);
 
-        $hesabfaApi = new HesabfaApi();
-        $response = $hesabfaApi->contactDelete($hesabfa->id_hesabfa);
-        if ($response->Success) {
-            $msg = 'ssbhesabfa - Contact successfully deleted.';
-            PrestaShopLogger::addLog($msg, 1, null, 'Customer', $params['customer']->id, true);
-        } else {
-            $msg = 'ssbhesabfa - Cannot delete item in hesabfa. Error Message: ' . $response->ErrorMessage;
-            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $params['customer']->id, true);
+            $hesabfaApi = new HesabfaApi();
+            $response = $hesabfaApi->contactDelete($hesabfa->id_hesabfa);
+            if ($response->Success) {
+                $msg = 'ssbhesabfa - Contact successfully deleted.';
+                PrestaShopLogger::addLog($msg, 1, null, 'Customer', $params['customer']->id, true);
+            } else {
+                $msg = 'ssbhesabfa - Cannot delete item in hesabfa. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $params['customer']->id, true);
+            }
+
+            $hesabfa->delete();
         }
-
-        $hesabfa->delete();
     }
 
     public function hookActionObjectAddressAddAfter($params)
@@ -1829,8 +1850,11 @@ class Ssbhesabfa extends Module
     public function hookActionOrderStatusPostUpdate($params)
     {
         if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE')) {
-            $obj = new HesabfaModel($this->getObjectId('order', $params['id_order']));
-            $this->setOrder($params['id_order'], 2, $obj->id_hesabfa);
+            $obj_id = $this->getObjectId('order', $params['id_order']);
+            if ($obj_id > 0) {
+                $obj = new HesabfaModel($obj_id);
+                $this->setOrder($params['id_order'], 2, $obj->id_hesabfa);
+            }
         }
     }
 
@@ -1850,7 +1874,7 @@ class Ssbhesabfa extends Module
             $base_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_0');
             if (ValidateCore::isUnsignedInt($base_item_code) != false && $base_item_code != '') {
                 $obj_id = $this->getObjectId('product', $params['product']->id, 0);
-                if ($obj_id != false) {
+                if ($obj_id > 0) {
                     $obj = new HesabfaModel($obj_id);
                     $obj->id_hesabfa = $base_item_code;
                     $obj->update();
@@ -1864,7 +1888,7 @@ class Ssbhesabfa extends Module
                     $attribute_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_' . $combination['id_product_attribute']);
                     if (ValidateCore::isUnsignedInt($attribute_item_code) != false && $attribute_item_code != '') {
                         $obj_id = $this->getObjectId('product', $params['product']->id, $combination['id_product_attribute']);
-                        if ($obj_id != false) {
+                        if ($obj_id > 0) {
                             $obj = new HesabfaModel($obj_id);
                             $obj->id_hesabfa = $attribute_item_code;
                             $obj->update();
@@ -1916,18 +1940,21 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeDelete($params)
     {
-        $hesabfa = new HesabfaModel($this->getObjectId('product', $params['id_product'], $params['id_product_attribute']));
+        $obj_id = $this->getObjectId('product', $params['id_product'], $params['id_product_attribute']);
+        if ($obj_id > 0) {
+            $hesabfa = new HesabfaModel($obj_id);
 
-        $hesabfaApi = new HesabfaApi();
-        $response = $hesabfaApi->itemDelete($hesabfa->id_hesabfa);
-        if ($response->Success) {
-            $msg = 'ssbhesabfa - Item (Combination) successfully deleted.';
-            PrestaShopLogger::addLog($msg, 1, null, 'Product', $params['id_product'], true);
-        } else {
-            $msg = 'ssbhesabfa - Cannot delete Item (Combination) in hesabfa. Error Message: ' . $response->ErrorMessage;
-            PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $params['id_product'], true);
+            $hesabfaApi = new HesabfaApi();
+            $response = $hesabfaApi->itemDelete($hesabfa->id_hesabfa);
+            if ($response->Success) {
+                $msg = 'ssbhesabfa - Item (Combination) successfully deleted.';
+                PrestaShopLogger::addLog($msg, 1, null, 'Product', $params['id_product'], true);
+            } else {
+                $msg = 'ssbhesabfa - Cannot delete Item (Combination) in hesabfa. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', $params['id_product'], true);
+            }
+
+            $hesabfa->delete();
         }
-
-        $hesabfa->delete();
     }
 }

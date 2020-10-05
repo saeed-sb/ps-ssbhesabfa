@@ -84,16 +84,12 @@ class HesabfaUpdate
         if (!$remote_version || strpos($remote_version, '.') === false) {
             return;
         }
-        $arr = explode('.', $remote_version);
-        $arr2 = explode('.', $this->ssbhesabfa->version);
-        $primary = array_shift($arr2);
-        // Must ensure the primary version is same.
-        if ($arr[0] == $primary) {
-            if (Tools::version_compare($this->ssbhesabfa->version, $remote_version)) {
-                // If current version is lower than remote version, need update.
-                return $remote_version;
-            }
+
+        if (Tools::version_compare($this->ssbhesabfa->version, $remote_version)) {
+            // If current version is lower than remote version, need update.
+            return $remote_version;
         }
+
         return false;
     }
 
