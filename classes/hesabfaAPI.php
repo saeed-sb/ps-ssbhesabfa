@@ -308,7 +308,7 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null)
+    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null, $transactionFee = 0)
     {
         $method = 'invoice/savepayment';
         $data = array(
@@ -318,6 +318,7 @@ class HesabfaApi
             'amount' => $amount,
             'transactionNumber' => $transactionNumber,
             'description' => $description,
+            'transactionFee' => $transactionFee,
         );
 
         return $this->apiRequest($method, $data);

@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.10';
+        $this->version = '0.9.11';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -850,6 +850,8 @@ class Ssbhesabfa extends Module
             $item = array(
                 'Code' => $code,
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
+                'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
+                'SalesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
                 'Barcode' => $this->getBarcode($id_product),
                 'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
@@ -872,6 +874,8 @@ class Ssbhesabfa extends Module
                     $item = array(
                         'Code' => $code,
                         'Name' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
+                        'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
+                        'SalesTitle' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
                         'ItemType' => $itemType,
                         'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
                         'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
@@ -1226,12 +1230,14 @@ class Ssbhesabfa extends Module
         // add product before insert invoice
         $items = array();
         $products = $order->getProducts();
+
         foreach ($products as $product) {
             $code = $this->getItemCodeByProductId($product['product_id'], $product['product_attribute_id']);
             if ($code == null) {
                 $items[] = $product['product_id'];
             }
         }
+
         if (!empty($items)) {
             if (!$this->setItems($items)) {
                 return false;
@@ -1417,7 +1423,17 @@ class Ssbhesabfa extends Module
                     $payment->transaction_id = 'None';
                 }
 
-                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id);
+                $transactionFee = 0;
+
+                //added for Pay.ir - iPhoneChi.com
+//                if ($bank_code == 2) {
+//                    $transactionFee = $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order) * 0.01;
+//                    if ($transactionFee >= 70000) {
+//                        $transactionFee = 70000;
+//                    }
+//                }
+
+                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, $transactionFee);
 
                 if ($response->Success) {
                     $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
@@ -1515,6 +1531,8 @@ class Ssbhesabfa extends Module
             if (!$id_obj) {
                 array_push($items, array(
                     'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
+                    'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
+                    'SalesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                     'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
                     'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
@@ -1535,6 +1553,8 @@ class Ssbhesabfa extends Module
                     if (!$id_obj) {
                         array_push($items, array(
                             'Name' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
+                            'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
+                            'SalesTitle' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
                             'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
                             'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
                             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),

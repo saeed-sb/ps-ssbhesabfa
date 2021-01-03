@@ -272,12 +272,12 @@ class HesabfaWebhook
             $product = new Product($id_product);
 
             //1.set new Hesabfa Item Code if changes
-            if ($hesabfa->id_hesabfa != $item->Code) {
+            if ($hesabfa->id_hesabfa != (int)$item->Code) {
                 $id_hesabfa_old = $hesabfa->id_hesabfa;
                 $hesabfa->id_hesabfa = (int)$item->Code;
                 $hesabfa->update();
 
-                $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $item->Code;
+                $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . (int)$item->Code;
                 PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product.'-'.$id_attribute, true);
             }
 
