@@ -878,7 +878,7 @@ class Ssbhesabfa extends Module
                         'SalesTitle' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
                         'ItemType' => $itemType,
                         'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
-                        'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
+                        'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => (int)$combination['id_product_attribute'])),
                         'Active' => $product->active ? true : false,
                         'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                         'ProductCode' => $id_product,
@@ -893,21 +893,22 @@ class Ssbhesabfa extends Module
             }
         }
 
-        if (!$this->saveItems($items)) {
+	    if (!$this->saveItems($items)) {
             return false;
         }
-        return true;
+
+	    return true;
     }
 
     private function saveItems($items)
     {
         $hesabfa = new HesabfaApi();
         $response = $hesabfa->itemBatchSave($items);
+
         if ($response->Success) {
             foreach ($response->Result as $item) {
                 $json = json_decode($item->Tag);
-                $id_ssb_hesabfa = $this->getObjectId('product', (int)$json->id_product, (int)$json->id_attribute);
-
+	            $id_ssb_hesabfa = $this->getObjectId('product', (int)$json->id_product, (int)$json->id_attribute);
                 if ($id_ssb_hesabfa == 0) {
                     $obj = new HesabfaModel();
                     $obj->id_hesabfa = (int)$item->Code;
@@ -1558,7 +1559,7 @@ class Ssbhesabfa extends Module
                             'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
                             'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
                             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
-                            'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
+                            'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => (int)$combination['id_product_attribute'])),
                             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                             'ProductCode' => $id_product,
                         ));
@@ -1887,6 +1888,8 @@ class Ssbhesabfa extends Module
     //Item
     public function hookActionProductAdd($params)
     {
+//    	$this->log(array('hookActionProductAdd' . $params['product']->id));
+
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             if (!$this->setItems(array($params['product']->id))) {
                 return false;
@@ -1896,7 +1899,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductUpdate($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+		if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $base_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_0');
             if (ValidateCore::isUnsignedInt($base_item_code) != false && $base_item_code != '') {
                 $obj_id = $this->getObjectId('product', $params['product']->id, 0);
@@ -1904,6 +1907,14 @@ class Ssbhesabfa extends Module
                     $obj = new HesabfaModel($obj_id);
                     $obj->id_hesabfa = $base_item_code;
                     $obj->update();
+                } else {
+                	$obj = new HesabfaModel();
+	                $obj->obj_type = 'product';
+	                $obj->id_hesabfa = $base_item_code;
+	                $obj->id_ps = $params['product']->id;
+                	$obj->id_ps_attribute = 0;
+
+                	$obj->add();
                 }
             }
 
@@ -1918,13 +1929,23 @@ class Ssbhesabfa extends Module
                             $obj = new HesabfaModel($obj_id);
                             $obj->id_hesabfa = $attribute_item_code;
                             $obj->update();
+                        } else {
+	                        $obj = new HesabfaModel();
+	                        $obj->obj_type = 'product';
+	                        $obj->id_hesabfa = $attribute_item_code;
+	                        $obj->id_ps = $params['product']->id;
+	                        $obj->id_ps_attribute = $combination['id_product_attribute'];
+
+	                        $obj->add();
                         }
                     }
                 }
             }
 
-            $this->hookActionProductAdd($params);
-        }
+		    if (!$this->setItems(array($params['product']->id))) {
+			    return false;
+		    }
+	    }
     }
 
     public function hookActionProductDelete($params)
@@ -1949,7 +1970,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeAdd($params)
     {
-        //ToDo: not working this hook
+	    //ToDo: not working this hook
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             if (!$this->setItems(array($params['product']->id))) {
                 return false;
@@ -1959,8 +1980,10 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeUpdate($params)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
-            $this->hookActionProductAttributeAdd($params);
+	    if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
+		    if (!$this->setItems(array($params['product']->id))) {
+			    return false;
+		    }
         }
     }
 
