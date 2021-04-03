@@ -1522,15 +1522,24 @@ class Ssbhesabfa extends Module
     {
         $products = Product::getProducts($this->context->language->id, 1, 0, 'id_product', 'ASC');
         $items = array();
+	    $items[0] = array();
+	    $i = 0;
+	    $j = 0;
 
         foreach ($products as $item) {
+	        if ($i > 999) {
+		        $j++;
+		        $items[$j] = array();
+		        $i = 0;
+	        }
+
             //do if product not exists in hesabfa
             $id_product = $item['id_product'];
             $product = new Product($id_product);
 
             $id_obj = $this->getObjectId('product', $id_product, 0);
             if (!$id_obj) {
-                array_push($items, array(
+                array_push($items[$j], array(
                     'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                     'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                     'SalesTitle' => mb_substr($product->name[$this->id_default_lang], 0, 99),
@@ -1542,6 +1551,8 @@ class Ssbhesabfa extends Module
                     'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                     'ProductCode' => $id_product,
                 ));
+
+	            $i++;
             }
 
             //add combinations
@@ -1552,7 +1563,7 @@ class Ssbhesabfa extends Module
                 foreach ($combinations as $combination) {
                     $id_obj = $this->getObjectId('product', $id_product, $combination['id_product_attribute']);
                     if (!$id_obj) {
-                        array_push($items, array(
+                        array_push($items[$j], array(
                             'Name' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
                             'PurchasesTitle' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
                             'SalesTitle' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
@@ -1563,33 +1574,37 @@ class Ssbhesabfa extends Module
                             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
                             'ProductCode' => $id_product,
                         ));
+
+	                    $i++;
                     }
                 }
             }
         }
 
         if (!empty($items)) {
-            $hesabfa = new HesabfaApi();
-            $response = $hesabfa->itemBatchSave($items);
-            if ($response->Success) {
-                foreach ($response->Result as $item) {
-                    $obj = new HesabfaModel();
-                    $obj->id_hesabfa = (int)$item->Code;
-                    $obj->obj_type = 'product';
-                    $json = json_decode($item->Tag);
-                    $obj->id_ps = (int)$json->id_product;
-                    $obj->id_ps_attribute = (int)$json->id_attribute;
-                    $obj->add();
-                    $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
-                    PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
-                }
+	        $hesabfa = new HesabfaApi();
+	        foreach ($items as $array) {
+		        $response = $hesabfa->itemBatchSave($array);
+		        if ($response->Success) {
+			        foreach ($response->Result as $item) {
+				        $obj = new HesabfaModel();
+				        $obj->id_hesabfa = (int)$item->Code;
+				        $obj->obj_type = 'product';
+				        $json = json_decode($item->Tag);
+				        $obj->id_ps = (int)$json->id_product;
+				        $obj->id_ps_attribute = (int)$json->id_attribute;
+				        $obj->add();
+				        $msg = 'ssbhesabfa - Item successfully added. Item Code: ' . $item->Code;
+				        PrestaShopLogger::addLog($msg, 1, null, 'Product', $json->id_product, true);
+			        }
+		        } else {
+			        $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
+			        PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
+			        return $msg . ' Error Code: ' . $response->ErrorCode;
+		        }
+	        }
 
-                return true;
-            } else {
-                $msg = 'ssbhesabfa - Cannot add bulk item. Error Message: ' . $response->ErrorMessage;
-                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Product', null, true);
-                return $msg . ' Error Code: ' . $response->ErrorCode;
-            }
+	        return true;
         } else {
             $msg = 'ssbhesabfa - No product available for export.';
             PrestaShopLogger::addLog($msg, 2, null, 'Product', null, true);
@@ -1669,7 +1684,17 @@ class Ssbhesabfa extends Module
     {
         $customers = Customer::getCustomers();
         $data = array();
+	    $data[0] = array();
+	    $i = 0;
+	    $j = 0;
+
         foreach ($customers as $item) {
+	        if ($i > 999) {
+		        $j++;
+		        $data[$j] = array();
+		        $i = 0;
+	        }
+
             //do if customer not exists in hesabfa
             $id_customer = $item['id_customer'];
             $id_obj = $this->getObjectId('customer', $id_customer);
@@ -1682,7 +1707,7 @@ class Ssbhesabfa extends Module
                     $name = 'Guest Customer';
                 }
 
-                array_push($data, array(
+                array_push($data[$j], array(
                     'Name' => $name,
                     'FirstName' => $customer->firstname,
                     'LastName' => $customer->lastname,
@@ -1693,30 +1718,34 @@ class Ssbhesabfa extends Module
                     'Active' => $customer->active ? true : false,
                     'Note' => 'Customer ID in OnlineStore: ' . $id_customer,
                 ));
+
+	            $i++;
             }
         }
 
         //call API when at least one customer exists
         if (!empty($data)) {
             $hesabfa = new HesabfaApi();
-            $response = $hesabfa->contactBatchSave($data);
-            if ($response->Success) {
-                foreach ($response->Result as $item) {
-                    $obj = new HesabfaModel();
-                    $obj->id_hesabfa = (int)$item->Code;
-                    $obj->obj_type = 'customer';
-                    $json = json_decode($item->Tag);
-                    $obj->id_ps = (int)$json->id_customer;
-                    $obj->add();
-                    $msg = 'ssbhesabfa - Contact successfully added. Contact Code: ' . $item->Code;
-                    PrestaShopLogger::addLog($msg, 1, null, 'Customer', $json->id_customer, true);
-                }
-                return true;
-            } else {
-                $msg = $this->l('ssbhesabfa - Cannot add bulk contacts. Error Message: ') . $response->ErrorMessage;
-                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', null, true);
-                return $msg . ' Error Code: ' . $response->ErrorCode;
-            }
+	        foreach ($data as $array) {
+		        $response = $hesabfa->contactBatchSave($array);
+		        if ($response->Success) {
+			        foreach ($response->Result as $item) {
+				        $obj = new HesabfaModel();
+				        $obj->id_hesabfa = (int)$item->Code;
+				        $obj->obj_type = 'customer';
+				        $json = json_decode($item->Tag);
+				        $obj->id_ps = (int)$json->id_customer;
+				        $obj->add();
+				        $msg = 'ssbhesabfa - Contact successfully added. Contact Code: ' . $item->Code;
+				        PrestaShopLogger::addLog($msg, 1, null, 'Customer', $json->id_customer, true);
+			        }
+		        } else {
+			        $msg = $this->l('ssbhesabfa - Cannot add bulk contacts. Error Message: ') . $response->ErrorMessage;
+			        PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', null, true);
+			        return $msg . ' Error Code: ' . $response->ErrorCode;
+		        }
+	        }
+	        return true;
         } else {
             $msg = $this->l('ssbhesabfa - No customer exists for export.');
             PrestaShopLogger::addLog($msg, 2, null, 'Customer', null, true);
