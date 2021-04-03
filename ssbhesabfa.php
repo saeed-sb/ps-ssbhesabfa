@@ -1888,8 +1888,6 @@ class Ssbhesabfa extends Module
     //Item
     public function hookActionProductAdd($params)
     {
-//    	$this->log(array('hookActionProductAdd' . $params['product']->id));
-
         if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             if (!$this->setItems(array($params['product']->id))) {
                 return false;
@@ -1901,11 +1899,12 @@ class Ssbhesabfa extends Module
     {
 		if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
             $base_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_0');
-            if (ValidateCore::isUnsignedInt($base_item_code) != false && $base_item_code != '') {
+            if (ValidateCore::isUnsignedInt($base_item_code) != false && $base_item_code !== 0 && $base_item_code != '') {
                 $obj_id = $this->getObjectId('product', $params['product']->id, 0);
                 if ($obj_id > 0) {
                     $obj = new HesabfaModel($obj_id);
                     $obj->id_hesabfa = $base_item_code;
+
                     $obj->update();
                 } else {
                 	$obj = new HesabfaModel();
@@ -1923,11 +1922,12 @@ class Ssbhesabfa extends Module
                 $combinations = $params['product']->getAttributesResume($this->id_default_lang);
                 foreach ($combinations as $combination) {
                     $attribute_item_code = Tools::getValue('ssbhesabfa_hesabfa_item_code_' . $combination['id_product_attribute']);
-                    if (ValidateCore::isUnsignedInt($attribute_item_code) != false && $attribute_item_code != '') {
+                    if (ValidateCore::isUnsignedInt($attribute_item_code) != false && $attribute_item_code !== 0 && $attribute_item_code != '') {
                         $obj_id = $this->getObjectId('product', $params['product']->id, $combination['id_product_attribute']);
                         if ($obj_id > 0) {
                             $obj = new HesabfaModel($obj_id);
                             $obj->id_hesabfa = $attribute_item_code;
+
                             $obj->update();
                         } else {
 	                        $obj = new HesabfaModel();
