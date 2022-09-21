@@ -1858,7 +1858,7 @@ class Ssbhesabfa extends Module
 
 	public function hookActionObjectCustomerDeleteBefore($params)
 	{
-		$obj_id = $this->getObjectId('customer', $params['customer']->id);
+		$obj_id = $this->getObjectId('customer', $params['object']->id);
 		if ($obj_id > 0) {
 			$hesabfa = new HesabfaModel($obj_id);
 
@@ -1866,10 +1866,10 @@ class Ssbhesabfa extends Module
 			$response = $hesabfaApi->contactDelete($hesabfa->id_hesabfa);
 			if ($response->Success) {
 				$msg = 'ssbhesabfa - Contact successfully deleted.';
-				PrestaShopLogger::addLog($msg, 1, null, 'Customer', $params['customer']->id, true);
+				PrestaShopLogger::addLog($msg, 1, null, 'Customer', $params['object']->id, true);
 			} else {
 				$msg = 'ssbhesabfa - Cannot delete item in hesabfa. Error Message: ' . $response->ErrorMessage;
-				PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $params['customer']->id, true);
+				PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Customer', $params['object']->id, true);
 			}
 
 			$hesabfa->delete();

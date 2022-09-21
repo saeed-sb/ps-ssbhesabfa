@@ -48,6 +48,28 @@ class HesabfaWebhook
                                 }
                             }
 
+                            // Added for ssbprofitloyalty module
+                            if (Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty')) {
+                                if ($item->Action == 121 || $item->Action == 122 || $item->Action == 123) {
+                                    require_once(_PS_MODULE_DIR_.'/ssbprofitloyalty/ssbprofitloyalty.php');
+                                    $ssbprofitloyalty = new Ssbprofitloyalty();
+
+                                    switch ($item->Action) {
+                                        case 121:
+                                            $ssbprofitloyalty->addInvoiceById($item->ObjectId);
+                                            break;
+
+                                        case 122:
+                                            $ssbprofitloyalty->updateInvoiceById($item->ObjectId);
+                                            break;
+
+                                        case 123:
+                                            $ssbprofitloyalty->deleteInvoiceById($item->ObjectId);
+                                            break;
+                                    }
+                                }
+                            }
+
                             break;
                         case 'Product':
                             //if Action was deleted
