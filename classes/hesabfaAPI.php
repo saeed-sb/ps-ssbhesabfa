@@ -63,7 +63,8 @@ class HesabfaApi
 
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
-//            var_dump('ssbhesabfa - Result: ' . print_r($result));
+            //var_dump('ssbhesabfa - Result: ' . print_r($result));
+            
         }
 
         //Maximum request per minutes is 60 times,
@@ -374,6 +375,13 @@ class HesabfaApi
     public function settingGetFiscalYear()
     {
         $method = 'setting/GetFiscalYear';
+
+        return $this->apiRequest($method);
+    }
+    
+    public function settingGetSalesmen()
+    {
+        $method = 'setting/GetSalesmen';
 
         return $this->apiRequest($method);
     }

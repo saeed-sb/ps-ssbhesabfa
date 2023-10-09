@@ -47,13 +47,11 @@ class HesabfaWebhook
                                     $this->invoiceItemsCode[] = $invoiceItem;
                                 }
                             }
-
                             // Added for ssbprofitloyalty module
                             if (Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty')) {
                                 if ($item->Action == 121 || $item->Action == 122 || $item->Action == 123) {
                                     require_once(_PS_MODULE_DIR_.'/ssbprofitloyalty/ssbprofitloyalty.php');
                                     $ssbprofitloyalty = new Ssbprofitloyalty();
-
                                     switch ($item->Action) {
                                         case 121:
                                             $ssbprofitloyalty->addInvoiceById($item->ObjectId);
@@ -69,7 +67,7 @@ class HesabfaWebhook
                                     }
                                 }
                             }
-
+                            
                             break;
                         case 'Product':
                             //if Action was deleted
@@ -307,6 +305,10 @@ class HesabfaWebhook
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
                 if ($id_attribute != 0) {
                     $combination = new Combination($id_attribute);
+                    if (empty($combination->id_product)) {
+                        return;
+                    }
+                    
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price + $combination->price);
                     if ($item->SellPrice != $price) {
                         $old_price = $price;
@@ -341,6 +343,17 @@ class HesabfaWebhook
 //                        $combination = new Combination($id_attribute);
 //                        $combination->quantity = $item->Stock;
 //                        $combination->update();
+                        if ($item->Stock > $current_quantity ) {
+                            $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
+                                SET `quantity` = `quantity` + '. $item->Stock - $current_quantity . '
+                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = 0';
+                            Db::getInstance()->execute($sql);
+                        } else {
+                            $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
+                                SET `quantity` = `quantity` - '. $item->Stock - $current_quantity . '
+                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = 0';
+                            Db::getInstance()->execute($sql);
+                        }
 
                         $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
                                 SET `quantity` = '. $item->Stock . '
