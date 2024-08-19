@@ -32,16 +32,21 @@ class HesabfaApi
             return false;
         }
 
-        $data = array_merge(array(
-            'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-            'userId' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-            'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
-//            'loginToken' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN')
-        ), $data);
+        if (empty(Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'))) {
+            $data = array_merge(array(
+                'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+                'userId' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
+                'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+            ), $data);
+        } else {
+            $data = array_merge(array(
+                'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+                'loginToken' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
+            ), $data);
+        }
 
         $data_string = json_encode($data);
-// var_dump($data_string);
-// die();
+
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - Method:' . $method . ' - DataString: ' . serialize($data_string), 1, null, null, null, true);
 //            var_dump('ssbhesabfa - Method:' . $method . ' - DataString: ' .$data_string);
@@ -55,17 +60,17 @@ class HesabfaApi
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-//        curl_setopt($ch, CURLINFO_HEADER_OUT, true);
+
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             'Content-Type: application/json'
-        ));
+            ));
 
         $result = curl_exec($ch);
+        
         curl_close($ch);
 
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
-            //var_dump('ssbhesabfa - Result: ' . print_r($result));
         }
 
         //Maximum request per minutes is 60 times,
@@ -268,11 +273,11 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceGetById($id)
+    public function invoiceGetById($idList)
     {
         $method = 'invoice/getById';
         $data = array(
-            'id' => $id,
+            'idList' => $idList,
         );
 
         return $this->apiRequest($method, $data);
@@ -385,5 +390,64 @@ class HesabfaApi
         $method = 'setting/GetSalesmen';
 
         return $this->apiRequest($method);
+    }
+    
+    public function inquiryNationalIdentity()
+    {
+        $method = 'inquiry/nationalIdentity';
+
+        return $this->apiRequest($method);
+    }
+    
+    public function inquiryCheckMobileAndNationalCode($nationalCode, $mobile)
+    {
+        $method = 'inquiry/checkMobileAndNationalCode';
+        $data = array(
+            'nationalCode' => $nationalCode,
+            'mobile' => $mobile,
+        );
+
+        return $this->apiRequest($method, $data);
+    }
+    
+    public function receiptSave2($type, $items, $transactions, $number = null, $dateTime = null, $description = null, $project = null, $currency = null, $currencyRate = null)
+    {
+        $method = 'receipt/save2';
+        $data = array(
+            'type' => $type,
+            'items' => $items,
+            'transactions' => $transactions,
+        );
+
+        if (!is_null($number)) {
+            $data['number'] = $number;
+        }
+        if (!is_null($dateTime)) {
+            $data['dateTime'] = $dateTime;
+        }
+        if (!is_null($description)) {
+            $data['description'] = $description;
+        }
+        if (!is_null($project)) {
+            $data['project'] = $project;
+        }
+        if (!is_null($currency)) {
+            $data['currency'] = $currency;
+        }
+        if (!is_null($currencyRate)) {
+            $data['currencyRate'] = $currencyRate;
+        }
+
+        return $this->apiRequest($method, $data);
+    }
+    
+    public function documentSave($document)
+    {
+        $method = 'document/save';
+        $data = array(
+            'document' => $document,
+        );
+
+        return $this->apiRequest($method, $data);
     }
 }

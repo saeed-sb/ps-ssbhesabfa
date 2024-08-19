@@ -36,11 +36,30 @@ class Ssbhesabfa extends Module
     protected $config_form = false;
     public $id_default_lang;
 
+    private $configurations = array(
+        'SSBHESABFA_LIVE_MODE' => 0,
+        'SSBHESABFA_DEBUG_MODE' => 0,
+        'SSBHESABFA_ACCOUNT_USERNAME' => null,
+        'SSBHESABFA_ACCOUNT_PASSWORD' => null,
+        'SSBHESABFA_ACCOUNT_API' => null,
+        'SSBHESABFA_ACCOUNT_TOKEN' => null,
+        'SSBHESABFA_WEBHOOK_PASSWORD' => null,
+        'SSBHESABFA_CONTACT_ADDRESS_STATUS' => 1,
+        'SSBHESABFA_CONTACT_NODE_FAMILY' => 'Online Store Customer\'s',
+        'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => 0,
+        'SSBHESABFA_ITEM_BARCODE' => 2,
+        'SSBHESABFA_ITEM_UPDATE_PRICE' => 0,
+        'SSBHESABFA_ITEM_UPDATE_QUANTITY' => 0,
+        'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
+        'SSBHESABFA_INVOICE_RETURN_STATUE' => 6,
+        'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
+    );
+
     public function __construct()
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.10';
+        $this->version = '1.0.2';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -64,27 +83,12 @@ class Ssbhesabfa extends Module
     {
         include(dirname(__FILE__).'/sql/install.php');
 
-        foreach (array(
-                     'SSBHESABFA_LIVE_MODE' => 0,
-                     'SSBHESABFA_DEBUG_MODE' => 0,
-                     'SSBHESABFA_ACCOUNT_USERNAME' => null,
-                     'SSBHESABFA_ACCOUNT_PASSWORD' => null,
-                     'SSBHESABFA_ACCOUNT_API' => null,
-                     'SSBHESABFA_WEBHOOK_PASSWORD' => bin2hex(openssl_random_pseudo_bytes(16)),
-                     'SSBHESABFA_CONTACT_ADDRESS_STATUS' => 1,
-                     'SSBHESABFA_CONTACT_NODE_FAMILY' => 'Online Store Customer\'s',
-                     'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => 0,
-                     'SSBHESABFA_ITEM_BARCODE' => 2,
-                     'SSBHESABFA_ITEM_UPDATE_PRICE' => 0,
-                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => 0,
-                     'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
-                     'SSBHESABFA_INVOICE_RETURN_STATUE' => 6,
-                     'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
-                 ) as $key => $val) {
+        foreach ($this->configurations as $key => $val) {
             if (!Configuration::updateValue($key, $val)) {
                 return false;
             }
         }
+        Configuration::updateValue('SSBHESABFA_WEBHOOK_PASSWORD', bin2hex(openssl_random_pseudo_bytes(16)));
 
         return parent::install() &&
             $this->registerHook('backOfficeHeader') &&
@@ -311,7 +315,6 @@ class Ssbhesabfa extends Module
             'languages' => $this->context->controller->getLanguages(),
             'id_language' => $this->context->language->id,
         );
-
         $function_name = 'get'.$form.'Form';
         return $helper->generateForm(array($this->$function_name()));
     }
@@ -623,6 +626,7 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
                     'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
                     'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+                    'SSBHESABFA_ACCOUNT_TOKEN' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
                 );
                 break;
             case 'Item':
@@ -657,6 +661,7 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
                     'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
                     'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
+                    'SSBHESABFA_ACCOUNT_TOKEN' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
 
                     'SSBHESABFA_ITEM_BARCODE' => Configuration::get('SSBHESABFA_ITEM_BARCODE'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
@@ -682,18 +687,16 @@ class Ssbhesabfa extends Module
     protected function setConfigFormsValues($form = null)
     {
         $form_values = $this->getConfigFormValues($form);
+
         foreach (array_keys($form_values) as $key) {
             //don't replace password with null if password not entered
-            if ($key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null) {
-                break;
-            }
+            $control1 = $key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null;
+            //don't add bank map if bank is not define in hesabfa
+            $control2 = strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false && Tools::getValue($key) == 0;
 
-            //dont add bank map if bank is not define in hesabfa
-            if (strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false && Tools::getValue($key) == 0) {
-                break;
+            if (!($control1 || $control2)){
+                Configuration::updateValue($key, Tools::getValue($key));
             }
-
-            Configuration::updateValue($key, Tools::getValue($key));
         }
     }
 
@@ -884,7 +887,7 @@ class Ssbhesabfa extends Module
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
                 'Barcode' => $this->getBarcode($id_product),
-//                'SellPrice' => $product->price * 10,
+                'SellPrice' => $product->price * 10,
                 'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
                 'Active' => $product->active ? true : false,
                 'NodeFamily' => $this->getCategoryPath($product->id_category_default),
@@ -1373,6 +1376,7 @@ class Ssbhesabfa extends Module
             'Status' => 2,
             'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $shipping,
+            'SalesmanCode' => $salesmanCode,
             'InvoiceItems' => $items,
         );
         
