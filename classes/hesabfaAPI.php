@@ -35,11 +35,13 @@ class HesabfaApi
         $data = array_merge(array(
             'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
             'userId' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-            'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD')
+            'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+//            'loginToken' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN')
         ), $data);
 
         $data_string = json_encode($data);
-
+// var_dump($data_string);
+// die();
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - Method:' . $method . ' - DataString: ' . serialize($data_string), 1, null, null, null, true);
 //            var_dump('ssbhesabfa - Method:' . $method . ' - DataString: ' .$data_string);
@@ -53,9 +55,9 @@ class HesabfaApi
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data_string);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+//        curl_setopt($ch, CURLINFO_HEADER_OUT, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            'Content-Type: application/json',
-            'Accept: application/json'
+            'Content-Type: application/json'
         ));
 
         $result = curl_exec($ch);
@@ -64,7 +66,6 @@ class HesabfaApi
         if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
             PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
             //var_dump('ssbhesabfa - Result: ' . print_r($result));
-            
         }
 
         //Maximum request per minutes is 60 times,

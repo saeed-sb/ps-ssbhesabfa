@@ -40,7 +40,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '0.9.11';
+        $this->version = '0.9.10';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -346,6 +346,13 @@ class Ssbhesabfa extends Module
                         'desc' => $this->l('Find API key in Setting->Financial Settings->API Menu'),
                         'name' => 'SSBHESABFA_ACCOUNT_API',
                         'label' => $this->l('API Key'),
+                    ),
+                    array(
+                        'col' => 6,
+                        'type' => 'text',
+                        'desc' => $this->l('Find Login Token in Setting->Financial Settings->API Menu'),
+                        'name' => 'SSBHESABFA_ACCOUNT_TOKEN',
+                        'label' => $this->l('Login Token'),
                     ),
                 ),
                 'submit' => array(
@@ -877,6 +884,7 @@ class Ssbhesabfa extends Module
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
                 'Barcode' => $this->getBarcode($id_product),
+//                'SellPrice' => $product->price * 10,
                 'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
                 'Active' => $product->active ? true : false,
                 'NodeFamily' => $this->getCategoryPath($product->id_category_default),
@@ -1354,11 +1362,6 @@ class Ssbhesabfa extends Module
         if ($reference === null) {
             $reference = Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE') ? $order->reference : $id_order;
         }
-
-        $salesmanCode = Configuration::get('SSBHESABFA_INVOICE_SALESMEN');
-        if ($salesmanCode != false) {
-            $data['SalesmanCode'] = $salesmanCode;
-        }
         
         $data = array (
             'Number' => $number,
@@ -1370,9 +1373,13 @@ class Ssbhesabfa extends Module
             'Status' => 2,
             'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $shipping,
-            'SalesmanCode' => $salesmanCode,
             'InvoiceItems' => $items,
         );
+        
+        $salesmanCode = Configuration::get('SSBHESABFA_INVOICE_SALESMEN');
+        if ($salesmanCode != false) {
+            $data['SalesmanCode'] = $salesmanCode;
+        }
 
         $hesabfa = new HesabfaApi();
         $response = $hesabfa->invoiceSave($data);
