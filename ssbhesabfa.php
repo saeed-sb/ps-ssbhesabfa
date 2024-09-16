@@ -427,7 +427,7 @@ class Ssbhesabfa extends Module
                 'name' => $order_state['name'],
             ));
         }
-        
+
         $options2 = array();
         $hesabfaApi = new HesabfaApi();
         $salesmen_list = $hesabfaApi->settingGetSalesmen();
@@ -438,7 +438,7 @@ class Ssbhesabfa extends Module
                     'id_option' => $salesmen->Code,
                     'name' => $salesmen->Name,
                 ));
-            }   
+            }
         }
 
         return array(
@@ -475,7 +475,7 @@ class Ssbhesabfa extends Module
                             'name' => 'name'
                         )
                     ),
-                    
+
                     array (
                         'type' => 'select',
                         'name' => 'SSBHESABFA_INVOICE_SALESMEN',
@@ -1228,7 +1228,7 @@ class Ssbhesabfa extends Module
     }
 
     //Invoice
-    public function setOrder($id_order, $orderType = 0, $reference = null)
+    public function setOrder($id_order, $orderType = 0, $reference = null, $serials = null)
     {
         if (!isset($id_order)) {
             return false;
@@ -1321,7 +1321,7 @@ class Ssbhesabfa extends Module
             if ($discount > $product_price * $product['product_quantity']) {
                 $discount = $product_price * $product['product_quantity'];
             }
-            
+
             if ($discount < 0) {
                 $discount = 0;
             }
@@ -1335,20 +1335,31 @@ class Ssbhesabfa extends Module
                 'Discount' => (float)$discount,
                 'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
             );
-            array_push($items, $item);
+
+            //compatibility with ssborderserial module
+            if (!empty($serials)) {
+                foreach ($serials as $serial) {
+                    if ($serial['product_id'] == $product['product_id']) {
+                        $item['serialNumbers'] = array($serial['serial_number']);
+                    }
+                }
+            }
+            //end with ssborderserial module
+
+            $items[] = $item;
             $i++;
         }
 
         if ($order->total_wrapping_tax_excl > 0) {
-            array_push($items, array (
-                'RowNumber' => $i+1,
+            $items[] = array(
+                'RowNumber' => $i + 1,
                 'ItemCode' => Configuration::get('SSBHESABFA_ITEM_GIFT_WRAPPING_ID'),
                 'Description' => $this->l('Gift wrapping Service'),
                 'Quantity' => 1,
                 'UnitPrice' => $this->getOrderPriceInHesabfaDefaultCurrency(($order->total_wrapping), $id_order),
                 'Discount' => 0,
                 'Tax' => $this->getOrderPriceInHesabfaDefaultCurrency(($order->total_wrapping_tax_incl - $order->total_wrapping_tax_excl), $id_order),
-            ));
+            );
         }
 
         switch ($orderType) {
@@ -1361,11 +1372,11 @@ class Ssbhesabfa extends Module
             default:
                 $date = $order->date_add;
         }
-        
+
         if ($reference === null) {
             $reference = Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE') ? $order->reference : $id_order;
         }
-        
+
         $data = array (
             'Number' => $number,
             'InvoiceType' => $orderType,
@@ -1376,10 +1387,10 @@ class Ssbhesabfa extends Module
             'Status' => 2,
             'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $shipping,
-            'SalesmanCode' => $salesmanCode,
+            'SalesmanCode' => null,
             'InvoiceItems' => $items,
         );
-        
+
         $salesmanCode = Configuration::get('SSBHESABFA_INVOICE_SALESMEN');
         if ($salesmanCode != false) {
             $data['SalesmanCode'] = $salesmanCode;
@@ -1462,7 +1473,7 @@ class Ssbhesabfa extends Module
                 if ($payment->transaction_id == '') {
                     $payment->transaction_id = 'None';
                 }
-                
+
                 // Added for ZarinPal TransactionFee
                 if ((int)$bank_code == 12) {
                     $transactionFee = $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order) * 0.025;
@@ -1472,7 +1483,7 @@ class Ssbhesabfa extends Module
                 } else {
                     $transactionFee = 0;
                 }
-                
+
                 $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, null, $transactionFee);
 
                 if ($response->Success) {
