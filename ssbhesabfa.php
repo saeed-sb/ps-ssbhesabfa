@@ -59,7 +59,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.2';
+        $this->version = '1.0.3';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -1299,6 +1299,7 @@ class Ssbhesabfa extends Module
 
         //Splitting total discount to each item
         $i = 0;
+        $note = array();
         $total_discounts = 0;
         foreach ($products as $key => $product) {
             $code = $this->getItemCodeByProductId($product['product_id'], $product['product_attribute_id']);
@@ -1341,6 +1342,9 @@ class Ssbhesabfa extends Module
                 foreach ($serials as $serial) {
                     if ($serial['product_id'] == $product['product_id']) {
                         $item['serialNumbers'] = array($serial['serial_number']);
+                        if (!empty($serial['serial_number'])) {
+                            $note[] = sprintf($this->l('شماره سریال کالای ردیف %d: %s'), $item['RowNumber'] + 1, $serial['serial_number']);
+                        }
                     }
                 }
             }
@@ -1389,6 +1393,7 @@ class Ssbhesabfa extends Module
             'Freight' => $shipping,
             'SalesmanCode' => null,
             'InvoiceItems' => $items,
+            'Note' => empty($note) ? '' : implode(' - ', $note)
         );
 
         $salesmanCode = Configuration::get('SSBHESABFA_INVOICE_SALESMEN');
@@ -1455,10 +1460,11 @@ class Ssbhesabfa extends Module
             return false;
         }
 
+        $order = new Order($id_order);
         $hesabfa = new HesabfaApi();
         $number = $this->getInvoiceCodeByOrderId((int)$id_order);
 
-        $payments = OrderPayment::getByOrderId($id_order);
+        $payments = OrderPayment::getByOrderReference($order->reference);
         foreach ($payments as $payment) {
             //Skip free order payment
             if ($payment->amount <= 0) {
