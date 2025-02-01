@@ -59,7 +59,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.3';
+        $this->version = '1.0.4';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -319,10 +319,6 @@ class Ssbhesabfa extends Module
         return $helper->generateForm(array($this->$function_name()));
     }
 
-    /**
-     * Configuration Tab's form
-     * @return array
-     */
     protected function getConfigForm()
     {
         return array(
@@ -727,6 +723,19 @@ class Ssbhesabfa extends Module
                     ';
 
         return (int)Db::getInstance()->getValue($sql);
+    }
+
+    public function getInvoiceNote($id_ppp) {
+        $note = '';
+        $features = PurchaseProcessFeatureValueModel::getProductFeaturesValue($id_ppp);
+        foreach ($features as $feature) {
+            if ($feature['use_for_invoice_note']) {
+                $note .= $feature['name'] . ': ' . $feature['value'] . '
+            ';
+            }
+        }
+
+        return $note;
     }
 
     //Return Payment methods Name and ID
@@ -1349,6 +1358,13 @@ class Ssbhesabfa extends Module
                 }
             }
             //end with ssborderserial module
+            
+            
+            if (Module::isInstalled('Ssbpurchaseprocess') && Module::isEnabled('Ssbpurchaseprocess')) {
+                
+                
+                $note[] = Ssbpurchaseprocess::getInvoiceNoteByProductPsID($product['product_id']);
+            }
 
             $items[] = $item;
             $i++;
@@ -1823,7 +1839,6 @@ class Ssbhesabfa extends Module
             return false;
         }
     }
-
 
     //Hooks
     public function hookBackOfficeHeader()

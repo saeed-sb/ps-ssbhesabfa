@@ -1,6 +1,6 @@
 <?php
 /**
- * 2007-2020 PrestaShop
+ * 2007-2025 PrestaShop
  *
  * NOTICE OF LICENSE
  *
@@ -19,35 +19,71 @@
  * needs please refer to http://www.prestashop.com for more information.
  *
  *  @author    PrestaShop SA <contact@prestashop.com>
- *  @copyright 2007-2019 PrestaShop SA
+ *  @copyright 2007-2025 PrestaShop SA
  *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  *  International Registered Trademark & Property of PrestaShop SA
  */
 
 class HesabfaApi
 {
+    public $apiKey;
+    public $userId;
+    public $password;
+    public $loginToken;
+
+    public function __construct($api = null){
+        if (is_null($api)) {
+            $this->setApiKey(Configuration::get('SSBHESABFA_ACCOUNT_API'));
+            $this->setUserId(Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'));
+            $this->setPassword(Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'));
+            $this->setLoginToken(Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'));
+        } else {
+            $this->setApiKey($api['apiKey']);
+            $this->setUserId($api['userId']);
+            $this->setPassword($api['password']);
+            $this->setLoginToken($api['loginToken']);
+        }
+    }
+
+    public function setApiKey($apiKey){
+        $this->apiKey = $apiKey;
+    }
+
+    public function setUserId($userId){
+        $this->userId = $userId;
+    }
+
+    public function setPassword($password){
+        $this->password = $password;
+    }
+
+    public function setLoginToken($loginToken){
+        $this->loginToken = $loginToken;
+    }
+
     public function apiRequest($method, $data = array())
     {
         if ($method == null) {
             return false;
         }
 
-        if (empty(Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'))) {
+        if (empty($this->loginToken)) {
             $data = array_merge(array(
-                'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-                'userId' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-                'password' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
+                'apiKey' => $this->apiKey,
+                'userId' => $this->userId,
+                'password' => $this->password,
             ), $data);
         } else {
             $data = array_merge(array(
-                'apiKey' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-                'loginToken' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
+                'apiKey' => $this->apiKey,
+                'loginToken' => $this->loginToken,
             ), $data);
         }
 
         $data_string = json_encode($data);
 
-        if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+        $debug = Configuration::get('SSBHESABFA_DEBUG_MODE');
+        if ($debug) {
             PrestaShopLogger::addLog('ssbhesabfa - Method:' . $method . ' - DataString: ' . serialize($data_string), 1, null, null, null, true);
 //            var_dump('ssbhesabfa - Method:' . $method . ' - DataString: ' .$data_string);
         }
@@ -69,7 +105,7 @@ class HesabfaApi
         
         curl_close($ch);
 
-        if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
+        if ($debug) {
             PrestaShopLogger::addLog('ssbhesabfa - Result: ' . serialize($result), 1, null, null, null, true);
         }
 
