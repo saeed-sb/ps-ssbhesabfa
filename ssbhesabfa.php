@@ -1358,13 +1358,15 @@ class Ssbhesabfa extends Module
                 }
             }
             //end with ssborderserial module
-            
-            
+
+
+            //compatibility with Ssbpurchaseprocess module
             if (Module::isInstalled('Ssbpurchaseprocess') && Module::isEnabled('Ssbpurchaseprocess')) {
                 require_once (_PS_MODULE_DIR_ . 'ssbpurchaseprocess/ssbpurchaseprocess.php');
 
                 $note[] = Ssbpurchaseprocess::getInvoiceNoteByProductPsID($product['product_id']);
             }
+            //end with Ssbpurchaseprocess module
 
             $items[] = $item;
             $i++;
