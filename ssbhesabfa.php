@@ -1361,8 +1361,8 @@ class Ssbhesabfa extends Module
             
             
             if (Module::isInstalled('Ssbpurchaseprocess') && Module::isEnabled('Ssbpurchaseprocess')) {
-                
-                
+                require_once (_PS_MODULE_DIR_ . 'ssbpurchaseprocess/ssbpurchaseprocess.php');
+
                 $note[] = Ssbpurchaseprocess::getInvoiceNoteByProductPsID($product['product_id']);
             }
 
