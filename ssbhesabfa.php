@@ -53,13 +53,14 @@ class Ssbhesabfa extends Module
         'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
         'SSBHESABFA_INVOICE_RETURN_STATUE' => 6,
         'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
+        'SSBHESABFA_INVOICE_PROJECT' => '1',
     );
 
     public function __construct()
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.4';
+        $this->version = '1.0.5';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -415,6 +416,7 @@ class Ssbhesabfa extends Module
 
     protected function getInvoiceForm()
     {
+        // get Order States
         $options = array();
         $order_states = OrderState::getOrderStates(Context::getContext()->language->id);
         foreach ($order_states as $order_state) {
@@ -424,6 +426,7 @@ class Ssbhesabfa extends Module
             ));
         }
 
+        // get Salesmen
         $options2 = array();
         $hesabfaApi = new HesabfaApi();
         $salesmen_list = $hesabfaApi->settingGetSalesmen();
@@ -434,6 +437,21 @@ class Ssbhesabfa extends Module
                     'id_option' => $salesmen->Code,
                     'name' => $salesmen->Name,
                 ));
+            }
+        }
+
+        // get projects
+        $options3 = array();
+        $projects = $hesabfaApi->settingGetProjects();
+
+        if ($projects->Success) {
+            foreach ($projects->Result as $project) {
+                if ($project->Active){
+                    array_push($options3, array(
+                        'id_option' => $project->Id,
+                        'name' => $project->Title,
+                    ));
+                }
             }
         }
 
@@ -471,13 +489,22 @@ class Ssbhesabfa extends Module
                             'name' => 'name'
                         )
                     ),
-
                     array (
                         'type' => 'select',
                         'name' => 'SSBHESABFA_INVOICE_SALESMEN',
                         'label' => $this->l('OnlineStore salesman code'),
                         'options' => array(
                             'query' => $options2,
+                            'id' => 'id_option',
+                            'name' => 'name'
+                        )
+                    ),
+                    array (
+                        'type' => 'select',
+                        'name' => 'SSBHESABFA_INVOICE_PROJECT',
+                        'label' => $this->l('Projects'),
+                        'options' => array(
+                            'query' => $options3,
                             'id' => 'id_option',
                             'name' => 'name'
                         )
@@ -1410,6 +1437,7 @@ class Ssbhesabfa extends Module
             'Tag' => json_encode(array('id_order' => $id_order)),
             'Freight' => $shipping,
             'SalesmanCode' => null,
+            'project' => Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
             'InvoiceItems' => $items,
             'Note' => empty($note) ? '' : implode(' - ', $note)
         );
@@ -1508,7 +1536,7 @@ class Ssbhesabfa extends Module
                     $transactionFee = 0;
                 }
 
-                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, null, $transactionFee);
+                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, null, $transactionFee, Configuration::get('SSBHESABFA_INVOICE_PROJECT'));
 
                 if ($response->Success) {
                     $msg = 'ssbhesabfa - Hesabfa invoice payment added.';

@@ -351,7 +351,7 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null, $transactionFee = 0)
+    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null, $transactionFee = 0, $project = null)
     {
         $method = 'invoice/savepayment';
         $data = array(
@@ -362,6 +362,7 @@ class HesabfaApi
             'transactionNumber' => $transactionNumber,
             'description' => $description,
             'transactionFee' => $transactionFee,
+            'project' => $project,
         );
 
         return $this->apiRequest($method, $data);
@@ -424,6 +425,13 @@ class HesabfaApi
     public function settingGetSalesmen()
     {
         $method = 'setting/GetSalesmen';
+
+        return $this->apiRequest($method);
+    }
+
+    public function settingGetProjects()
+    {
+        $method = 'setting/GetProjects';
 
         return $this->apiRequest($method);
     }
