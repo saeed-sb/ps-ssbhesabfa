@@ -505,7 +505,7 @@ class Ssbhesabfa extends Module
                         'label' => $this->l('Projects'),
                         'options' => array(
                             'query' => $options3,
-                            'id' => 'id_option',
+                            'id' => 'name',
                             'name' => 'name'
                         )
                     ),
@@ -670,6 +670,7 @@ class Ssbhesabfa extends Module
                     'SSBHESABFA_INVOICE_RETURN_STATUE' => Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUE'),
                     'SSBHESABFA_INVOICE_REFERENCE_TYPE' => Configuration::get('SSBHESABFA_INVOICE_REFERENCE_TYPE'),
                     'SSBHESABFA_INVOICE_SALESMEN' => Configuration::get('SSBHESABFA_INVOICE_SALESMEN'),
+                    'SSBHESABFA_INVOICE_PROJECT' => Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
                 );
                 break;
             case 'Bank':
