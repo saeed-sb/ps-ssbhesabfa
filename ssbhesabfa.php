@@ -89,10 +89,13 @@ class Ssbhesabfa extends Module
                 return false;
             }
         }
+
+
+
         Configuration::updateValue('SSBHESABFA_WEBHOOK_PASSWORD', bin2hex(openssl_random_pseudo_bytes(16)));
 
         return parent::install() &&
-            $this->registerHook('backOfficeHeader') &&
+            $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('displayAdminProductsExtra') &&
 
             $this->registerHook('actionObjectCustomerAddAfter') &&
@@ -1010,21 +1013,22 @@ class Ssbhesabfa extends Module
 
     private function getCategoryPath($id_category)
     {
-        if ($id_category < 2) {
-            $sign = ' : '; // You can customize your sign which splits categories
-            //array_pop($this->categoryArray);
-            $categoryArray = array_reverse($this->categoryArray);
-            $categoryPath = '';
-            foreach ($categoryArray as $categoryName) {
-                $categoryPath .= $categoryName.$sign;
+        $id_lang = Context::getContext()->language->id;
+        $category = new Category($id_category, $id_lang);
+
+        $parents = $category->getParentsCategories($id_lang);
+
+        $names = array();
+        foreach ($parents as $parent) {
+            if ($parent['id_category'] > 1) {
+                $names[] = $parent['name'];
             }
-            $this->categoryArray = array();
-            return Tools::substr($categoryPath, 0, -Tools::strlen($sign));
-        } else {
-            $category = new Category($id_category, Context::getContext()->language->id);
-            $this->categoryArray[] = $category->name;
-            return $this->getCategoryPath($category->id_parent);
         }
+
+        $path = implode(' : ', array_reverse($names));
+
+        // اگر مسیر خالی نبود، پیشوند اضافه شود
+        return !empty($path) ? 'کالا : ' . $path : '';
     }
 
     private function getBarcode($id_product, $id_attribute = 0)
@@ -1872,7 +1876,7 @@ class Ssbhesabfa extends Module
     }
 
     //Hooks
-    public function hookBackOfficeHeader()
+    public function hookDisplayBackOfficeHeader()
     {
         if (Tools::getValue('module_name') == $this->name) {
             $this->context->controller->addJqueryUI('ui.datepicker');
