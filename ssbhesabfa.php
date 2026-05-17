@@ -773,31 +773,105 @@ class Ssbhesabfa extends Module
     public function getPaymentMethodsName()
     {
         $payment_array = array();
+
+        /*
+         * Normal PrestaShop payment modules
+         */
         $modules_list = Module::getPaymentModules();
 
         foreach ($modules_list as $module) {
-            $module_obj = Module::getInstanceById($module['id_module']);
-            array_push($payment_array, array(
-                'name' => $module_obj->displayName,
-                'id' => 'SSBHESABFA_PAYMENT_METHOD_' . $module['id_module'],
-            ));
+            $module_obj = Module::getInstanceById((int) $module['id_module']);
+
+            if (!Validate::isLoadedObject($module_obj)) {
+                continue;
+            }
+
+            $moduleName = trim((string) $module_obj->name);
+            $paymentName = $this->normalizePaymentName(
+                $module_obj->displayName,
+                $moduleName
+            );
+
+            if (empty($moduleName) || empty($paymentName)) {
+                continue;
+            }
+
+            $payment_array[] = array(
+                'name' => $paymentName,
+                'module' => $moduleName,
+                'id' => $this->getPaymentConfigName($moduleName, $paymentName),
+            );
         }
 
-        //ToDo: Compatible with PrestaPay plugins
-//        if (Module::isInstalled('psf_prestapay')) {
-//            $prestapay = Module::getInstanceByName('psf_prestapay');
-//
-//            /* Check if the module is enabled */
-//            if ($prestapay->active) {
-//                $psf_prestapay = new psf_prestapay();
-//                $plugins = $psf_prestapay->getModulePlugins(1);
-//                foreach ($plugins as $plugin) {
-//                    $plugin;
-//                }
-//            }
-//        }
+        /*
+         * Compatible with psy_paymenthelper methods
+         */
+        $paymentHelperModule = Module::getInstanceByName('psy_paymenthelper');
+
+        if (
+            Validate::isLoadedObject($paymentHelperModule)
+            && method_exists($paymentHelperModule, 'getMethods')
+        ) {
+            $methods = $paymentHelperModule->getMethods(true);
+
+            foreach ($methods as $key => $class) {
+                if (!class_exists($class)) {
+                    continue;
+                }
+
+                $method = new $class($paymentHelperModule);
+
+                if (!method_exists($method, 'isActive') || !$method->isActive()) {
+                    continue;
+                }
+
+                $displayName = null;
+
+                $reflection = new ReflectionClass($method);
+
+                if ($reflection->hasProperty('displayName')) {
+                    $property = $reflection->getProperty('displayName');
+                    $property->setAccessible(true);
+                    $displayName = $property->getValue($method);
+                }
+
+                $moduleName = trim((string) $paymentHelperModule->name);
+                $paymentName = $this->normalizePaymentName($displayName, $moduleName);
+
+                if (empty($moduleName) || empty($paymentName)) {
+                    continue;
+                }
+
+                $payment_array[] = array(
+                    'name' => $paymentName,
+                    'module' => $moduleName,
+                    'id' => $this->getPaymentConfigName($moduleName, $paymentName),
+                );
+            }
+        }
 
         return $payment_array;
+    }
+
+    private function getPaymentConfigName($moduleName, $paymentName)
+    {
+        $moduleName = trim((string) $moduleName);
+        $paymentName = $this->normalizePaymentName($paymentName, $moduleName);
+
+        return 'SSBHESABFA_PAYMENT_METHOD_' . md5($moduleName . '|' . $paymentName);
+    }
+
+    private function normalizePaymentName($paymentName, $moduleName = null)
+    {
+        $paymentName = trim((string) $paymentName);
+        $moduleName = trim((string) $moduleName);
+
+        if ($moduleName === 'psy_paymenthelper') {
+            $paymentName = str_replace('درگاه پرداخت', '', $paymentName);
+            $paymentName = trim($paymentName);
+        }
+
+        return $paymentName;
     }
 
     public function setChangeHook()
@@ -1605,23 +1679,42 @@ class Ssbhesabfa extends Module
 
     public function getBankCodeByPaymentName($paymentName)
     {
-        $sql = 'SELECT `module` FROM `' . _DB_PREFIX_ . 'orders` 
-                WHERE `payment` = \''. $paymentName .'\' ORDER BY `id_order` DESC
-        ';
-        $result = Db::getInstance()->ExecuteS($sql);
+        $paymentName = trim((string) $paymentName);
 
-        $modules_list = Module::getPaymentModules();
-        if (isset($result[0])) {
-            foreach ($modules_list as $module) {
-                $module_obj = Module::getInstanceById($module['id_module']);
-                if ($module_obj->name == $result[0]['module']) {
-                    $configurationName = 'SSBHESABFA_PAYMENT_METHOD_' . $module['id_module'];
-                }
-            }
-            return Configuration::get($configurationName);
-        } else {
+        if (empty($paymentName)) {
             return false;
         }
+
+        $sql = 'SELECT `module`, `payment`
+            FROM `' . _DB_PREFIX_ . 'orders`
+            WHERE `payment` = "' . pSQL($paymentName) . '"
+            ORDER BY `id_order` DESC
+            LIMIT 1';
+
+        $order = Db::getInstance()->getRow($sql);
+
+        if (
+            !$order
+            || empty($order['module'])
+            || empty($order['payment'])
+        ) {
+            return false;
+        }
+
+        $moduleName = trim((string) $order['module']);
+        $orderPaymentName = $this->normalizePaymentName(
+            $order['payment'],
+            $moduleName
+        );
+
+        $configurationName = $this->getPaymentConfigName(
+            $moduleName,
+            $orderPaymentName
+        );
+
+        $bankCode = Configuration::get($configurationName);
+
+        return !empty($bankCode) ? $bankCode : false;
     }
 
     //Export
