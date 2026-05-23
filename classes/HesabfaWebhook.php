@@ -343,17 +343,24 @@ class HesabfaWebhook
 //                        $combination = new Combination($id_attribute);
 //                        $combination->quantity = $item->Stock;
 //                        $combination->update();
-                        if ($item->Stock > $current_quantity ) {
-                            $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
-                                SET `quantity` = `quantity` + '. $item->Stock - $current_quantity . '
-                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = 0';
-                            Db::getInstance()->execute($sql);
-                        } else {
-                            $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
-                                SET `quantity` = `quantity` - '. $item->Stock - $current_quantity . '
-                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = 0';
-                            Db::getInstance()->execute($sql);
-                        }
+if ($item->Stock > $current_quantity) {
+    // باید موجودی را به اندازه اختلاف زیاد کنیم
+    $diff = $item->Stock - $current_quantity;
+
+    $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
+        SET `quantity` = `quantity` + ' . (int)$diff . '
+        WHERE `id_product` = ' . (int)$id_product . ' AND `id_product_attribute` = 0';
+    Db::getInstance()->execute($sql);
+} else {
+    // باید موجودی را به اندازه اختلاف کم کنیم
+    $diff = $current_quantity - $item->Stock;
+
+    $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
+        SET `quantity` = `quantity` - ' . (int)$diff . '
+        WHERE `id_product` = ' . (int)$id_product . ' AND `id_product_attribute` = 0';
+    Db::getInstance()->execute($sql);
+}
+
 
                         $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
                                 SET `quantity` = '. $item->Stock . '

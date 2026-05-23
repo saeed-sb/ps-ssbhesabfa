@@ -351,12 +351,20 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
-    public function invoiceSavePayment($number, $bankCode, $date, $amount, $transactionNumber = null, $description = null, $transactionFee = 0, $project = null)
-    {
+    public function invoiceSavePayment(
+        $number,
+        $paymentTarget,
+        $date,
+        $amount,
+        $transactionNumber = null,
+        $description = null,
+        $transactionFee = 0,
+        $project = null
+    ) {
         $method = 'invoice/savepayment';
+
         $data = array(
-            'number' => (int)$number,
-            'bankCode' => (int)$bankCode,
+            'number' => (int) $number,
             'date' => $date,
             'amount' => $amount,
             'transactionNumber' => $transactionNumber,
@@ -364,6 +372,72 @@ class HesabfaApi
             'transactionFee' => $transactionFee,
             'project' => $project,
         );
+
+        /*
+         * $paymentTarget can be:
+         *
+         * array('bankCode' => 12)
+         * array('accountPath' => 'درآمدها: درآمد کارمزد پرداخت')
+         * array('contactCode' => '10001')
+         * array('cashCode' => 1)
+         * array('pettyCashCode' => 2)
+         *
+         * For backward compatibility, if a number/string is passed,
+         * it will be treated as bankCode.
+         */
+
+        if (is_array($paymentTarget)) {
+            $allowedTargets = array(
+                'bankCode',
+                'accountPath',
+                'contactCode',
+                'cashCode',
+                'pettyCashCode',
+            );
+
+            $selectedTargetKey = null;
+            $selectedTargetValue = null;
+
+            foreach ($allowedTargets as $targetKey) {
+                if (
+                    isset($paymentTarget[$targetKey])
+                    && $paymentTarget[$targetKey] !== ''
+                    && $paymentTarget[$targetKey] !== null
+                    && $paymentTarget[$targetKey] !== false
+                ) {
+                    if ($selectedTargetKey !== null) {
+                        return (object) array(
+                            'Success' => false,
+                            'ErrorCode' => 'INVALID_PAYMENT_TARGET',
+                            'ErrorMessage' => 'Only one of bankCode, accountPath, contactCode, cashCode, pettyCashCode can be set.',
+                        );
+                    }
+
+                    $selectedTargetKey = $targetKey;
+                    $selectedTargetValue = $paymentTarget[$targetKey];
+                }
+            }
+
+            if ($selectedTargetKey !== null) {
+                if (in_array($selectedTargetKey, array('bankCode', 'cashCode', 'pettyCashCode'))) {
+                    $data[$selectedTargetKey] = (int) $selectedTargetValue;
+                } else {
+                    $data[$selectedTargetKey] = (string) $selectedTargetValue;
+                }
+            }
+        } else {
+            /*
+             * Backward compatibility:
+             * old usage: invoiceSavePayment($number, $bankCode, ...)
+             */
+            if (
+                $paymentTarget !== null
+                && $paymentTarget !== false
+                && $paymentTarget !== ''
+            ) {
+                $data['bankCode'] = (int) $paymentTarget;
+            }
+        }
 
         return $this->apiRequest($method, $data);
     }

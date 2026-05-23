@@ -60,7 +60,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '1.0.5';
+        $this->version = '1.0.6';
         $this->author = 'Hesabfa Co - Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -138,6 +138,7 @@ class Ssbhesabfa extends Module
         }
 
         $output = '';
+        $output .= $this->getBankFormStyle();
 
         //show error if store installed in local
         $shop_domain = Configuration::get('PS_SHOP_DOMAIN');
@@ -293,6 +294,7 @@ class Ssbhesabfa extends Module
 
         // To load form inside your template
         $output .= $this->context->smarty->fetch($this->local_path.'views/templates/admin/configure.tpl');
+        $output .= $this->getBankFeeToggleScript();
 
         // To return form html only
         return $output;
@@ -369,31 +371,92 @@ class Ssbhesabfa extends Module
     {
         $input_array = array();
 
-        $bank_options = array(array(
+        $bank_options = array(
+            array(
                 'id_option' => -1,
                 'name' => $this->l('No need to set!'),
-            ));
+            )
+        );
+
+        $fee_type_options = array(
+            array(
+                'id_option' => 'none',
+                'name' => $this->l('No fee'),
+            ),
+            array(
+                'id_option' => 'shaparak_purchase',
+                'name' => $this->l('Shaparak purchase fee'),
+            ),
+            array(
+                'id_option' => 'percent',
+                'name' => $this->l('Percent of payment amount'),
+            ),
+            array(
+                'id_option' => 'fixed',
+                'name' => $this->l('Fixed amount'),
+            ),
+        );
+
+        $fee_payer_options = array(
+            array(
+                'id_option' => 'merchant',
+                'name' => $this->l('Merchant pays fee'),
+            ),
+            array(
+                'id_option' => 'customer',
+                'name' => $this->l('Customer pays fee'),
+            ),
+        );
+
         $hesabfaApi = new HesabfaApi();
         $banks = $hesabfaApi->settingGetBanks();
 
         if (is_object($banks) && $banks->Success) {
+            $default_currency = new Currency(
+                Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY')
+            );
+
             foreach ($banks->Result as $bank) {
-                //show only bank with default currency in hesabfa
-                $default_currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+                // Show only bank with default currency in Hesabfa
                 if ($bank->Currency == $default_currency->iso_code) {
-                    array_push($bank_options, array(
+                    $bank_options[] = array(
                         'id_option' => $bank->Code,
                         'name' => $bank->Name . ' - ' . $bank->Branch . ' - ' . $bank->AccountNumber,
-                    ));
+                    );
                 }
             }
 
             foreach ($this->getPaymentMethodsName() as $item) {
-                $input = array(
-                    'col' => 3,
+                $paymentConfigId = $item['id'];
+
+                /*
+                 * Payment method title / separator
+                 * اگر در نسخه پرستاشاپ شما type => free نمایش داده نشد،
+                 * type را به html تغییر بدهید.
+                 */
+                $input_array[] = array(
+                    'type' => 'free',
+                    'name' => $paymentConfigId . '_TITLE',
+                    'label' => '',
+                    'html_content' => '
+                    <div class="ssbhesabfa-payment-block-title">
+                        <strong>' . htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') . '</strong>
+                        <span>' . $this->l('Bank and fee settings') . '</span>
+                    </div>
+                ',
+                    'form_group_class' => 'ssbhesabfa-payment-block-start',
+                );
+
+                /*
+                 * Bank select
+                 */
+                $input_array[] = array(
+                    'col' => 4,
                     'type' => 'select',
-                    'name' => $item['id'],
+                    'name' => $paymentConfigId,
                     'label' => $item['name'],
+                    'desc' => $this->l('Select Hesabfa bank account for this payment method.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-payment-bank-row',
                     'options' => array(
                         'query' => $bank_options,
                         'id' => 'id_option',
@@ -401,7 +464,100 @@ class Ssbhesabfa extends Module
                     )
                 );
 
-                array_push($input_array, $input);
+                /*
+                 * Fee type
+                 */
+                $input_array[] = array(
+                    'col' => 4,
+                    'type' => 'select',
+                    'name' => $paymentConfigId . '_FEE_TYPE',
+                    'label' => $this->l('Fee type'),
+                    'desc' => $this->l('Select how transaction fee should be calculated.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-fee-type-row',
+                    'options' => array(
+                        'query' => $fee_type_options,
+                        'id' => 'id_option',
+                        'name' => 'name'
+                    )
+                );
+
+                /*
+                 * Fee payer
+                 */
+                $input_array[] = array(
+                    'col' => 4,
+                    'type' => 'select',
+                    'name' => $paymentConfigId . '_FEE_PAYER',
+                    'label' => $this->l('Fee payer'),
+                    'desc' => $this->l('Who pays the transaction fee?'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-fee-payer-row',
+                    'options' => array(
+                        'query' => $fee_payer_options,
+                        'id' => 'id_option',
+                        'name' => 'name'
+                    )
+                );
+
+                /*
+                 * Fee percent
+                 * Used when FEE_TYPE = percent
+                 * Example: 7 means 7%
+                 */
+                $input_array[] = array(
+                    'col' => 4,
+                    'type' => 'text',
+                    'name' => $paymentConfigId . '_FEE_PERCENT',
+                    'label' => $this->l('Fee percent'),
+                    'desc' => $this->l('Example: enter 7 for 7 percent. Used only when fee type is Percent.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-fee-percent-row ssbhesabfa-fee-dependent',
+                );
+
+                /*
+                 * Fixed fee
+                 * Used when FEE_TYPE = fixed
+                 */
+                $input_array[] = array(
+                    'col' => 4,
+                    'type' => 'text',
+                    'name' => $paymentConfigId . '_FEE_FIXED',
+                    'label' => $this->l('Fixed fee amount'),
+                    'desc' => $this->l('Used only when fee type is Fixed amount.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-fee-fixed-row ssbhesabfa-fee-dependent',
+                );
+
+                /*
+                 * Customer extra charge percent
+                 *
+                 * مثال:
+                 * اگر مشتری ۱۰ درصد بیشتر از مبلغ فاکتور پرداخت می‌کند، اینجا 10 وارد شود.
+                 * اگر خالی باشد یا صفر باشد، همان FEE_PERCENT برای محاسبه مبلغ پایه استفاده می‌شود.
+                 */
+                $input_array[] = array(
+                    'col' => 4,
+                    'type' => 'text',
+                    'name' => $paymentConfigId . '_CUSTOMER_CHARGE_PERCENT',
+                    'label' => $this->l('Customer extra charge percent'),
+                    'desc' => $this->l('Example: if customer pays 10% more than invoice amount, enter 10. Used when fee payer is Customer.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
+                );
+
+                /*
+                 * Income account path
+                 *
+                 * مثال:
+                 * مشتری ۱۰ درصد بیشتر پرداخت کرده
+                 * ۷ درصد transaction fee است
+                 * ۳ درصد باقی‌مانده باید درآمد ثبت شود
+                 * این فیلد مسیر حساب درآمد همان ۳ درصد است.
+                 */
+                $input_array[] = array(
+                    'col' => 6,
+                    'type' => 'text',
+                    'name' => $paymentConfigId . '_INCOME_ACCOUNT_PATH',
+                    'label' => $this->l('Income account path'),
+                    'desc' => $this->l('Used when customer extra charge is more than transaction fee. Example: درآمدها: درآمد کارمزد پرداخت'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
+                );
             }
         } else {
             Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
@@ -643,6 +799,164 @@ class Ssbhesabfa extends Module
         );
     }
 
+    protected function getBankFormStyle()
+    {
+        return '
+    <style type="text/css">
+        .ssbhesabfa-payment-block-start {
+            margin-top: 30px !important;
+            padding-top: 20px !important;
+            border-top: 1px solid #ddd !important;
+        }
+
+        .ssbhesabfa-payment-block-title {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+
+        .ssbhesabfa-payment-block-title strong {
+            display: block;
+            font-size: 15px;
+            color: #333;
+            margin-bottom: 3px;
+        }
+
+        .ssbhesabfa-payment-block-title span {
+            display: block;
+            font-size: 12px;
+            color: #777;
+        }
+
+        .ssbhesabfa-payment-row label.control-label {
+            font-weight: normal;
+        }
+
+        .ssbhesabfa-fee-dependent,
+        .ssbhesabfa-customer-fee-row {
+            margin-bottom: 20px !important;
+        }
+    </style>';
+    }
+
+    protected function getBankFeeToggleScript()
+    {
+        return '
+    <script type="text/javascript">
+        $(document).ready(function () {
+            function ssbhesabfaTogglePaymentFeeBlock(bankSelectElement) {
+                var bankSelectName = $(bankSelectElement).attr("name");
+                var bankValue = $(bankSelectElement).val();
+
+                if (!bankSelectName) {
+                    return;
+                }
+
+                var feeTypeName = bankSelectName + "_FEE_TYPE";
+                var feePayerName = bankSelectName + "_FEE_PAYER";
+                var percentName = bankSelectName + "_FEE_PERCENT";
+                var fixedName = bankSelectName + "_FEE_FIXED";
+                var customerChargeName = bankSelectName + "_CUSTOMER_CHARGE_PERCENT";
+                var incomeAccountName = bankSelectName + "_INCOME_ACCOUNT_PATH";
+
+                var feeTypeRow = $("[name=\'" + feeTypeName + "\']").closest(".form-group");
+                var feePayerRow = $("[name=\'" + feePayerName + "\']").closest(".form-group");
+                var percentRow = $("[name=\'" + percentName + "\']").closest(".form-group");
+                var fixedRow = $("[name=\'" + fixedName + "\']").closest(".form-group");
+                var customerChargeRow = $("[name=\'" + customerChargeName + "\']").closest(".form-group");
+                var incomeAccountRow = $("[name=\'" + incomeAccountName + "\']").closest(".form-group");
+
+                if (bankValue === "-1" || bankValue === "" || bankValue === "0") {
+                    feeTypeRow.hide();
+                    feePayerRow.hide();
+                    percentRow.hide();
+                    fixedRow.hide();
+                    customerChargeRow.hide();
+                    incomeAccountRow.hide();
+                    return;
+                }
+
+                feeTypeRow.show();
+                feePayerRow.show();
+
+                ssbhesabfaToggleFeeFields($("[name=\'" + feeTypeName + "\']"));
+                ssbhesabfaToggleFeePayerFields($("[name=\'" + feePayerName + "\']"));
+            }
+
+            function ssbhesabfaToggleFeeFields(selectElement) {
+                var selectName = $(selectElement).attr("name");
+                var feeType = $(selectElement).val();
+
+                if (!selectName) {
+                    return;
+                }
+
+                var baseName = selectName.replace("_FEE_TYPE", "");
+
+                var percentInputName = baseName + "_FEE_PERCENT";
+                var fixedInputName = baseName + "_FEE_FIXED";
+
+                var percentRow = $("[name=\'" + percentInputName + "\']").closest(".form-group");
+                var fixedRow = $("[name=\'" + fixedInputName + "\']").closest(".form-group");
+
+                percentRow.hide();
+                fixedRow.hide();
+
+                if (feeType === "percent") {
+                    percentRow.show();
+                }
+
+                if (feeType === "fixed") {
+                    fixedRow.show();
+                }
+            }
+
+            function ssbhesabfaToggleFeePayerFields(selectElement) {
+                var selectName = $(selectElement).attr("name");
+                var feePayer = $(selectElement).val();
+
+                if (!selectName) {
+                    return;
+                }
+
+                var baseName = selectName.replace("_FEE_PAYER", "");
+
+                var customerChargeName = baseName + "_CUSTOMER_CHARGE_PERCENT";
+                var incomeAccountName = baseName + "_INCOME_ACCOUNT_PATH";
+
+                var customerChargeRow = $("[name=\'" + customerChargeName + "\']").closest(".form-group");
+                var incomeAccountRow = $("[name=\'" + incomeAccountName + "\']").closest(".form-group");
+
+                customerChargeRow.hide();
+                incomeAccountRow.hide();
+
+                if (feePayer === "customer") {
+                    customerChargeRow.show();
+                    incomeAccountRow.show();
+                }
+            }
+
+            $("select[name^=\'SSBHESABFA_PAYMENT_METHOD_\']:not([name$=\'_FEE_TYPE\']):not([name$=\'_FEE_PAYER\'])").each(function () {
+                ssbhesabfaTogglePaymentFeeBlock(this);
+            });
+
+            $(document).on("change", "select[name^=\'SSBHESABFA_PAYMENT_METHOD_\']:not([name$=\'_FEE_TYPE\']):not([name$=\'_FEE_PAYER\'])", function () {
+                ssbhesabfaTogglePaymentFeeBlock(this);
+            });
+
+            $(document).on("change", "select[name$=\'_FEE_TYPE\']", function () {
+                ssbhesabfaToggleFeeFields(this);
+            });
+
+            $(document).on("change", "select[name$=\'_FEE_PAYER\']", function () {
+                ssbhesabfaToggleFeePayerFields(this);
+            });
+        });
+    </script>';
+    }
+
     //Configuration form Values
     protected function getConfigFormValues($form = null)
     {
@@ -678,11 +992,20 @@ class Ssbhesabfa extends Module
                 break;
             case 'Bank':
                 $keys = array();
-                $paymentsName = $this->getPaymentMethodsName();
-                foreach ($paymentsName as $item) {
+
+                foreach ($this->getPaymentMethodsName() as $item) {
                     $keys[$item['id']] = Configuration::get($item['id']);
+
+                    $keys[$item['id'] . '_FEE_TYPE'] = Configuration::get($item['id'] . '_FEE_TYPE');
+                    $keys[$item['id'] . '_FEE_PERCENT'] = Configuration::get($item['id'] . '_FEE_PERCENT');
+                    $keys[$item['id'] . '_FEE_FIXED'] = Configuration::get($item['id'] . '_FEE_FIXED');
+
+                    $keys[$item['id'] . '_FEE_PAYER'] = Configuration::get($item['id'] . '_FEE_PAYER');
+                    $keys[$item['id'] . '_CUSTOMER_CHARGE_PERCENT'] = Configuration::get($item['id'] . '_CUSTOMER_CHARGE_PERCENT');
+                    $keys[$item['id'] . '_INCOME_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_INCOME_ACCOUNT_PATH');
                 }
                 break;
+
             default:
                 $keys =  array(
                     'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
@@ -716,14 +1039,49 @@ class Ssbhesabfa extends Module
         $form_values = $this->getConfigFormValues($form);
 
         foreach (array_keys($form_values) as $key) {
-            //don't replace password with null if password not entered
-            $control1 = $key == 'SSBHESABFA_ACCOUNT_PASSWORD' && Tools::getValue($key) == null;
-            //don't add bank map if bank is not define in hesabfa
-            $control2 = strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false && Tools::getValue($key) == 0;
+            $value = Tools::getValue($key);
 
-            if (!($control1 || $control2)){
-                Configuration::updateValue($key, Tools::getValue($key));
+            // Don't replace password with null if password not entered
+            $control1 = $key == 'SSBHESABFA_ACCOUNT_PASSWORD' && $value == null;
+
+            // Don't add bank map if bank is not defined in Hesabfa
+            // فقط خود فیلد بانک، نه فیلدهای fee
+            $isPaymentBankField =
+                strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false
+                && strpos($key, '_FEE_TYPE') === false
+                && strpos($key, '_FEE_PERCENT') === false
+                && strpos($key, '_FEE_FIXED') === false;
+
+            $control2 = $isPaymentBankField && ($value === '0' || $value === 0);
+
+            if ($control1 || $control2) {
+                continue;
             }
+
+            // Default fee type
+            if (strpos($key, '_FEE_TYPE') !== false && ($value === null || $value === '')) {
+                $value = 'none';
+            }
+
+            // Normalize percent and fixed fee values
+            if (
+                strpos($key, '_FEE_PERCENT') !== false
+                || strpos($key, '_FEE_FIXED') !== false
+                || strpos($key, '_CUSTOMER_CHARGE_PERCENT') !== false
+            ) {
+                $value = str_replace(',', '.', (string) $value);
+                $value = trim($value);
+
+                if ($value === '' || !is_numeric($value)) {
+                    $value = 0;
+                }
+            }
+
+            if (strpos($key, '_FEE_PAYER') !== false && ($value === null || $value === '')) {
+                $value = 'merchant';
+            }
+
+            Configuration::updateValue($key, $value);
         }
     }
 
@@ -1000,7 +1358,7 @@ class Ssbhesabfa extends Module
                 'Code' => $code,
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
-                'Barcode' => $this->getBarcode($id_product),
+//                'Barcode' => $this->getBarcode($id_product),
                 'SellPrice' => $product->price * 10,
                 'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
                 'Active' => $product->active ? true : false,
@@ -1023,7 +1381,7 @@ class Ssbhesabfa extends Module
                         'Code' => $code,
                         'Name' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
                         'ItemType' => $itemType,
-                        'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
+//                        'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
                         'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
                         'Active' => $product->active ? true : false,
                         'NodeFamily' => $this->getCategoryPath($product->id_category_default),
@@ -1087,24 +1445,37 @@ class Ssbhesabfa extends Module
 
     private function getCategoryPath($id_category)
     {
-        $id_lang = Context::getContext()->language->id;
-        $category = new Category($id_category, $id_lang);
-
+        $context = Context::getContext();
+        $id_lang = (int) $context->language->id;
+    
+        $category = new Category((int) $id_category, $id_lang);
         $parents = $category->getParentsCategories($id_lang);
-
+    
         $names = array();
+    
+        $id_category_home = (int) Configuration::get('PS_HOME_CATEGORY');
+    
         foreach ($parents as $parent) {
-            if ($parent['id_category'] > 1) {
-                $names[] = $parent['name'];
+            $parent_id = (int) $parent['id_category'];
+            $parent_name = trim($parent['name']);
+    
+            // حذف Root و Home در همه نسخه‌ها
+            if (
+                $parent_id <= 1 ||
+                $parent_id === $id_category_home ||
+                Tools::strtolower($parent_name) === 'home'
+            ) {
+                continue;
             }
+    
+            $names[] = $parent_name;
         }
-
+    
         $path = implode(' : ', array_reverse($names));
-
-        // اگر مسیر خالی نبود، پیشوند اضافه شود
-        return !empty($path) ? 'کالا : ' . $path : '';
+    
+        return 'کالا : ' . $path;
     }
-
+    
     private function getBarcode($id_product, $id_attribute = 0)
     {
         if (!isset($id_product)) {
@@ -1581,54 +1952,421 @@ class Ssbhesabfa extends Module
 
     public function setOrderPayment($id_order)
     {
-        if (!isset($id_order)) {
+        if (!isset($id_order) || !(int) $id_order) {
             return false;
         }
 
+        $id_order = (int) $id_order;
+
         $order = new Order($id_order);
+
+        if (!Validate::isLoadedObject($order)) {
+            return false;
+        }
+
         $hesabfa = new HesabfaApi();
-        $number = $this->getInvoiceCodeByOrderId((int)$id_order);
+        $number = $this->getInvoiceCodeByOrderId($id_order);
+
+        if (empty($number)) {
+            $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Invoice number not found.';
+            PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
+            return false;
+        }
 
         $payments = OrderPayment::getByOrderReference($order->reference);
+
         foreach ($payments as $payment) {
-            //Skip free order payment
             if ($payment->amount <= 0) {
-                return true;
+                continue;
             }
 
-            $bank_code = $this->getBankCodeByPaymentName($payment->payment_method);
+            $paymentConfig = $this->getPaymentConfigByOrderPayment(
+                $id_order,
+                $payment->payment_method
+            );
+
+            if (!$paymentConfig || empty($paymentConfig['configuration_name'])) {
+                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Payment configuration not found.';
+                PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
+                continue;
+            }
+
+            $paymentConfigName = $paymentConfig['configuration_name'];
+            $bank_code = isset($paymentConfig['bank_code']) ? $paymentConfig['bank_code'] : false;
+
             if ($bank_code == -1) {
-                return true;
-            } elseif ($bank_code != false) {
-                //fix Hesabfa API error
-                if ($payment->transaction_id == '') {
-                    $payment->transaction_id = 'None';
-                }
+                continue;
+            }
 
-                // Added for ZarinPal TransactionFee
-                if ((int)$bank_code == 12) {
-                    $transactionFee = $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order) * 0.025;
-                    if ($transactionFee >= 100000) {
-                        $transactionFee = 100000;
-                    }
-                } else {
-                    $transactionFee = 0;
-                }
+            if ($bank_code === false || $bank_code === null || $bank_code === '') {
+                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Bank Code not define.';
+                PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
+                continue;
+            }
 
-                $response = $hesabfa->invoiceSavePayment($number, $bank_code, $payment->date_add, $this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, $id_order), $payment->transaction_id, null, $transactionFee, Configuration::get('SSBHESABFA_INVOICE_PROJECT'));
+            if ($payment->transaction_id == '') {
+                $payment->transaction_id = 'None';
+            }
 
-                if ($response->Success) {
-                    $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
+            $paidAmount = $this->getOrderPriceInHesabfaDefaultCurrency(
+                $payment->amount,
+                $id_order
+            );
+
+            $feeBreakdown = $this->getPaymentFeeBreakdown(
+                $paymentConfigName,
+                $paidAmount
+            );
+
+            /*
+             * Main invoice payment:
+             * - merchant pays fee: full paid amount + transaction fee
+             * - customer pays fee: invoice base amount + transaction fee = 0
+             */
+            $response = $hesabfa->invoiceSavePayment(
+                $number,
+                array('bankCode' => $bank_code),
+                $payment->date_add,
+                $feeBreakdown['invoice_payment_amount'],
+                $payment->transaction_id,
+                null,
+                $feeBreakdown['transaction_fee'],
+                Configuration::get('SSBHESABFA_INVOICE_PROJECT')
+            );
+
+            if ($response->Success) {
+                $msg = 'ssbhesabfa - Hesabfa invoice payment added.';
+                PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
+            } else {
+                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment. Error Message: ' . $response->ErrorMessage;
+                PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Order', $id_order, true);
+                continue;
+            }
+
+            /*
+             * Customer paid extra and merchant has profit:
+             * Create accounting document:
+             *   Debit: Bank
+             *   Credit: Income account path
+             */
+            if (
+                isset($feeBreakdown['income_amount'])
+                && $feeBreakdown['income_amount'] > 0
+                && !empty($feeBreakdown['income_account_path'])
+            ) {
+                $description = 'درآمد کارمزد پرداخت آنلاین - فاکتور ' . (int) $number . ' - مرجع سفارش: ' . $order->reference;
+
+                $incomeResponse = $this->savePaymentFeeIncomeDocument(
+                    $bank_code,
+                    $feeBreakdown['income_account_path'],
+                    $payment->date_add,
+                    $feeBreakdown['income_amount'],
+                    $description,
+                    Configuration::get('SSBHESABFA_INVOICE_PROJECT')
+                );
+
+                if ($incomeResponse->Success) {
+                    $msg = 'ssbhesabfa - Hesabfa payment fee income document added.';
                     PrestaShopLogger::addLog($msg, 1, null, 'Order', $id_order, true);
                 } else {
-                    $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment. Error Message: ' . $response->ErrorMessage;
-                    PrestaShopLogger::addLog($msg, 2, $response->ErrorCode, 'Order', $id_order, true);
+                    $msg = 'ssbhesabfa - Cannot add Hesabfa payment fee income document. Error Message: ' . $incomeResponse->ErrorMessage;
+                    PrestaShopLogger::addLog($msg, 2, $incomeResponse->ErrorCode, 'Order', $id_order, true);
                 }
-            } else {
-                $msg = 'ssbhesabfa - Cannot add Hesabfa Invoice payment - Bank Code not define.';
+            } elseif (
+                isset($feeBreakdown['income_amount'])
+                && $feeBreakdown['income_amount'] > 0
+                && empty($feeBreakdown['income_account_path'])
+            ) {
+                $msg = 'ssbhesabfa - Fee income amount detected but income account path is not defined.';
                 PrestaShopLogger::addLog($msg, 2, null, 'Order', $id_order, true);
             }
         }
+
+        return true;
+    }
+
+    private function savePaymentFeeIncomeDocument($bankCode, $incomeAccountPath, $date, $amount, $description = null, $project = null)
+    {
+        $bankCode = (int) $bankCode;
+        $amount = round((float) $amount);
+
+        $bankAccountPath = 'دارایی ها: دارایی های جاری: موجودی نقد و بانک: بانک';
+        $incomeAccountPath = trim((string) $incomeAccountPath);
+
+        if ($bankCode <= 0 || $amount <= 0 || empty($incomeAccountPath)) {
+            return (object) array(
+                'Success' => false,
+                'ErrorCode' => 'INVALID_FEE_INCOME_DOCUMENT',
+                'ErrorMessage' => 'Bank code, income account path or amount is invalid.',
+            );
+        }
+
+        if (empty($description)) {
+            $description = 'درآمد کارمزد پرداخت آنلاین';
+        }
+
+        $defaultCurrency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+        $currency = $defaultCurrency->iso_code;
+
+        $document = array(
+            'number' => 0,
+            'reference' => 0,
+            'date' => $date,
+            'description' => $description,
+            'project' => $project,
+            'debit' => $amount,
+            'credit' => $amount,
+            'status' => 1,
+            'transactions' => array(
+                array(
+                    // بدهکار: بانک
+                    'accountPath' => $bankAccountPath,
+                    'description' => $description,
+                    'info' => '',
+                    'amount' => $amount,
+                    'currencyAmount' => $amount,
+                    'currency' => $currency,
+                    'type' => 0,
+                    'contactCode' => '',
+                    'productCode' => '',
+                    'bankCode' => $bankCode,
+                    'cashCode' => '',
+                    'pettyCashCode' => '',
+                ),
+                array(
+                    // بستانکار: درآمد
+                    'accountPath' => $incomeAccountPath,
+                    'description' => $description,
+                    'info' => '',
+                    'amount' => $amount,
+                    'currencyAmount' => $amount,
+                    'currency' => $currency,
+                    'type' => 1,
+                    'contactCode' => '',
+                    'productCode' => '',
+                    'bankCode' => '',
+                    'cashCode' => '',
+                    'pettyCashCode' => '',
+                ),
+            ),
+        );
+
+        $hesabfa = new HesabfaApi();
+
+        return $hesabfa->documentSave($document);
+    }
+
+    private function getPaymentTransactionFee($paymentConfigName, $amount)
+    {
+        $amount = (float) $amount;
+
+        if (empty($paymentConfigName) || $amount <= 0) {
+            return 0;
+        }
+
+        $feeType = Configuration::get($paymentConfigName . '_FEE_TYPE');
+
+        switch ($feeType) {
+            case 'shaparak_purchase':
+                return $this->getShaparakPurchaseTransactionFee($amount);
+
+            case 'percent':
+                return $this->getPercentTransactionFee($paymentConfigName, $amount);
+
+            case 'fixed':
+                return $this->getFixedTransactionFee($paymentConfigName);
+
+            case 'none':
+            default:
+                return 0;
+        }
+    }
+
+    private function getShaparakPurchaseTransactionFee($amount)
+    {
+        $amount = (float) $amount;
+
+        if ($amount <= 0) {
+            return 0;
+        }
+
+        // کمتر از ۶۰۰ هزار تومان
+        if ($amount < 6000000) {
+            return 1200;
+        }
+
+        // بین ۶۰۰ هزار تا ۸۰ میلیون تومان
+        if ($amount <= 800000000) {
+            return $amount * 0.0002;
+        }
+
+        // بیشتر از ۸۰ میلیون تومان
+        return 160000;
+    }
+
+    private function getPercentTransactionFee($paymentConfigName, $amount)
+    {
+        $amount = (float) $amount;
+
+        $percent = (float) Configuration::get($paymentConfigName . '_FEE_PERCENT');
+
+        if ($percent <= 0 || $amount <= 0) {
+            return 0;
+        }
+
+        return $amount * ($percent / 100);
+    }
+
+    private function getFixedTransactionFee($paymentConfigName)
+    {
+        $fixedFee = (float) Configuration::get($paymentConfigName . '_FEE_FIXED');
+
+        return $fixedFee > 0 ? $fixedFee : 0;
+    }
+
+    private function getPaymentFeeBreakdown($paymentConfigName, $paidAmount)
+    {
+        $paidAmount = round((float) $paidAmount);
+
+        $result = array(
+            'invoice_payment_amount' => $paidAmount,
+            'transaction_fee' => 0,
+            'income_amount' => 0,
+            'income_account_path' => '',
+        );
+
+        if (empty($paymentConfigName) || $paidAmount <= 0) {
+            return $result;
+        }
+
+        $feePayer = Configuration::get($paymentConfigName . '_FEE_PAYER');
+
+        if (empty($feePayer)) {
+            $feePayer = 'merchant';
+        }
+
+        /*
+         * Merchant pays fee:
+         * Receive full amount on invoice and register transaction fee.
+         */
+        if ($feePayer === 'merchant') {
+            $result['invoice_payment_amount'] = $paidAmount;
+            $result['transaction_fee'] = round($this->getPaymentTransactionFee(
+                $paymentConfigName,
+                $paidAmount
+            ));
+
+            return $result;
+        }
+
+        /*
+         * Customer pays fee:
+         *
+         * paidAmount = total amount paid by customer
+         *
+         * Example:
+         * paidAmount = 100,650,000
+         * customerChargePercent = 10
+         * feePercent = 7
+         *
+         * baseAmount = 100,650,000 / 1.10 = 91,500,000
+         * gatewayFee = 100,650,000 * 7% = 7,045,500
+         * netDeposit = 100,650,000 - 7,045,500 = 93,604,500
+         * incomeAmount = 93,604,500 - 91,500,000 = 2,104,500
+         *
+         * We do NOT register transactionFee.
+         * We only register invoice payment amount and extra income document.
+         */
+        if ($feePayer === 'customer') {
+            $customerChargePercent = (float) Configuration::get(
+                $paymentConfigName . '_CUSTOMER_CHARGE_PERCENT'
+            );
+
+            $feePercent = (float) Configuration::get(
+                $paymentConfigName . '_FEE_PERCENT'
+            );
+
+            if ($customerChargePercent > 0) {
+                $baseAmount = $paidAmount / (1 + ($customerChargePercent / 100));
+            } else {
+                $baseAmount = $paidAmount;
+            }
+
+            $baseAmount = round($baseAmount);
+
+            /*
+             * Gateway fee is calculated from total paid amount,
+             * not from invoice base amount.
+             */
+            if ($feePercent > 0) {
+                $gatewayFee = round($paidAmount * ($feePercent / 100));
+            } else {
+                $gatewayFee = 0;
+            }
+
+            $netDeposit = $paidAmount - $gatewayFee;
+
+            /*
+             * Real income is:
+             * amount deposited to our bank - invoice amount
+             */
+            $incomeAmount = $netDeposit - $baseAmount;
+
+            $result['invoice_payment_amount'] = $baseAmount;
+            $result['transaction_fee'] = 0;
+            $result['income_amount'] = $incomeAmount > 0 ? round($incomeAmount) : 0;
+            $result['income_account_path'] = trim((string) Configuration::get(
+                $paymentConfigName . '_INCOME_ACCOUNT_PATH'
+            ));
+
+            return $result;
+        }
+
+        return $result;
+    }
+
+    public function getPaymentConfigByOrderPayment($id_order, $paymentMethod)
+    {
+        $id_order = (int) $id_order;
+        $paymentMethod = trim((string) $paymentMethod);
+
+        if (!$id_order || empty($paymentMethod)) {
+            return false;
+        }
+
+        $sql = 'SELECT `module`
+            FROM `' . _DB_PREFIX_ . 'orders`
+            WHERE `id_order` = ' . (int) $id_order . '
+            LIMIT 1';
+
+        $result = Db::getInstance()->ExecuteS($sql);
+
+        $orderRow = isset($result[0]) ? $result[0] : false;
+
+        if (!$orderRow || empty($orderRow['module'])) {
+            return false;
+        }
+
+        $moduleName = trim((string) $orderRow['module']);
+
+        $paymentName = $this->normalizePaymentName(
+            $paymentMethod,
+            $moduleName
+        );
+
+        $configurationName = $this->getPaymentConfigName(
+            $moduleName,
+            $paymentName
+        );
+
+        $bankCode = Configuration::get($configurationName);
+
+        return array(
+            'configuration_name' => $configurationName,
+            'bank_code' => $bankCode,
+            'module' => $moduleName,
+            'payment' => $paymentName,
+        );
     }
 
     public function getInvoiceCodeByOrderId($id_order)
@@ -1677,45 +2415,6 @@ class Ssbhesabfa extends Module
         return $price;
     }
 
-    public function getBankCodeByPaymentName($paymentName)
-    {
-        $paymentName = trim((string) $paymentName);
-
-        if (empty($paymentName)) {
-            return false;
-        }
-
-        $sql = 'SELECT `module`, `payment`
-            FROM `' . _DB_PREFIX_ . 'orders`
-            WHERE `payment` = "' . pSQL($paymentName) . '"
-            ORDER BY `id_order` DESC
-            LIMIT 1';
-
-        $order = Db::getInstance()->getRow($sql);
-
-        if (
-            !$order
-            || empty($order['module'])
-            || empty($order['payment'])
-        ) {
-            return false;
-        }
-
-        $moduleName = trim((string) $order['module']);
-        $orderPaymentName = $this->normalizePaymentName(
-            $order['payment'],
-            $moduleName
-        );
-
-        $configurationName = $this->getPaymentConfigName(
-            $moduleName,
-            $orderPaymentName
-        );
-
-        $bankCode = Configuration::get($configurationName);
-
-        return !empty($bankCode) ? $bankCode : false;
-    }
 
     //Export
     public function exportProducts()
@@ -1733,7 +2432,7 @@ class Ssbhesabfa extends Module
                 array_push($items, array(
                     'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                     'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
-                    'Barcode' => $this->getBarcode($id_product),
+//                    'Barcode' => $this->getBarcode($id_product),
                     'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price),
                     'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
                     'Active' => $product->active ? true : false,
@@ -1753,7 +2452,7 @@ class Ssbhesabfa extends Module
                         array_push($items, array(
                             'Name' => mb_substr($product->name[$this->id_default_lang] .' - '. $combination['attribute_designation'], 0, 99),
                             'ItemType' => ($product->is_virtual == 1 ? 1 : 0),
-                            'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
+//                            'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
                             'SellPrice' => $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']),
                             'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
                             'NodeFamily' => $this->getCategoryPath($product->id_category_default),
