@@ -1823,18 +1823,44 @@ class Ssbhesabfa extends Module
                 'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
             );
 
-            //compatibility with ssborderserial module
-            if (!empty($serials)) {
-                foreach ($serials as $serial) {
-                    if ($serial['product_id'] == $product['product_id']) {
-                        $item['serialNumbers'] = array($serial['serial_number']);
-                        if (!empty($serial['serial_number'])) {
-                            $note[] = sprintf($this->l('شماره سریال کالای ردیف %d: %s'), $item['RowNumber'] + 1, $serial['serial_number']);
-                        }
-                    }
-                }
-            }
-            //end with ssborderserial module
+			// compatibility with ssbserialorder module
+			if (!empty($serials) && !empty($product['id_order_detail'])) {
+			    foreach ($serials as $serial) {
+			        if ((int) $serial['id_order_detail'] !== (int) $product['id_order_detail']) {
+			            continue;
+			        }
+
+			        $serialNumber = trim((string) $serial['serial_number']);
+
+			        if ($serialNumber === '') {
+			            break;
+			        }
+
+			        $item['serialNumbers'] = array($serialNumber);
+
+			        if (!empty($item['description'])) {
+			            $item['description'] .= "\n";
+			        } elseif (!empty($item['Description'])) {
+			            $item['description'] = $item['Description'] . "\n";
+			        } else {
+			            $item['description'] = '';
+			        }
+
+			        $item['description'] .= sprintf(
+			            $this->l('شماره سریال: %s'),
+			            $serialNumber
+			        );
+
+			        $note[] = sprintf(
+			            $this->l('شماره سریال کالای ردیف %d: %s'),
+			            ((int) $item['RowNumber']) + 1,
+			            $serialNumber
+			        );
+
+			        break;
+			    }
+			}
+			// end compatibility with ssbserialorder module
 
 
             //compatibility with Ssbpurchaseprocess module
