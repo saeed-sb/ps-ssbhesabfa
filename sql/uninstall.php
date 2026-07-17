@@ -30,8 +30,43 @@
  * but does not want to loose all of the data associated to the module.
  */
 
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_change`';
+if (!Db::getInstance()->execute($query)) { return false; }
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_rate_limit`';
+if (!Db::getInstance()->execute($query)) { return false; }
+
 $query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa`';
 
 if (Db::getInstance()->execute($query) == false) {
     return false;
 }
+
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_log`';
+
+if (Db::getInstance()->execute($query) == false) {
+    return false;
+}
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_operation`';
+if (Db::getInstance()->execute($query) == false) {
+    return false;
+}
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_issue`';
+if (Db::getInstance()->execute($query) == false) {
+    return false;
+}
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_job`';
+if (Db::getInstance()->execute($query) == false) {
+    return false;
+}
+
+$query = 'DROP TABLE IF EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_api_request`';
+if (Db::getInstance()->execute($query) == false) {
+    return false;
+}
+
+return true;

@@ -23,9 +23,20 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
+
+{if isset($ssbhesabfa_mapping_notices.errors) && $ssbhesabfa_mapping_notices.errors}
+    {foreach from=$ssbhesabfa_mapping_notices.errors item=notice}
+        <div class="alert alert-danger">{$notice|escape:'htmlall':'UTF-8'}</div>
+    {/foreach}
+{/if}
+{if isset($ssbhesabfa_mapping_notices.messages) && $ssbhesabfa_mapping_notices.messages}
+    {foreach from=$ssbhesabfa_mapping_notices.messages item=notice}
+        <div class="alert alert-success">{$notice|escape:'htmlall':'UTF-8'}</div>
+    {/foreach}
+{/if}
 <div class="alert alert-info" role="alert">
     <i class="material-icons">help</i>
-    <p class="alert-text">{l s='If this product is already defined in the Hesabfa, enter the accounting code in the field below.' mod='ssbhesabfa'}</p>
+    <p class="alert-text">{l s='If this product already exists in Hesabfa, enter its item code below. Clear a field and save to remove only the local mapping.' mod='ssbhesabfa'}</p>
 </div>
 
 <div class="row">
@@ -46,9 +57,9 @@
                 </tr>
             </thead>
             <tbody>
-                {foreach from=$combinations item=item}
+                {foreach from=$combinations item=item name=ssbhesabfa_combinations}
                 <tr>
-                    <th scope="row">1</th>
+                    <th scope="row">{$smarty.foreach.ssbhesabfa_combinations.iteration|intval}</th>
                     <td>{$item['name']|escape:'htmlall':'UTF-8'}</td>
                     <td><input id="{$item['id_hesabfa_item_code']|escape:'htmlall':'UTF-8'}" name="{$item['id_hesabfa_item_code']|escape:'htmlall':'UTF-8'}" type="text" class="form-control" value="{$item['hesabfa_item_code']|escape:'htmlall':'UTF-8'}"/></td>
                 </tr>

@@ -1,0 +1,184 @@
+<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>راهنمای API داخلی ماژول ssbhesabfa</title><style>
+body{font-family:Tahoma,Arial,sans-serif;line-height:1.85;margin:0;background:#f5f7fa;color:#263238}main{max-width:1180px;margin:24px auto;background:#fff;padding:32px;border-radius:12px;box-shadow:0 5px 24px rgba(0,0,0,.08)}h1,h2,h3{color:#17324d}code,pre{font-family:Consolas,Monaco,monospace;direction:ltr;text-align:left}pre{background:#10212f;color:#f5f7fa;padding:18px;border-radius:8px;overflow:auto}.note{background:#eef7ff;border-right:4px solid #2e86c1;padding:14px;margin:16px 0}.warn{background:#fff7e6;border-right-color:#f39c12}.danger{background:#fff0f0;border-right-color:#c0392b}table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #d9e1e8;padding:9px;vertical-align:top}th{background:#eaf0f5;position:sticky;top:0}nav a{display:inline-block;margin:4px 2px;padding:7px 10px;background:#eef3f7;border-radius:6px;color:#17324d;text-decoration:none}.ltr{direction:ltr;text-align:left}ul{padding-right:24px}.badge{display:inline-block;padding:2px 7px;border-radius:10px;background:#e8eef4;font-size:12px}
+</style></head><body><main>
+<h1>راهنمای کامل API داخلی و صف ماژول ssbhesabfa</h1>
+<p>نسخه مستندات: <strong>2.3.20</strong></p>
+<div class="note">این API برای ماژول‌های دیگر PrestaShop است تا بدون نگهداری نام کاربری، رمز یا API Key حسابفا، درخواست‌های خود را از طریق <code>ssbhesabfa</code> اجرا یا صف کنند.</div>
+<nav><a href="#requirements">پیش‌نیازها</a><a href="#sync">فراخوانی مستقیم</a><a href="#queue">فراخوانی صف</a><a href="#inputs">ورودی‌ها</a><a href="#outputs">خروجی‌ها</a><a href="#retry">Retry و UUID</a><a href="#examples">مثال‌ها</a><a href="#methods">متدها</a></nav>
+
+<h2 id="requirements">۱. پیش‌نیازها و سیاست اتصال</h2>
+<ul><li>ماژول <code>ssbhesabfa</code> باید نصب و فعال باشد.</li><li>متد در فهرست مجاز کلاس <code>HesabfaApi</code> وجود داشته باشد.</li><li>برای اجرای مستقیم، اتصال حسابفا باید برقرار باشد.</li><li>در معماری صف، ایجاد job نباید به اتصال لحظه‌ای وابسته باشد؛ بررسی اتصال باید در زمان اجرای job انجام شود.</li></ul>
+<div class="note warn"><strong>LIVE_MODE:</strong> در حالت synchronous پیش از تماس API بررسی شود. در حالت asynchronous رویداد ابتدا ذخیره شود؛ اگر هنگام اجرا اتصال برقرار نبود، job باید با کد <code>HESABFA_NOT_CONNECTED</code> در <code>retry_wait</code> بماند.</div>
+
+<h2 id="sync">۲. فراخوانی مستقیم</h2>
+<pre><code>$module = Module::getInstanceByName('ssbhesabfa');
+if (!$module || !$module-&gt;active) {
+    throw new Exception('ssbhesabfa is not available.');
+}
+
+$result = $module-&gt;callInternalApi(
+    'invoiceGet',
+    array(12345, 0),
+    array(
+        'requester' =&gt; 'mycustommodule',
+        'object_type' =&gt; 'Order',
+        'object_id' =&gt; 1001,
+        'queue' =&gt; false,
+        'log_request' =&gt; true,
+    )
+);</code></pre>
+
+<h2 id="queue">۳. فراخوانی صف</h2>
+<pre><code>$queued = $module-&gt;enqueueInternalApiRequest(
+    'invoiceSave',
+    array($invoicePayload),
+    'mycustommodule',
+    'Order',
+    (int) $idOrder
+);</code></pre>
+<p>خروجی اولیه فقط پذیرش در صف را نشان می‌دهد؛ به معنای موفقیت در حسابفا نیست.</p>
+<pre><code>{
+  "success": true,
+  "request_id": 321,
+  "status": "pending"
+}</code></pre>
+
+<h2 id="inputs">۴. توضیح ورودی‌های bridge</h2>
+<table><thead><tr><th>ورودی</th><th>نوع</th><th>اجباری</th><th>توضیح</th></tr></thead><tbody>
+<tr><td><code>$method</code></td><td>string</td><td>بله</td><td>نام public method در <code>HesabfaApi</code> مانند <code>invoiceGet</code>.</td></tr>
+<tr><td><code>$arguments</code></td><td>array</td><td>خیر</td><td>آرایه positional؛ ترتیب مقادیر باید دقیقاً با signature متد یکسان باشد.</td></tr>
+<tr><td><code>requester</code></td><td>string</td><td>پیشنهادی</td><td>نام ماژول فراخواننده برای لاگ و پیگیری.</td></tr>
+<tr><td><code>object_type</code></td><td>string|null</td><td>خیر</td><td>نوع موجودیت محلی مانند Order، Product یا Customer.</td></tr>
+<tr><td><code>object_id</code></td><td>int|string|null</td><td>خیر</td><td>شناسه موجودیت در PrestaShop.</td></tr>
+<tr><td><code>queue</code></td><td>bool</td><td>خیر</td><td>در <code>callInternalApi</code>، درخواست را به صف منتقل می‌کند.</td></tr>
+<tr><td><code>log_request</code></td><td>bool</td><td>خیر</td><td>درخواست مستقیم را نیز در جدول درخواست‌های داخلی ثبت می‌کند.</td></tr>
+</tbody></table>
+
+<h2 id="outputs">۵. قرارداد خروجی‌ها</h2>
+<h3>موفقیت مستقیم</h3><pre><code>{
+  "success": true,
+  "method": "invoiceGet",
+  "result": { },
+  "raw": { "Success": true, "Result": { } },
+  "request_id": 25
+}</code></pre>
+<h3>خطای مستقیم</h3><pre><code>{
+  "success": false,
+  "method": "invoiceGet",
+  "error_code": "HESABFA_NOT_CONNECTED",
+  "error": "Hesabfa API is not connected.",
+  "raw": { },
+  "request_id": 25
+}</code></pre>
+<h3>خواندن وضعیت درخواست صف</h3><pre><code>$request = $module-&gt;getInternalApiRequest((int) $queued['request_id']);</code></pre>
+<p>فیلدهای مهم: <code>status</code>، <code>attempts</code>، <code>next_run_at</code>، <code>last_error_code</code>، <code>last_error</code>، <code>request_unique_ids</code>، <code>request_payload_hash</code> و <code>response</code>.</p>
+
+<h2 id="retry">۶. وضعیت صف، Retry و requestUniqueId</h2>
+<table><thead><tr><th>وضعیت</th><th>معنی</th><th>اقدام</th></tr></thead><tbody>
+<tr><td><code>pending</code></td><td>منتظر اولین اجرا</td><td>توسط cron یا اجرای دستی پردازش می‌شود.</td></tr>
+<tr><td><code>running</code></td><td>در حال اجرا</td><td>نباید هم‌زمان دوباره اجرا شود.</td></tr>
+<tr><td><code>retry_wait</code></td><td>خطای موقت یا نتیجه نامشخص</td><td>با همان UUID و backoff مجدداً اجرا می‌شود.</td></tr>
+<tr><td><code>needs_attention</code></td><td>خطای داده، تنظیمات یا دسترسی</td><td>ابتدا علت اصلاح شود؛ عملیات جدید UUID تازه می‌گیرد.</td></tr>
+<tr><td><code>duplicate_check</code></td><td>UUID تکراری یا قدیمی‌تر از ۲۴ ساعت</td><td>نتیجه قبلی در حسابفا بررسی شود.</td></tr>
+<tr><td><code>done</code></td><td>عملیات موفق</td><td>فقط تاریخچه؛ نباید همان payload قدیمی دوباره اجرا شود.</td></tr>
+<tr><td><code>dead</code></td><td>تعداد تلاش‌ها تمام شده</td><td>بررسی دستی و در صورت نیاز عملیات جدید.</td></tr>
+</tbody></table>
+<div class="note danger">یک retry فنی با payload یکسان باید همان UUID را نگه دارد. تغییر payload یا شروع عملیات منطقی جدید باید UUID تازه تولید کند.</div>
+
+<h2 id="examples">۷. مثال‌های کاربردی</h2>
+<h3>گرفتن فاکتور</h3><pre><code>$result = $module-&gt;callInternalApi('invoiceGet', array(12345, 0), array(
+    'requester' =&gt; 'mycustommodule',
+    'object_type' =&gt; 'Order',
+    'object_id' =&gt; 1001,
+));</code></pre>
+<h3>ذخیره کالا</h3><pre><code>$item = array(
+    'Name' =&gt; 'Sample product',
+    'ItemType' =&gt; 0,
+    'SellPrice' =&gt; 1500000,
+    'ProductCode' =&gt; 'PS-100',
+    'Tag' =&gt; json_encode(array('id_product' =&gt; 100)),
+);
+$result = $module-&gt;callInternalApi('itemSave', array($item), array(
+    'requester' =&gt; 'mycustommodule',
+    'object_type' =&gt; 'Product',
+    'object_id' =&gt; 100,
+));</code></pre>
+<h3>ذخیره شخص در صف</h3><pre><code>$contact = array(
+    'Name' =&gt; 'Test Customer',
+    'ContactType' =&gt; 1,
+    'Mobile' =&gt; '09120000000',
+    'PostalCode' =&gt; '1234567890',
+    'Tag' =&gt; json_encode(array('id_customer' =&gt; 45)),
+);
+$queued = $module-&gt;enqueueInternalApiRequest(
+    'contactSave',
+    array($contact),
+    'mycustommodule',
+    'Customer',
+    45
+);</code></pre>
+<h3>کنترل خطا</h3><pre><code>if (empty($result['success'])) {
+    $errorCode = isset($result['error_code']) ? $result['error_code'] : 'UNKNOWN';
+    $error = isset($result['error']) ? $result['error'] : 'Unknown error';
+    PrestaShopLogger::addLog($errorCode . ': ' . $error, 3);
+}</code></pre>
+
+<h2 id="methods">۸. فهرست متدهای مجاز و ورودی‌ها</h2>
+<p>آرگومان‌های <code>$arguments</code> به‌صورت positional ارسال می‌شوند. ساختار آرایه‌های business object باید مطابق مستندات رسمی endpoint حسابفا باشد.</p>
+<table><thead><tr><th>گروه</th><th>متد</th><th>Signature</th><th>توضیح ورودی‌ها</th></tr></thead><tbody><tr><td>انتقال بانکی</td><td><code>bankTransferDelete</code></td><td><code>$number</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>انتقال بانکی</td><td><code>bankTransferGet</code></td><td><code>$number</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>انتقال بانکی</td><td><code>bankTransferGetTransfers</code></td><td><code>$queryInfo = null</code></td><td><code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>انتقال بانکی</td><td><code>bankTransferSave</code></td><td><code>$transfer</code></td><td><code>$transfer</code>: آرایه انتقال بانکی</td></tr><tr><td>اشخاص</td><td><code>contactBatchSave</code></td><td><code>$contacts</code></td><td><code>$contacts</code>: آرایه‌ای از اشخاص</td></tr><tr><td>اشخاص</td><td><code>contactDelete</code></td><td><code>$code</code></td><td><code>$code</code>: کد موجودیت در حسابفا</td></tr><tr><td>اشخاص</td><td><code>contactFindByPhoneOrEmail</code></td><td><code>$mobile = null, $phone = null, $email = null</code></td><td><code>$mobile = null</code>: شماره موبایل؛ <code>$phone = null</code>: شماره تلفن؛ <code>$email = null</code>: ایمیل</td></tr><tr><td>اشخاص</td><td><code>contactGet</code></td><td><code>$code</code></td><td><code>$code</code>: کد موجودیت در حسابفا</td></tr><tr><td>اشخاص</td><td><code>contactGetById</code></td><td><code>$idList</code></td><td><code>$idList</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>اشخاص</td><td><code>contactGetContactLink</code></td><td><code>$code, $showAllAccounts = true, $days = 3</code></td><td><code>$code</code>: کد موجودیت در حسابفا؛ <code>$showAllAccounts = true</code>: نمایش همه حساب‌ها؛ <code>$days = 3</code>: مدت اعتبار لینک به روز</td></tr><tr><td>اشخاص</td><td><code>contactGetContacts</code></td><td><code>$queryInfo</code></td><td><code>$queryInfo</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>اشخاص</td><td><code>contactSave</code></td><td><code>$contact</code></td><td><code>$contact</code>: آرایه اطلاعات شخص</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemBatchSave</code></td><td><code>$items</code></td><td><code>$items</code>: آرایه اقلام یا تراکنش‌ها، متناسب با متد</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemDelete</code></td><td><code>$idList</code></td><td><code>$idList</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemGet</code></td><td><code>$contactCode = null, $productCode = null, $contactPath = null, $productPath = null, $tag = null</code></td><td><code>$contactCode = null</code>: کد شخص؛ <code>$productCode = null</code>: کد کالا؛ <code>$contactPath = null</code>: مسیر شخص؛ <code>$productPath = null</code>: مسیر کالا؛ <code>$tag = null</code>: برچسب</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemGetById</code></td><td><code>$idList</code></td><td><code>$idList</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemGetItems</code></td><td><code>$queryInfo = null</code></td><td><code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>تخفیف‌ها</td><td><code>discountItemSave</code></td><td><code>$item</code></td><td><code>$item</code>: آرایه اطلاعات کالا/خدمت</td></tr><tr><td>اسناد حسابداری</td><td><code>documentDelete</code></td><td><code>$number</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>اسناد حسابداری</td><td><code>documentGet</code></td><td><code>$number</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>اسناد حسابداری</td><td><code>documentGetDocuments</code></td><td><code>$queryInfo = null</code></td><td><code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>اسناد حسابداری</td><td><code>documentSave</code></td><td><code>$document</code></td><td><code>$document</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryAccountToIban</code></td><td><code>$account, $bank</code></td><td><code>$account</code>: شماره حساب؛ <code>$bank</code>: نام یا کد بانک</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCard</code></td><td><code>$cardNumber</code></td><td><code>$cardNumber</code>: شماره کارت</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCardToIban</code></td><td><code>$cardNumber</code></td><td><code>$cardNumber</code>: شماره کارت</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCheckCardAndNationalCode</code></td><td><code>$nationalCode, $cardNumber, $birthDate</code></td><td><code>$nationalCode</code>: کد ملی؛ <code>$cardNumber</code>: شماره کارت؛ <code>$birthDate</code>: تاریخ تولد</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCheckIbanAndNationalCode</code></td><td><code>$nationalCode, $iban, $birthDate = null</code></td><td><code>$nationalCode</code>: کد ملی؛ <code>$iban</code>: شماره شبا؛ <code>$birthDate = null</code>: تاریخ تولد</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCheckMobileAndNationalCode</code></td><td><code>$nationalCode, $mobile</code></td><td><code>$nationalCode</code>: کد ملی؛ <code>$mobile</code>: شماره موبایل</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryCredit</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryIban</code></td><td><code>$iban</code></td><td><code>$iban</code>: شماره شبا</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryNationalIdentity</code></td><td><code>$nationalCode = null, $birthDate = null</code></td><td><code>$nationalCode = null</code>: کد ملی؛ <code>$birthDate = null</code>: تاریخ تولد</td></tr><tr><td>استعلام‌ها</td><td><code>inquiryPostalCode</code></td><td><code>$postalCode</code></td><td><code>$postalCode</code>: کدپستی ۱۰ رقمی</td></tr><tr><td>فاکتورها</td><td><code>invoiceChangePaidStatus</code></td><td><code>$number, $paid, $type = 0</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$paid</code>: وضعیت پرداخت‌شده؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceChangeSentStatus</code></td><td><code>$number, $sent, $type = 0</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$sent</code>: وضعیت ارسال‌شده؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceDelete</code></td><td><code>$number, $type = 0</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceGet</code></td><td><code>$number, $type = 0</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceGetById</code></td><td><code>$idList</code></td><td><code>$idList</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceGetInvoices</code></td><td><code>$queryinfo, $type = 0</code></td><td><code>$queryinfo</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceGetOnlineInvoiceURL</code></td><td><code>$number, $type = 0</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$type = 0</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>فاکتورها</td><td><code>invoiceSave</code></td><td><code>$invoice</code></td><td><code>$invoice</code>: آرایه کامل فاکتور</td></tr><tr><td>فاکتورها</td><td><code>invoiceSavePayment</code></td><td><code>$number, $paymentTarget, $date, $amount, $transactionNumber = null, $description = null, $transactionFee = 0, $project = null</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$paymentTarget</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$date</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$amount</code>: مبلغ؛ <code>$transactionNumber = null</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$description = null</code>: شرح عملیات؛ <code>$transactionFee = 0</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>فاکتورها</td><td><code>invoiceSaveWarehouseReceipt</code></td><td><code>$receipt, $deleteOldReceipts = true</code></td><td><code>$receipt</code>: آرایه رسید/حواله انبار؛ <code>$deleteOldReceipts = true</code>: حذف رسیدهای قبلی</td></tr><tr><td>کالا و خدمات</td><td><code>itemBatchSave</code></td><td><code>$items</code></td><td><code>$items</code>: آرایه اقلام یا تراکنش‌ها، متناسب با متد</td></tr><tr><td>کالا و خدمات</td><td><code>itemDelete</code></td><td><code>$code</code></td><td><code>$code</code>: کد موجودیت در حسابفا</td></tr><tr><td>کالا و خدمات</td><td><code>itemGet</code></td><td><code>$code</code></td><td><code>$code</code>: کد موجودیت در حسابفا</td></tr><tr><td>کالا و خدمات</td><td><code>itemGetByBarcode</code></td><td><code>$barcode</code></td><td><code>$barcode</code>: بارکد کالا</td></tr><tr><td>کالا و خدمات</td><td><code>itemGetById</code></td><td><code>$idList</code></td><td><code>$idList</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>کالا و خدمات</td><td><code>itemGetItems</code></td><td><code>$queryInfo = null</code></td><td><code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>کالا و خدمات</td><td><code>itemGetQuantity</code></td><td><code>$codes, $warehouseCode = null</code></td><td><code>$codes</code>: آرایه کدهای کالا؛ <code>$warehouseCode = null</code>: کد انبار</td></tr><tr><td>کالا و خدمات</td><td><code>itemGetQuantity2</code></td><td><code>$codes</code></td><td><code>$codes</code>: آرایه کدهای کالا</td></tr><tr><td>کالا و خدمات</td><td><code>itemSave</code></td><td><code>$item</code></td><td><code>$item</code>: آرایه اطلاعات کالا/خدمت</td></tr><tr><td>کالا و خدمات</td><td><code>itemUpdateOpeningQuantity</code></td><td><code>$items</code></td><td><code>$items</code>: آرایه اقلام یا تراکنش‌ها، متناسب با متد</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptDelete</code></td><td><code>$type, $number</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptGet</code></td><td><code>$type, $number</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptGetById</code></td><td><code>$type, $id = null, $idList = null</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$id = null</code>: شناسه حسابفا؛ <code>$idList = null</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptGetReceipts</code></td><td><code>$type, $queryInfo = null</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptSave</code></td><td><code>$type, $description, $amount, $contactCode = null, $bankCode = null, $cashCode = null, $pettyCashCode = null, $currency = null, $currencyRate = null</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$description</code>: شرح عملیات؛ <code>$amount</code>: مبلغ؛ <code>$contactCode = null</code>: کد شخص؛ <code>$bankCode = null</code>: کد بانک؛ <code>$cashCode = null</code>: کد صندوق؛ <code>$pettyCashCode = null</code>: کد تنخواه؛ <code>$currency = null</code>: واحد پول؛ <code>$currencyRate = null</code>: نرخ تبدیل ارز</td></tr><tr><td>دریافت و پرداخت</td><td><code>receiptSave2</code></td><td><code>$type, $items, $transactions, $number = null, $dateTime = null, $description = null, $project = null, $currency = null, $currencyRate = null</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$items</code>: آرایه اقلام یا تراکنش‌ها، متناسب با متد؛ <code>$transactions</code>: ورودی متد مطابق قرارداد رسمی همان endpoint در حسابفا؛ <code>$number = null</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$dateTime = null</code>: تاریخ و زمان؛ <code>$description = null</code>: شرح عملیات؛ <code>$project = null</code>: کد پروژه؛ <code>$currency = null</code>: واحد پول؛ <code>$currencyRate = null</code>: نرخ تبدیل ارز</td></tr><tr><td>گزارش‌ها</td><td><code>reportBalanceSheet</code></td><td><code>$startDate, $endDate, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportBank</code></td><td><code>$startDate, $endDate, $code, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$code</code>: کد موجودیت در حسابفا؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportCash</code></td><td><code>$startDate, $endDate, $code, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$code</code>: کد موجودیت در حسابفا؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportDebtorsCreditors</code></td><td><code>$startDate, $endDate, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportInventory</code></td><td><code>$startDate, $endDate, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportJournal</code></td><td><code>$startDate, $endDate, $project = null, $take = null, $skip = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه؛ <code>$take = null</code>: تعداد رکورد دریافتی؛ <code>$skip = null</code>: تعداد رکوردهای ردشده</td></tr><tr><td>گزارش‌ها</td><td><code>reportPettyCash</code></td><td><code>$startDate, $endDate, $code, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$code</code>: کد موجودیت در حسابفا؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportProfitAndLossStatement</code></td><td><code>$startDate, $endDate, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportTrialBalance</code></td><td><code>$startDate, $endDate, $project = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه</td></tr><tr><td>گزارش‌ها</td><td><code>reportTrialBalanceItems</code></td><td><code>$startDate, $endDate, $project = null, $accountPath = null</code></td><td><code>$startDate</code>: تاریخ شروع؛ <code>$endDate</code>: تاریخ پایان؛ <code>$project = null</code>: کد پروژه؛ <code>$accountPath = null</code>: مسیر حساب</td></tr><tr><td>تنظیمات</td><td><code>settingGetAccounts</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetBanks</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetBusinessInfo</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetCashes</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetChangeHook</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetChanges</code></td><td><code>$start = 0</code></td><td><code>$start = 0</code>: شناسه شروع تغییرات</td></tr><tr><td>تنظیمات</td><td><code>settingGetContactCategories</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetCurrency</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetCurrencyTable</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetDefaultPriceList</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetFiscalYear</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetFiscalYears</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetPettyCashes</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetProductCategories</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetProjects</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetSalesmen</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetServiceCategories</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingGetWarehouses</code></td><td><code></code></td><td>بدون ورودی</td></tr><tr><td>تنظیمات</td><td><code>settingSetChangeHook</code></td><td><code>$url, $hookPassword</code></td><td><code>$url</code>: نشانی webhook فروشگاه؛ <code>$hookPassword</code>: رمز webhook</td></tr><tr><td>تنظیمات</td><td><code>settingSetCurrencyTable</code></td><td><code>$table</code></td><td><code>$table</code>: آرایه جدول نرخ ارز</td></tr><tr><td>انبار</td><td><code>warehouseDelete</code></td><td><code>$number, $type = null</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا؛ <code>$type = null</code>: نوع عملیات مطابق متد حسابفا</td></tr><tr><td>انبار</td><td><code>warehouseGet</code></td><td><code>$number</code></td><td><code>$number</code>: شماره سند/فاکتور/رسید در حسابفا</td></tr><tr><td>انبار</td><td><code>warehouseGetById</code></td><td><code>$id = null, $idList = null</code></td><td><code>$id = null</code>: شناسه حسابفا؛ <code>$idList = null</code>: آرایه شناسه‌های حسابفا</td></tr><tr><td>انبار</td><td><code>warehouseGetReceipts</code></td><td><code>$type, $queryInfo = null</code></td><td><code>$type</code>: نوع عملیات مطابق متد حسابفا؛ <code>$queryInfo = null</code>: آرایه فیلتر، صفحه‌بندی و مرتب‌سازی حسابفا</td></tr><tr><td>انبار</td><td><code>warehouseSave</code></td><td><code>$receipt, $deleteOldReceipts = true</code></td><td><code>$receipt</code>: آرایه رسید/حواله انبار؛ <code>$deleteOldReceipts = true</code>: حذف رسیدهای قبلی</td></tr></tbody></table>
+
+<h2>۹. امنیت و نکات اجرایی</h2><ul><li>اطلاعات ورود حسابفا را در ماژول فراخواننده ذخیره نکنید.</li><li>درخواست‌های مالی و نوشتنی را ترجیحاً از صف عبور دهید.</li><li>موفقیت پذیرش در صف، موفقیت عملیات حسابفا نیست.</li><li>برای متدهای Save/Delete/Set، مدیریت UUID به ماژول مرکزی واگذار شود.</li><li>در لاگ عمومی payload شامل رمز، token یا API key چاپ نشود.</li></ul>
+<p>مستندات رسمی endpointها: <a href="https://www.hesabfa.com/help/api" target="_blank" rel="noopener">Hesabfa API Documentation</a></p>
+</main>
+<section>
+<h2>Queue connection and completed-record behavior</h2>
+<p>Queued requests are accepted independently of the current live connection after API credentials have been configured. Connection status is checked immediately before execution. If Hesabfa is offline, the request remains in <code>retry_wait</code> without consuming an attempt. A <code>done</code> record is historical and has no Run again action; create a new request with current input when a new operation is required. Completed records also reject forged direct-run or requeue submissions at the repository/service layer.</p>
+</section>
+
+<h2>یکتایی شماره فاکتور و mapping سفارش</h2>
+<p>شماره فاکتور حسابفا ممکن است در سال مالی جدید دوباره از ۱ آغاز شود. به همین دلیل کد حسابفا برای mappingهای <code>order</code> و <code>returnOrder</code> به‌تنهایی یکتا نیست. یکتایی اصلی mapping بر اساس نوع موجودیت، شناسه پرستاشاپ و شناسه ترکیب حفظ می‌شود. برای کالا و مشتری، کنترل تکراری بودن کد حسابفا همچنان فعال است.</p>
+
+<section>
+<h2>رفتار خطای پرداخت و سند کارمزد</h2>
+<p>در نسخه 2.3.10 شکست ثبت پرداخت فاکتور یا سند درآمد کارمزد دیگر موفق تلقی نمی‌شود. متد <code>setOrderPayment()</code> مقدار <code>false</code> برمی‌گرداند و صف بر اساس پاسخ واقعی حسابفا وضعیت <code>retry_wait</code> یا <code>needs_attention</code> را انتخاب می‌کند.</p>
+<p>مسیر حساب بانکی پیش‌فرض سند کارمزد: <code>دارایی ها : دارایی های جاری : موجودی نقد و بانک : بانک</code></p>
+</section>
+
+<h2>Placeholderهای توضیحات پرداخت و اسناد حسابداری</h2>
+<p>قالب‌های توضیحات پرداخت و سند درآمد کارمزد از placeholderهای زیر پشتیبانی می‌کنند:</p>
+<ul>
+<li><code>{order_id}</code>: شناسه عددی سفارش در پرستاشاپ.</li>
+<li><code>{order_reference}</code>: مرجع سفارش در پرستاشاپ.</li>
+<li><code>{invoice_number}</code>: شماره فاکتور حسابفا.</li>
+<li><code>{transaction_number}</code>: شماره تراکنش درگاه یا پرداخت.</li>
+</ul>
+<pre><code>پرداخت سفارش {order_reference} - فاکتور {invoice_number} - تراکنش {transaction_number}</code></pre>
+<p>در پرداخت‌های خودکار، مقدار <code>{order_reference}</code> از مرجع همان سفارش خوانده می‌شود. در پرداخت دستی، این مقدار از فیلد اختیاری «مرجع سفارش» در فرم پرداخت دستی گرفته می‌شود و در صورت خالی بودن، با مقدار خالی جایگزین خواهد شد.</p>
+
+
+<h2>اقلام فاکتور در Webhook</h2>
+<p>ممکن است فاکتور حسابفا شامل کالاها یا خدماتی باشد که به محصولی در فروشگاه آنلاین متصل نیستند. اگر قلم فاکتور <code>Tag</code> معتبر مربوط به فروشگاه نداشته باشد، ماژول آن را با ثبت لاگ نادیده می‌گیرد و پردازش تغییر فاکتور و checkpoint ادامه پیدا می‌کند. اگر قلم دارای Tag فروشگاه باشد اما mapping، محصول یا ترکیب متناظر آن خراب یا حذف شده باشد، پردازش همچنان خطا محسوب می‌شود تا اتصال معیوب به‌صورت واقعی اصلاح شود.</p>
+
+
+<section>
+<h2>پوشش ترجمه فارسی</h2>
+<p>در نسخه 2.3.15 تمام عبارت‌های قابل‌ترجمه فعلی در فایل‌های PHP و قالب‌های Smarty دارای ترجمه متناظر در <code>translations/fa.php</code> هستند.</p>
+</section>
+
+<section id="webhook-store-tags"><h2>Webhook store tag filtering</h2><p>Invoice items, products and contacts received from Hesabfa are applied only when their <code>Tag</code> contains a valid positive <code>id_product</code> or <code>id_customer</code>. Objects that are not connected to the online store are ignored and do not block the webhook checkpoint.</p></section>
+
+<section><h2>Item code mismatch guard</h2><p>During Hesabfa-to-PrestaShop price and stock synchronization, if the item code received from Hesabfa does not match the existing local mapping, the module logs the mismatch, keeps the mapping unchanged, and skips applying price or stock for that item. The webhook checkpoint continues. Resolve the mismatch through the manual review workflow before changing the mapping.</p></section>
+
+<h2>فیلتر و صفحه‌بندی صف‌ها در نسخه 2.3.16</h2>
+<p>صف اصلی حسابفا و صف درخواست‌های API داخلی دارای فیلترهای مستقل برای وضعیت، نوع عملیات، موجودیت، کد خطا، بازه تاریخ و کلیدواژه هستند. هر صفحه حداکثر ۵۰ رکورد نمایش می‌دهد و شماره صفحات به‌صورت فشرده مانند <code>1 2 3 … 50 51 52</code> نمایش داده می‌شود.</p>
+<h2>تلاش مجدد خودکار و توقف دستی صف در نسخه 2.3.17</h2>
+<p>خطاهای موقت در وضعیت <code>retry_wait</code> قرار می‌گیرند و پس از رسیدن زمان <code>next_run_at</code> توسط کرون به‌صورت خودکار دوباره اجرا می‌شوند. وضعیت‌های <code>needs_attention</code>، <code>duplicate_check</code> و <code>dead</code> خودکار اجرا نمی‌شوند.</p>
+<p>برای رکوردهای <code>pending</code>، <code>retry_wait</code>، <code>needs_attention</code> و <code>duplicate_check</code> دکمه «علامت‌گذاری به‌عنوان مرده» اضافه شده است. این عملیات اجرای خودکار رکورد را متوقف می‌کند و برای وضعیت‌های <code>running</code> و <code>done</code> مجاز نیست.</p>
+<section><h2>Queue tabs and pagination</h2><p>The Queue controller separates the Hesabfa request queue and the Internal API request queue into two tabs. Filters and pagination are independent per tab. Compact pagination is displayed in a stable left-to-right order on both LTR and RTL back-office pages.</p></section>
+
+<h2>اصلاح هشدار صف در نسخه 2.3.20</h2>
+<p>در هشدار سراسری صف، فقط وضعیت‌های <code>needs_attention</code> و <code>duplicate_check</code> به‌عنوان نیازمند بررسی دستی محاسبه می‌شوند. وضعیت <code>dead</code> به معنی بسته یا کنار گذاشته‌شدن دستی رکورد است؛ بنابراین رکوردهای مرده در جدول و تاریخچه صف باقی می‌مانند، اما هشدار <code>Queue attention required</code> را فعال نگه نمی‌دارند. وضعیت <code>retry_wait</code> همچنان هشدار انتظار برای تلاش مجدد ایجاد می‌کند.</p>
+<h2>هشدار صف و آمار اصلاح‌شده لاگ‌ها در نسخه 2.3.19</h2>
+<p>اگر صف اصلی یا صف API داخلی شامل رکوردهای <code>retry_wait</code>، <code>needs_attention</code> یا <code>duplicate_check</code> باشد، در بالای صفحات مدیریت ماژول هشدار نمایش داده می‌شود. رکوردهای <code>dead</code> در تاریخچه صف باقی می‌مانند، اما هشدار سراسری را فعال نگه نمی‌دارند. آمار لاگ نیز فقط شدت‌های ۳ و ۴ را به‌عنوان خطا و شدت ۲ را به‌عنوان هشدار محاسبه می‌کند.</p>
+
+</body></html>

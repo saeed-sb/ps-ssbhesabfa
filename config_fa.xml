@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <module>
     <name>ssbhesabfa</name>
-    <displayName><![CDATA[Hesabfa Online Accounting]]></displayName>
+    <displayName><![CDATA[نرم&zwnj;افزار حسابداری ابری حسابفا]]></displayName>
     <version>2.3.20</version>
-    <description><![CDATA[Connect Hesabfa Online Accounting to Prestashop]]></description>
+    <description><![CDATA[اتصال نرم&zwnj;افزار حسابداری ابری حسابفا به پرستاشاپ]]></description>
     <author><![CDATA[Saeed Sattar Beglou]]></author>
     <tab><![CDATA[billing_invoicing]]></tab>
     <is_configurable>1</is_configurable>

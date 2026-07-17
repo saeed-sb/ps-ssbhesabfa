@@ -30,90 +30,13 @@ class HesabfaWebhook
     public $invoiceItemsCode = array();
     public $itemsObjectId = array();
     public $contactsObjectId = array();
-
-    public function __construct()
+    public function __construct($autoProcess = true)
     {
-        $hesabfaApi = new HesabfaApi();
-        $lastChange = Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
-        $changes = $hesabfaApi->settingGetChanges($lastChange + 1);
-        if ($changes->Success) {
-            foreach ($changes->Result as $item) {
-                if (!$item->API) {
-                    switch ($item->ObjectType) {
-                        case 'Invoice':
-                            $this->invoicesObjectId[] = $item->ObjectId;
-                            foreach (explode(',', $item->Extra) as $invoiceItem) {
-                                if ($invoiceItem != ''){
-                                    $this->invoiceItemsCode[] = $invoiceItem;
-                                }
-                            }
-                            // Added for ssbprofitloyalty module
-                            if (Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty')) {
-                                if ($item->Action == 121 || $item->Action == 122 || $item->Action == 123) {
-                                    require_once(_PS_MODULE_DIR_.'/ssbprofitloyalty/ssbprofitloyalty.php');
-                                    $ssbprofitloyalty = new Ssbprofitloyalty();
-                                    switch ($item->Action) {
-                                        case 121:
-                                            $ssbprofitloyalty->addInvoiceById($item->ObjectId);
-                                            break;
-
-                                        case 122:
-                                            $ssbprofitloyalty->updateInvoiceById($item->ObjectId);
-                                            break;
-
-                                        case 123:
-                                            $ssbprofitloyalty->deleteInvoiceById($item->ObjectId);
-                                            break;
-                                    }
-                                }
-                            }
-                            
-                            break;
-                        case 'Product':
-                            //if Action was deleted
-                            if ($item->Action == 53) {
-                                $id_obj = Ssbhesabfa::getObjectIdByCode('product', $item->Extra);
-                                $hesabfa = new HesabfaModel($id_obj);
-                                $hesabfa->delete();
-
-                                break;
-                            }
-
-                            $this->itemsObjectId[] = $item->ObjectId;
-                            break;
-                        case 'Contact':
-                            //if Action was deleted
-                            if ($item->Action == 33) {
-                                $id_obj = Ssbhesabfa::getObjectIdByCode('customer', $item->Extra);
-                                $hesabfa = new HesabfaModel($id_obj);
-                                $hesabfa->delete();
-
-                                break;
-                            }
-
-                            $this->contactsObjectId[] = $item->ObjectId;
-                            break;
-                    }
-                }
-            }
-
-            //remove duplicate values
-            $this->invoiceItemsCode = array_unique($this->invoiceItemsCode);
-            $this->contactsObjectId = array_unique($this->contactsObjectId);
-            $this->itemsObjectId = array_unique($this->itemsObjectId);
-            $this->invoicesObjectId = array_unique($this->invoicesObjectId);
-
-            $this->setChanges();
-            //set LastChange ID
-            $lastChange = end($changes->Result);
-            if (is_object($lastChange)) {
-                Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $lastChange->Id);
-            }
-
-        } else {
-            PrestaShopLogger::addLog('ssbhesabfa - Cannot check last changes. Error Message: ' . $changes->ErrorMessage, 2, $changes->ErrorCode, null, null, true);
+        if ($autoProcess) {
+            (new HesabfaWebhookService($this))->run();
         }
     }
+
 
     public function setChanges() {
         //Invoices
@@ -185,7 +108,7 @@ class HesabfaWebhook
             if ($id_order == 0) {
                 if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
                     $msg = 'This invoice is not define in OnlineStore';
-                    PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'Order', $number, true);
+                    Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 2, null, 'Order', $number, true);
                 }
             } else {
                 //check if order exist in prestashop
@@ -199,7 +122,7 @@ class HesabfaWebhook
                         $hesabfa->update();
 
                         $msg = 'Invoice Number changed. Old Number: ' . $id_hesabfa_old . '. New ID: ' . $number;
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
+                        Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'order', $id_order, true);
                     }
                 }
             }
@@ -228,7 +151,7 @@ class HesabfaWebhook
         if ($id_customer == 0) {
             if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
                 $msg = 'This Customer is not define in OnlineStore';
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'customer', $code, true);
+                Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 2, null, 'customer', $code, true);
             }
 
             return false;
@@ -245,14 +168,14 @@ class HesabfaWebhook
                 $hesabfa->update();
 
                 $msg = 'Contact Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . $code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
+                Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'customer', $id_customer, true);
             }
         }
 
         return true;
     }
 
-    public static function setItemChanges($item)
+    public static function setItemChanges($item, $allowCodeRemap = false, $ignoreUnlinkedItem = false)
     {
         if (!is_object($item)) {
             return false;
@@ -266,20 +189,36 @@ class HesabfaWebhook
         $id_product = 0;
         $id_attribute = 0;
 
-        //set ids if set
-        $json = json_decode($item->Tag);
-        if (is_object($json)) {
-            $id_product = $json->id_product;
+        // Read the PrestaShop relation from Hesabfa Tag when it exists.
+        $json = isset($item->Tag) ? json_decode($item->Tag) : null;
+        if (is_object($json) && isset($json->id_product)) {
+            $id_product = (int) $json->id_product;
             if (isset($json->id_attribute)) {
-                $id_attribute = $json->id_attribute;
+                $id_attribute = (int) $json->id_attribute;
             }
         }
 
-        //check if Tag not set in hesabfa
-        if ($id_product == 0) {
+        // Items without an online-store relation are valid in Hesabfa invoices.
+        // Invoice processing may skip them, while a direct product-change event
+        // must still fail so a broken relation is not silently ignored.
+        if ($id_product <= 0) {
+            $itemCode = isset($item->Code) ? (int) $item->Code : 0;
+            if ($ignoreUnlinkedItem) {
+                Ssbhesabfa::addLegacyLog(
+                    'Hesabfa invoice item is not linked to an online-store product and was skipped. Item code: ' . $itemCode,
+                    1,
+                    'WEBHOOK_UNLINKED_INVOICE_ITEM_SKIPPED',
+                    'product',
+                    $itemCode,
+                    true,
+                    array('hesabfa_code' => $itemCode, 'area' => 'Webhook')
+                );
+                return true;
+            }
+
             if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-                $msg = 'Item with code: '. $item->Code .' is not define in OnlineStore';
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 2, null, 'product', $item->Code, true);
+                $msg = 'Item with code: ' . $itemCode . ' is not defined in OnlineStore';
+                Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 2, 'WEBHOOK_ITEM_NOT_LINKED', 'product', $itemCode, true, array('hesabfa_code' => $itemCode, 'area' => 'Webhook'));
             }
 
             return false;
@@ -288,45 +227,86 @@ class HesabfaWebhook
         $id_obj = Ssbhesabfa::getObjectId('product', $id_product, $id_attribute);
         if ($id_obj > 0) {
             $hesabfa = new HesabfaModel($id_obj);
-            //ToDo: if product not exists in PS then return
             $product = new Product($id_product);
+            if (!Validate::isLoadedObject($product)) {
+                Ssbhesabfa::addLegacyLog(
+                    'Hesabfa item Tag points to a missing PrestaShop product. Item code: ' . (int) $item->Code . '. Product ID: ' . (int) $id_product,
+                    3,
+                    'WEBHOOK_LINKED_PRODUCT_NOT_FOUND',
+                    'product',
+                    $id_product . '-' . $id_attribute,
+                    true,
+                    array('hesabfa_code' => isset($item->Code) ? (int) $item->Code : null, 'area' => 'Webhook')
+                );
+                return false;
+            }
+            $itemStock = isset($item->Stock) && is_numeric($item->Stock) ? (int) $item->Stock : null;
+            if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY') && $itemStock === null) {
+                Ssbhesabfa::addLegacyLog('Invalid stock value received from Hesabfa. Product: ' . (int)$id_product . '-' . (int)$id_attribute . '. Stock: ' . print_r(isset($item->Stock) ? $item->Stock : null, true), 3, null, 'product', $id_product.'-'.$id_attribute, true);
+                return false;
+            }
 
-            //1.set new Hesabfa Item Code if changes
+            //1. Detect Hesabfa Item Code changes. Price/stock sync must not remap automatically.
             if ($hesabfa->id_hesabfa != (int)$item->Code) {
-                $id_hesabfa_old = $hesabfa->id_hesabfa;
-                $hesabfa->id_hesabfa = (int)$item->Code;
-                $hesabfa->update();
-
-                $msg = 'Item Code changed. Old ID: ' . $id_hesabfa_old . '. New ID: ' . (int)$item->Code;
-                PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product.'-'.$id_attribute, true);
+                if (!$allowCodeRemap) {
+                    $msg = 'Hesabfa item code mismatch detected. Current mapped code: ' . (int)$hesabfa->id_hesabfa . '. New code from Hesabfa Tag: ' . (int)$item->Code . '. Mapping was not changed during price/stock sync.';
+                    Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 2, null, 'product', $id_product.'-'.$id_attribute, true);
+                    return true;
+                } else {
+                    Ssbhesabfa::addLegacyLog('Automatic Hesabfa item code remapping is disabled. Use the manual mismatch review before changing mappings.', 2, null, 'product', $id_product.'-'.$id_attribute, true);
+                    return true;
+                }
             }
 
             //2.set new Price
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
                 if ($id_attribute != 0) {
                     $combination = new Combination($id_attribute);
-                    if (empty($combination->id_product)) {
-                        return;
+                    if (!Validate::isLoadedObject($combination) || (int) $combination->id_product !== (int) $id_product) {
+                        Ssbhesabfa::addLegacyLog(
+                            'Hesabfa item Tag points to a missing or mismatched PrestaShop combination. Item code: ' . (int) $item->Code . '. Product: ' . (int) $id_product . '-' . (int) $id_attribute,
+                            3,
+                            'WEBHOOK_LINKED_COMBINATION_NOT_FOUND',
+                            'product',
+                            $id_product . '-' . $id_attribute,
+                            true,
+                            array('hesabfa_code' => isset($item->Code) ? (int) $item->Code : null, 'area' => 'Webhook')
+                        );
+                        return false;
                     }
                     
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price + $combination->price);
                     if ($item->SellPrice != $price) {
                         $old_price = $price;
-                        $combination->price = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice) - $product->price;
-                        $combination->update();
+                        $newCombinationPrice = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice) - $product->price;
+                        if (!is_numeric($newCombinationPrice)) {
+                            Ssbhesabfa::addLegacyLog('Invalid combination price received from Hesabfa. Product: ' . (int)$id_product . '-' . (int)$id_attribute . '. SellPrice: ' . print_r($item->SellPrice, true), 3, null, 'product', $id_product.'-'.$id_attribute, true);
+                            return false;
+                        }
+                        if (!HesabfaProductService::updateCombinationImpactPrice($id_attribute, $newCombinationPrice)) {
+                            Ssbhesabfa::addLegacyLog('Failed to update combination price through PrestaShop ObjectModel. Product: ' . (int) $id_product . '-' . (int) $id_attribute, 3, 'COMBINATION_PRICE_UPDATE_FAILED', 'product', $id_product . '-' . $id_attribute, true);
+                            return false;
+                        }
 
                         $msg = "Item $id_product-$id_attribute price changed. Old Price: $old_price. New Price: $item->SellPrice";
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 } else {
                     $price = Ssbhesabfa::getPriceInHesabfaDefaultCurrency($product->price);
                     if ($item->SellPrice != $price) {
                         $old_price = $price;
-                        $product->price = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice);
-                        $product->update();
+                        $newProductPrice = Ssbhesabfa::getPriceInPrestashopDefaultCurrency($item->SellPrice);
+                        if (!is_numeric($newProductPrice) || $newProductPrice < 0) {
+                            Ssbhesabfa::addLegacyLog('Invalid product price received from Hesabfa. Product: ' . (int)$id_product . '. SellPrice: ' . print_r($item->SellPrice, true), 3, null, 'product', $id_product, true);
+                            return false;
+                        }
+                        if (!HesabfaProductService::updateBaseProductPrice($id_product, $newProductPrice)) {
+                            Ssbhesabfa::addLegacyLog('Failed to update product price through PrestaShop ObjectModel. Product: ' . (int) $id_product, 3, 'PRODUCT_PRICE_UPDATE_FAILED', 'product', $id_product, true);
+                            return false;
+                        }
 
                         $msg = "Item $id_product price changed. Old Price: $old_price. New Price: $item->SellPrice";
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 }
             }
@@ -335,63 +315,54 @@ class HesabfaWebhook
             if (Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY')) {
                 if ($id_attribute != 0) {
                     $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product, $id_attribute);
-                    if ($item->Stock != $current_quantity) {
-                        StockAvailable::setQuantity($id_product, $id_attribute, $item->Stock);
-//                        StockAvailable::updateQuantity($id_product, $id_attribute, $item->Stock);
+                    if ($itemStock != $current_quantity) {
+                        if (!HesabfaStockService::setQuantity($id_product, $id_attribute, $itemStock)) {
+                            Ssbhesabfa::addLegacyLog('Failed to update combination quantity through PrestaShop stock API. Product: ' . (int) $id_product . '-' . (int) $id_attribute, 3, 'COMBINATION_STOCK_UPDATE_FAILED', 'product', $id_product . '-' . $id_attribute, true);
+                            return false;
+                        }
+//                        StockAvailable::updateQuantity($id_product, $id_attribute, $itemStock);
 
                         //TODO: Check why this object not update the quantity
 //                        $combination = new Combination($id_attribute);
-//                        $combination->quantity = $item->Stock;
+//                        $combination->quantity = $itemStock;
 //                        $combination->update();
-if ($item->Stock > $current_quantity) {
-    // باید موجودی را به اندازه اختلاف زیاد کنیم
-    $diff = $item->Stock - $current_quantity;
+                        // Stock is updated through PrestaShop stock APIs only. Direct stock table updates are intentionally avoided for PrestaShop 8, multistore and advanced stock compatibility.
 
-    $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
-        SET `quantity` = `quantity` + ' . (int)$diff . '
-        WHERE `id_product` = ' . (int)$id_product . ' AND `id_product_attribute` = 0';
-    Db::getInstance()->execute($sql);
-} else {
-    // باید موجودی را به اندازه اختلاف کم کنیم
-    $diff = $current_quantity - $item->Stock;
-
-    $sql = 'UPDATE `' . _DB_PREFIX_ . 'stock_available`
-        SET `quantity` = `quantity` - ' . (int)$diff . '
-        WHERE `id_product` = ' . (int)$id_product . ' AND `id_product_attribute` = 0';
-    Db::getInstance()->execute($sql);
-}
-
-
-                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute`
-                                SET `quantity` = '. $item->Stock . '
-                                WHERE `id_product` = ' . $id_product . ' AND `id_product_attribute` = ' . $id_attribute;
-                        Db::getInstance()->execute($sql);
-
-                        $msg = "Item $id_product-$id_attribute quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        $msg = "Item $id_product-$id_attribute quantity changed. Old qty: $current_quantity. New qty: $itemStock";
+                        Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 } else {
                     $current_quantity = StockAvailable::getQuantityAvailableByProduct($id_product);
-                    if ($item->Stock != $current_quantity) {
-                        StockAvailable::setQuantity($id_product, null, $item->Stock);
-//                        StockAvailable::updateQuantity($id_product, null, $item->Stock);
+                    if ($itemStock != $current_quantity) {
+                        if (!HesabfaStockService::setQuantity($id_product, 0, $itemStock)) {
+                            Ssbhesabfa::addLegacyLog('Failed to update product quantity through PrestaShop stock API. Product: ' . (int) $id_product, 3, 'PRODUCT_STOCK_UPDATE_FAILED', 'product', $id_product, true);
+                            return false;
+                        }
+//                        StockAvailable::updateQuantity($id_product, null, $itemStock);
 
                         //TODO: Check why this object not update the quantity
-//                    $product->quantity = $item->Stock;
+//                    $product->quantity = $itemStock;
 //                    $product->update();
 
-                        $sql = 'UPDATE `' . _DB_PREFIX_ . 'product`
-                                SET `quantity` = '. $item->Stock . '
-                                WHERE `id_product` = ' . $id_product;
-                        Db::getInstance()->execute($sql);
+                        // Stock is updated through PrestaShop stock APIs only. Direct product quantity updates are intentionally avoided.
 
-                        $msg = "Item $id_product quantity changed. Old qty: $current_quantity. New qty: $item->Stock";
-                        PrestaShopLogger::addLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
+                        $msg = "Item $id_product quantity changed. Old qty: $current_quantity. New qty: $itemStock";
+                        Ssbhesabfa::addLegacyLog('ssbhesabfa - ' . $msg, 1, null, 'product', $id_product, true);
                     }
                 }
             }
             return true;
         }
+
+        Ssbhesabfa::addLegacyLog(
+            'Hesabfa item Tag points to a PrestaShop product without a valid local mapping. Item code: ' . (isset($item->Code) ? (int) $item->Code : 0) . '. Product: ' . (int) $id_product . '-' . (int) $id_attribute,
+            3,
+            'WEBHOOK_LINKED_ITEM_MAPPING_NOT_FOUND',
+            'product',
+            $id_product . '-' . $id_attribute,
+            true,
+            array('hesabfa_code' => isset($item->Code) ? (int) $item->Code : null, 'area' => 'Webhook')
+        );
         return false;
     }
 
@@ -436,4 +407,6 @@ if ($item->Stock > $current_quantity) {
 
         return false;
     }
+
+
 }

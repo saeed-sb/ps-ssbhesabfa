@@ -44,4 +44,15 @@ class HesabfaModel extends ObjectModel
     public $id_hesabfa;
     public $id_ps;
     public $id_ps_attribute;
+    public function add($autoDate = true, $nullValues = false)
+    {
+        $existing=HesabfaMappingRepository::getObjectRowId($this->obj_type,$this->id_ps,$this->id_ps_attribute);
+        $conflict = HesabfaMappingRepository::shouldEnforceUniqueHesabfaCode($this->obj_type)
+            ? HesabfaMappingRepository::getObjectRowIdByCode($this->obj_type, $this->id_hesabfa)
+            : 0;
+        if ($conflict && (int) $conflict !== (int) $existing) return false;
+        if ($existing) { $this->id=$existing; $this->id_ssb_hesabfa=$existing; return $this->update($nullValues); }
+        return parent::add($autoDate,$nullValues);
+    }
+
 }

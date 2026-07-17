@@ -1,0 +1,203 @@
+.ssb-admin-wrap { margin: 0 0 20px; }
+    .ssb-hero { background: #fff; border: 1px solid #dbe6ef; border-radius: 6px; padding: 16px 22px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .ssb-hero h2 { margin: 0 0 6px; font-size: 22px; font-weight: 600; line-height: 1.35; }
+    .ssb-hero p { margin: 0; color: #6c7a89; }
+    .ssb-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-left: 8px; vertical-align: middle; }
+    .ssb-badge-ok { background: #eaf7ea; color: #2e7d32; border: 1px solid #c8e6c9; }
+    .ssb-badge-bad { background: #fff3e0; color: #ef6c00; border: 1px solid #ffe0b2; }
+    .ssb-business-header { margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf2f7; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .ssb-business-pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 18px; background: #f4f9fd; border: 1px solid #d6e6f2; color: #435a6b; font-size: 12px; line-height: 1.3; }
+    .ssb-business-pill strong { color: #263238; font-weight: 600; }
+
+    .ssb-layout { display: flex; align-items: flex-start; gap: 20px; width: 100%; }
+    .ssb-sidebar { flex: 0 0 270px; max-width: 270px; }
+    .ssb-content { flex: 1 1 auto; min-width: 0; }
+    .ssb-nav { background: #fff; border: 1px solid #dbe6ef; border-radius: 6px; padding: 10px; list-style: none; margin: 0; }
+    .ssb-nav li { margin: 0 0 6px; }
+    .ssb-nav li:last-child { margin-bottom: 0; }
+    .ssb-nav a { display: block; padding: 11px 12px; border-radius: 5px; color: #394b59; text-decoration: none; border: 1px solid transparent; line-height: 1.35; }
+    .ssb-nav li.active a, .ssb-nav a:hover { background: #f2f7fb; border-color: #d6e6f2; color: #1f6fb2; }
+
+    .ssb-card { background: #fff; border: 1px solid #dbe6ef; border-radius: 6px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); overflow: hidden; }
+    .ssb-card-header { width: 100%; box-sizing: border-box; padding: 18px 22px; border-bottom: 1px solid #edf2f7; display: flex; align-items: center; justify-content: space-between; gap: 15px; background: #fff; }
+    .ssb-card-header > div { flex: 1 1 auto; min-width: 0; }
+    .ssb-card-header h3 { margin: 0 0 8px; padding: 0; font-size: 18px; font-weight: 600; line-height: 1.35; }
+    .ssb-card-header p { margin: 0; padding: 0; color: #6c7a89; line-height: 1.5; }
+    /* Keep PrestaShop panel titles aligned inside this module without the large default heading margins. */
+    #content.bootstrap .ssb-admin-wrap .panel-heading,
+    #content.bootstrap .ssb-admin-wrap h3:not(.modal-title) { margin: 0; }
+    #content.bootstrap .ssb-admin-wrap .panel-heading { padding: 12px 16px; }
+    .ssb-card-header h3 { margin: 0 0 8px !important; }
+    .ssb-card-body { padding: 22px; }
+    .ssb-card-actions { white-space: nowrap; }
+    .ssb-card-actions form { margin: 0; }
+
+    .ssb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+    .ssb-action-card { border: 1px solid #e2eaf1; border-radius: 6px; padding: 15px; background: #fbfdff; min-height: 120px; }
+    .ssb-action-card h4 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+    .ssb-action-card p { color: #6c7a89; min-height: 34px; margin-bottom: 12px; }
+    .ssb-warning-card { border-color: #ffe0a3; background: #fffaf0; }
+    .ssb-info-note { background: #f4f9fd; border: 1px solid #d6e6f2; border-radius: 6px; padding: 12px 15px; color: #456; margin-bottom: 15px; }
+
+    .ssb-stats { display: flex; gap: 15px; padding: 18px 20px; border-bottom: 1px solid #edf2f7; }
+    .ssb-stats span { background: #f8fbfd; border: 1px solid #e2eaf1; border-radius: 6px; padding: 12px 15px; min-width: 125px; color: #6c7a89; }
+    .ssb-stats strong { display: block; color: #263238; font-size: 20px; line-height: 1.2; }
+
+    .ssb-log-table-filter-form { margin: 0; padding: 18px 20px; }
+    .ssb-log-table-responsive { width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+    .ssb-log-table { margin: 0; min-width: 1180px; }
+    .ssb-log-table-debug-responsive .ssb-log-table { min-width: 1900px; }
+    .ssb-log-table > thead > tr > th,
+    .ssb-log-table > tbody > tr > td { vertical-align: middle; }
+    .ssb-log-table > thead > tr.filter > td { background: #f9fbfd; padding: 7px 8px; border-top: 1px solid #edf2f7; }
+    .ssb-log-table > thead > tr.filter .form-control { min-width: 100%; }
+
+    .ssb-debug-log-data { min-width: 220px; margin: 0 0 4px; }
+    .ssb-debug-log-data summary { cursor: pointer; font-weight: 600; }
+    .ssb-debug-log-data pre { max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-word; background: #f7fafc; border: 1px solid #e2e8f0; padding: 8px; margin: 6px 0 0; direction: ltr; text-align: left; }
+    .ssb-log-message { max-width: 520px; white-space: normal !important; word-break: break-word; }
+
+    .ssb-status-row { display: flex; gap: 15px; flex-wrap: wrap; }
+    .ssb-status-box { flex: 1; min-width: 180px; background: #fbfdff; border: 1px solid #e2eaf1; border-radius: 6px; padding: 14px 15px; }
+    .ssb-status-box strong { display: block; margin-bottom: 5px; }
+
+    .ssb-form-box { padding: 22px; }
+    .ssb-form-box > .panel { margin: 0; border: 1px solid #dbe6ef; box-shadow: none; border-radius: 6px; }
+    .ssb-form-box > .panel > .panel-heading { display: none; }
+    .ssb-form-box .panel-body { padding: 22px; }
+    .ssb-form-box .form-wrapper { padding: 0; }
+    .ssb-form-box .form-group { margin-bottom: 18px; }
+    .ssb-form-box .help-block { margin-top: 6px; margin-bottom: 0; line-height: 1.5; }
+    .ssb-form-box .panel-footer { margin: 0; padding: 15px 20px; border-top: 1px solid #edf2f7; background: #fbfdff; }
+
+
+    .ssb-admin-wrap.ssb-admin-rtl { direction: rtl; text-align: right; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-layout { direction: rtl; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-card-header { flex-direction: row-reverse; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-card-actions { text-align: left; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-badge { margin-left: 0; margin-right: 8px; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-business-header { direction: rtl; }
+    .ssb-admin-wrap.ssb-admin-rtl .ssb-nav a { text-align: right; }
+    .ssb-admin-wrap.ssb-admin-rtl .form-horizontal .control-label { text-align: left; }
+    .ssb-admin-wrap.ssb-admin-rtl table th,
+    .ssb-admin-wrap.ssb-admin-rtl table td { text-align: right; }
+
+    @media (max-width: 991px) {
+        .ssb-layout { display: block; }
+        .ssb-sidebar { max-width: none; margin-bottom: 20px; }
+        .ssb-grid { grid-template-columns: 1fr; }
+        .ssb-card-header { display: block; }
+        .ssb-card-actions { margin-top: 12px; }
+    }
+
+    .ssb-ajax-export-progress { display:none; margin-top: 18px; border: 1px solid #dbe6ef; border-radius: 6px; background: #fbfdff; padding: 15px; }
+    .ssb-ajax-export-progress .progress { height: 24px; margin: 8px 0 10px; background: #edf2f7; border-radius: 12px; overflow: hidden; }
+    .ssb-ajax-export-progress .progress-bar { min-width: 2em; line-height: 24px; transition: width .25s ease; }
+    .ssb-ajax-export-log { max-height: 180px; overflow: auto; margin-top: 10px; padding: 8px 10px; background: #fff; border: 1px solid #edf2f7; border-radius: 4px; font-size: 12px; direction: ltr; text-align: left; }
+    .ssb-ajax-export-log div { margin-bottom: 4px; }
+
+.ssb-sync-loader { text-align: center; display: none; margin-top: 15px; }
+.ssb-progress-bar-empty { width: 0%; }
+
+.ssbhesabfa-payment-block-start { margin-top: 16px !important; padding-top: 14px !important; border-top: 1px solid #ddd !important; }
+.ssbhesabfa-payment-block-title { background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
+.ssbhesabfa-payment-block-title strong { display: block; font-size: 15px; color: #333; margin-bottom: 3px; }
+.ssbhesabfa-payment-block-title span { display: block; font-size: 12px; color: #777; }
+.ssbhesabfa-payment-row label.control-label { font-weight: normal; }
+.ssbhesabfa-fee-dependent, .ssbhesabfa-customer-fee-row { margin-bottom: 12px !important; }
+.ssb-inline-action-form { display: inline-block; margin: 0 3px 3px 0; }
+.ssb-inline-action-form-last { display: inline-block; margin: 0; }
+
+.ssb-queue-filter-form {
+    margin: 0 0 18px;
+    padding: 15px;
+    border: 1px solid #dfe3e8;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+.ssb-queue-filter-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+.ssb-queue-filter-row {
+    margin-top: 12px;
+}
+.ssb-queue-filter-actions {
+    padding-top: 25px;
+    white-space: nowrap;
+}
+.ssb-queue-tabs-wrap {
+    margin-top: 0;
+}
+.ssb-queue-tabs {
+    margin-bottom: 16px;
+}
+.ssb-queue-tabs > li > a {
+    font-weight: 600;
+}
+.ssb-queue-tab-content > .tab-pane > .ssb-card {
+    margin-top: 0;
+}
+.ssb-admin-rtl .ssb-queue-tabs > li {
+    float: right;
+}
+.ssb-pagination-form {
+    margin: 15px 0 0;
+}
+.ssb-pagination {
+    direction: ltr;
+    overflow-x: auto;
+    text-align: center;
+    -webkit-overflow-scrolling: touch;
+}
+.ssb-pagination .pagination {
+    direction: ltr;
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+}
+.ssb-pagination .pagination > li {
+    display: block;
+    float: none;
+}
+.ssb-pagination .pagination > li > button.btn-link {
+    float: none;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 0;
+    background: #fff;
+    text-decoration: none;
+}
+.ssb-pagination .pagination > li.active > button.btn-link {
+    color: #fff;
+    background: #25b9d7;
+    border-color: #25b9d7;
+}
+.ssb-pagination .pagination > li > span {
+    display: block;
+    float: none;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    background: #fff;
+}
+.ssb-pagination .pagination > li.disabled > span {
+    cursor: default;
+}
+@media (max-width: 1199px) {
+    .ssb-queue-filter-form .form-control {
+        margin-bottom: 10px;
+    }
+    .ssb-queue-filter-actions {
+        padding-top: 10px;
+    }
+}
+
+.ssb-admin-wrap .ssb-queue-alert { margin: 0 0 16px; }
+.ssb-admin-wrap .ssb-queue-alert-actions { margin-top: 10px; }
+.ssb-admin-rtl .ssb-queue-alert-actions .btn { margin-left: 6px; margin-right: 0; }

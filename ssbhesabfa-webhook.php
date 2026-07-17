@@ -30,8 +30,14 @@ include(dirname(__FILE__) . '/../../init.php');
 
 /* Check security token */
 if (!Tools::isPHPCLI()) {
-    if (Tools::substr(Tools::encrypt('ssbhesabfa/webhook'), 0, 10) != Tools::getValue('token') || !Module::isInstalled('ssbhesabfa')) {
-        PrestaShopLogger::addLog('Bad token', 2, null, null, null, true);
+    if (!Module::isInstalled('ssbhesabfa')) {
+        die('Module not installed');
+    }
+
+    $expectedToken = (string) Configuration::get('SSBHESABFA_WEBHOOK_TOKEN');
+    $providedToken = (string) Tools::getValue('token');
+    if ($expectedToken === '' || $providedToken === '' || !hash_equals($expectedToken, $providedToken)) {
+        if (class_exists('Ssbhesabfa')) { Ssbhesabfa::addLegacyLog('Bad webhook token', 2, null, 'Webhook', null, true); }
         die('Bad token');
     }
 }
@@ -44,20 +50,20 @@ if ($ssbHesabfa->active) {
     $result = json_decode($post);
 
     if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-        PrestaShopLogger::addLog('ssbhesabfa - WebHook call - ' . serialize($result), 1, null, null, null, true);
+        Ssbhesabfa::addLegacyLog('Webhook request received: ' . serialize($result), 1, null, 'Webhook', null, true);
     }
 
     if (!is_object($result)) {
-        PrestaShopLogger::addLog('ssbhesabfa - Invalid Webhook request.', 2, null, null, null, true);
+        Ssbhesabfa::addLegacyLog('Invalid webhook request: missing or invalid token.', 2, null, 'Webhook', null, true);
         die('Invalid request.');
     }
 
     if ($result->Password != Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD')) {
-        PrestaShopLogger::addLog('ssbhesabfa - Invalid Webhook password.', 2, null, null, null, true);
+        Ssbhesabfa::addLegacyLog('Invalid webhook request: password mismatch.', 2, null, 'Webhook', null, true);
         die('Invalid password.');
     }
 
-    PrestaShopLogger::addLog('ssbhesabfa - Webhook call from Hesabfa.', 1, null, null, null, true);
-    include(dirname(__FILE__) . '/classes/HesabfaWebhook.php');
+    Ssbhesabfa::addLegacyLog('Webhook request received from Hesabfa.', 1, null, 'Webhook', null, true);
+    include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaWebhook.php');
     new HesabfaWebhook();
 }

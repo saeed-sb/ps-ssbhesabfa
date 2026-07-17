@@ -1,275 +1,130 @@
-{*
-* 2007-2020 PrestaShop
-*
-* NOTICE OF LICENSE
-*
-* This source file is subject to the Academic Free License (AFL 3.0)
-* that is bundled with this package in the file LICENSE.txt.
-* It is also available through the world-wide-web at this URL:
-* http://opensource.org/licenses/afl-3.0.php
-* If you did not receive a copy of the license and are unable to
-* obtain it through the world-wide-web, please send an email
-* to license@prestashop.com so we can send you a copy immediately.
-*
-* DISCLAIMER
-*
-* Do not edit or add to this file if you wish to upgrade PrestaShop to newer
-* versions in the future. If you wish to customize PrestaShop for your
-* needs please refer to http://www.prestashop.com for more information.
-*
-*  @author    PrestaShop SA <contact@prestashop.com>
-*  @copyright 2007-2020 PrestaShop SA
-*  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
-*  International Registered Trademark & Property of PrestaShop SA
-*}
 
-<div class="panel">
-    <h3><i class="icon icon-credit-card"></i> {l s='Settings' mod='ssbhesabfa'}</h3>
-    <!-- Nav tabs -->
-    <ul class="nav nav-tabs" id="myTab" role="tablist">
-        <li class="nav-item {if $current_form_tab == null || $current_form_tab == 'Home'}active{/if}">
-            <a class="nav-link active" id="home-tab" data-toggle="tab" href="#home" role="tab" aria-controls="home" aria-selected="true">{l s='Home' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Item'}active{/if}">
-            <a class="nav-link" id="catalog-tab" data-toggle="tab" href="#catalog" role="tab" aria-controls="catalog" aria-selected="false">{l s='Catalog' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Contact'}active{/if}">
-            <a class="nav-link" id="customers-tab" data-toggle="tab" href="#customers" role="tab" aria-controls="customers" aria-selected="false">{l s='Customers' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Invoice'}active{/if}">
-            <a class="nav-link" id="invoice-tab" data-toggle="tab" href="#invoice" role="tab" aria-controls="invoice" aria-selected="false">{l s='Invoice' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Bank'}active{/if}">
-            <a class="nav-link" id="payment-tab" data-toggle="tab" href="#payment" role="tab" aria-controls="payment" aria-selected="false">{l s='Payment Methods' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}">
-            <a class="nav-link" id="api-tab" data-toggle="tab" href="#api" role="tab" aria-controls="api" aria-selected="false">{l s='API' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Export'}active{/if}">
-            <a class="nav-link" id="export-tab" data-toggle="tab" href="#export" role="tab" aria-controls="export" aria-selected="false">{l s='Export' mod='ssbhesabfa'}</a>
-        </li>
-        <li class="nav-item {if $current_form_tab == 'Sync'}active{/if}">
-            <a class="nav-link" id="sync-tab" data-toggle="tab" href="#sync" role="tab" aria-controls="sync" aria-selected="false">{l s='Sync' mod='ssbhesabfa'}</a>
-        </li>
 
-    </ul>
-    <!-- Tab panes -->
-    <div class="tab-content">
-        <div class="tab-pane {if $current_form_tab == null || $current_form_tab == 'Home'}active{/if}" id="home" role="tabpanel" aria-labelledby="home-tab">
-            <div class="panel" style="border-top-left-radius: 0px;">
-                <h1>{l s='Hesabfa Accounting' mod='ssbhesabfa'}</h1>
-                <p>{l s='This module helps connect your (online) store to Hesabfa online accounting software. By using this module, saving products, contacts, and orders in your store will also save them automatically in your Hesabfa account. Besides that, just after a client pays a bill, the receipt document will be stored in Hesabfa as well. Of course, you have to register your account in Hesabfa first. To do so, visit Hesabfa at the link here www.hesabfa.com and sign up for free. After you signed up and entered your account, choose your business, then in the settings menu/API, you can find the API keys for the business and import them to the module’s settings. Now your module is ready to use.' mod='ssbhesabfa'}</p>
-                <p>{l s='For more information and a full guide to how to use Hesabfa and PerstaShop module, visit Hesabfa’s website and go to the “Accounting School” menu.' mod='ssbhesabfa'}</p>
+{assign var=active_tab value=$current_form_tab}
+{if $active_tab == null || $active_tab == ''}{assign var=active_tab value='Dashboard'}{/if}
 
-                <div class="row">
-                    <div class="col-lg-4">
-                        <form action="{$update_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                            <button {if isset($need_update)}style="display: none" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpdate" name="submitSsbhesabfaModuleUpdate" onclick="">{l s='Check Update' mod='ssbhesabfa'}</button>
-                            <button {if !isset($need_update) || $need_update == false || is_null($need_update)}style="display: none;" {/if}type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaModuleUpgrade" name="submitSsbhesabfaModuleUpgrade" onclick="">{l s='Upgrade Module' mod='ssbhesabfa'}</button>
-                            {l s='Module Version: v' mod='ssbhesabfa'}{$module_ver|escape:'htmlall':'UTF-8'}
-                        </form>
-                        <br>
-                        {if isset($notices)}{$notices}{/if}
-                        {if isset($upgrade) && $upgrade == true}
-                            {$upgrade}
-                        {/if}
+<div class="ssb-admin-wrap {if $is_rtl}ssb-admin-rtl{/if}" dir="{if $is_rtl}rtl{else}ltr{/if}" data-delete-warning="{l s='Warning: if you uninstall the module later, all Hesabfa module tables, logs and saved settings will be permanently deleted. Continue with this setting?' mod='ssbhesabfa'}">
+    <div class="ssb-hero">
+        <h2>
+            <i class="icon-credit-card"></i> {l s='Hesabfa Online Accounting' mod='ssbhesabfa'}
+            <span class="ssb-badge {if $live_mode}ssb-badge-ok{else}ssb-badge-bad{/if}">{if $live_mode}{l s='Connected' mod='ssbhesabfa'}{else}{l s='Not connected' mod='ssbhesabfa'}{/if}</span>
+            {if $debug_mode}<span class="ssb-badge ssb-badge-bad">{l s='Debug enabled' mod='ssbhesabfa'}</span>{/if}
+        </h2>
+        <div class="ssb-business-header ssb-module-header"><span class="ssb-business-pill">{l s='Module Version:' mod='ssbhesabfa'} <strong>{$module_version_info|escape:'htmlall':'UTF-8'}</strong></span></div>
+        {if $live_mode && isset($hesabfa_business_info.name) && $hesabfa_business_info.name}
+            <div class="ssb-business-header">
+                <span class="ssb-business-pill"><i class="icon-building"></i> <strong>{$hesabfa_business_info.name|escape:'htmlall':'UTF-8'}</strong></span>
+                {if isset($hesabfa_business_info.legal_name) && $hesabfa_business_info.legal_name}<span class="ssb-business-pill">{l s='Legal name:' mod='ssbhesabfa'} <strong>{$hesabfa_business_info.legal_name|escape:'htmlall':'UTF-8'}</strong></span>{/if}
+                {if isset($hesabfa_business_info.currency) && $hesabfa_business_info.currency}<span class="ssb-business-pill">{l s='Currency:' mod='ssbhesabfa'} <strong>{$hesabfa_business_info.currency|escape:'htmlall':'UTF-8'}</strong></span>{/if}
+                {if isset($hesabfa_business_info.subscription) && $hesabfa_business_info.subscription}<span class="ssb-business-pill">{l s='Plan:' mod='ssbhesabfa'} <strong>{$hesabfa_business_info.subscription|escape:'htmlall':'UTF-8'}</strong></span>{/if}
+                {if isset($hesabfa_business_info.expire_date) && $hesabfa_business_info.expire_date}<span class="ssb-business-pill">{l s='Expires:' mod='ssbhesabfa'} <strong>{$hesabfa_business_info.expire_date|escape:'htmlall':'UTF-8'}</strong></span>{/if}
+            </div>
+        {/if}
+    </div>
+
+
+    {if isset($queue_alert_html) && $queue_alert_html}
+        {$queue_alert_html}
+    {/if}
+
+    <div class="ssb-layout">
+        <div class="ssb-sidebar">
+            <ul class="ssb-nav">
+                {if $section_allowed.Dashboard}<li class="{if $active_tab == 'Dashboard'}active{/if}"><a href="{$section_urls.Dashboard|escape:'htmlall':'UTF-8'}"><i class="icon-dashboard"></i> {l s='Overview' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.Settings}<li class="{if $active_tab == 'Settings'}active{/if}"><a href="{$section_urls.Settings|escape:'htmlall':'UTF-8'}"><i class="icon-cogs"></i> {l s='Settings' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.Payments}<li class="{if $active_tab == 'Payments'}active{/if}"><a href="{$section_urls.Payments|escape:'htmlall':'UTF-8'}"><i class="icon-money"></i> {l s='Payment Methods' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.ManualPayment}<li class="{if $active_tab == 'ManualPayment'}active{/if}"><a href="{$section_urls.ManualPayment|escape:'htmlall':'UTF-8'}"><i class="icon-credit-card"></i> {l s='Manual Gateway Payment' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.Sync}<li class="{if $active_tab == 'Sync'}active{/if}"><a href="{$section_urls.Sync|escape:'htmlall':'UTF-8'}"><i class="icon-refresh"></i> {l s='Sync / Repair' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.Queue}<li class="{if $active_tab == 'Queue'}active{/if}"><a href="{$section_urls.Queue|escape:'htmlall':'UTF-8'}"><i class="icon-tasks"></i> {l s='Request Queue' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.InternalApi}<li class="{if $active_tab == 'InternalApi'}active{/if}"><a href="{$section_urls.InternalApi|escape:'htmlall':'UTF-8'}"><i class="icon-exchange"></i> {l s='Internal API' mod='ssbhesabfa'}</a></li>{/if}
+                {if $section_allowed.Logs}<li class="{if $active_tab == 'Logs'}active{/if}"><a href="{$section_urls.Logs|escape:'htmlall':'UTF-8'}"><i class="icon-list"></i> {l s='Logs / Issues' mod='ssbhesabfa'}</a></li>{/if}
+            </ul>
+        </div>
+
+        <div class="ssb-content">
+            {if $active_tab == 'Dashboard'}
+                <div class="ssb-card">
+                    <div class="ssb-card-header">
+                        <div>
+                            <h3>{l s='Operational overview' mod='ssbhesabfa'}</h3>
+                            <p>{l s='Use this dashboard to understand the module state and jump to the right workflow.' mod='ssbhesabfa'}</p>
+                        </div>
+                    </div>
+                    <div class="ssb-card-body">
+                        <div class="ssb-status-row">
+                            <div class="ssb-status-box"><strong>{l s='API status' mod='ssbhesabfa'}</strong>{if $live_mode}{l s='Connected and ready' mod='ssbhesabfa'}{else}{l s='Not connected. Configure API first.' mod='ssbhesabfa'}{/if}</div>
+                            <div class="ssb-status-box"><strong>{l s='Payment mapping' mod='ssbhesabfa'}</strong>{l s='Map each payment method to a Hesabfa bank and fee policy.' mod='ssbhesabfa'}</div>
+                            <div class="ssb-status-box"><strong>{l s='Internal logs' mod='ssbhesabfa'}</strong>{l s='Logs and sync issues are available in the dedicated controller.' mod='ssbhesabfa'}</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div class="tab-pane {if $current_form_tab == 'Item'}active{/if}" id="catalog" role="tabpanel" aria-labelledby="catalog-tab">{$Item}</div>
-        <div class="tab-pane {if $current_form_tab == 'Contact'}active{/if}" id="customers" role="tabpanel" aria-labelledby="customers-tab">{$Contact}</div>
-        <div class="tab-pane {if $current_form_tab == 'Invoice'}active{/if}" id="invoice" role="tabpanel" aria-labelledby="invoice-tab">{$Invoice}</div>
-        <div class="tab-pane {if $current_form_tab == 'Bank'}active{/if}" id="payment" role="tabpanel" aria-labelledby="payment-tab">
-            {if $live_mode == true}
-                {$Bank}
-            {else}
-            <div class="panel">
-                <br>
-                <div class="alert alert-info" role="alert">
-                    <p>{l s='Bank Maping Disabled, Please set API First.' mod='ssbhesabfa'}</p>
-                </div>
-            </div>
             {/if}
-        </div>
-        <div class="tab-pane {if $current_form_tab == 'Config' || $current_form_tab == 'Test'}active{/if}" id="api" role="tabpanel" aria-labelledby="api-tab">{$Config}</div>
-        <div class="tab-pane {if $current_form_tab == 'Export'}active{/if}" id="export" role="tabpanel" aria-labelledby="export-tab">
-            <div class="panel">
-                <div class="alert alert-info" role="alert">
-                    {l s='Export/Sync can take several minutes.' mod='ssbhesabfa'}</p>
-                </div>
-                <div class="margin-form" style="clear: both;">
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProducts">
-                        {l s='Export products' mod='ssbhesabfa'}
-                    </button>
-                    <div class="modal fade" id="exportProducts" tabindex="-1" role="dialog" aria-labelledby="exportProductsLabel" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content">
-                                <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa?' mod='ssbhesabfa'}</p>
-                                </div>
-                                <div class="modal-footer">
-                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportProducts" name="submitSsbhesabfaExportProducts" onclick="$('#export_loader').show();">{l s='Export products' mod='ssbhesabfa'}</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p>{l s='Export and add all online store products to Hesabfa' mod='ssbhesabfa'}<br></p>
-                    <br>
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportProductsOpeningQuntity">
-                        {l s='Export products Opening Quantity' mod='ssbhesabfa'}
-                    </button>
-                    <div class="modal fade" id="exportProductsOpeningQuntity" tabindex="-1" role="dialog" aria-labelledby="exportProductsOpeningQuntityLabel" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content">
-                                <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Products into Hesabfa with Quantity?' mod='ssbhesabfa'}</p>
-                                    <p>{l s='As you invoke this method, the inventory is saved in the opening balance. Also, the opening balance would be edited corresponding to the information. Therefore make sure you have already defined the stockholders.' mod='ssbhesabfa'}</p>
-                                    <h6>{l s='Notice:'  mod='ssbhesabfa'}</h6>
-                                    <ul>
-                                        <li>{l s='This process is available in the first fiscal year.' mod='ssbhesabfa'}</li>
-                                        <li>{l s='Only the products which are shipped would be updated, and the inventory for other products remains unchanged.' mod='ssbhesabfa'}</li>
-                                        <li>{l s='Remember to only invoke this method at the beginning of the fiscal year. Invoking the method during the fiscal year might disrupt the system.' mod='ssbhesabfa'}</li>
-                                        <li>{l s='Export products before run this job.' mod='ssbhesabfa'}</li>
-                                    </ul>
-                                </div>
-                                <div class="modal-footer">
-                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSetOpeningQuantity" name="submitSsbhesabfaSetOpeningQuantity" onclick="$('#export_loader').show();">{l s='Export products Opening Quantity' mod='ssbhesabfa'}</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <p>{l s='Export the products quantity and record the \'products opening quantity\' in the Hesabfa' mod='ssbhesabfa'}<br></p>
-                    <br>
-                </div>
-                <div class="margin-form" style="clear: both;">
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportCustomers">
-                        {l s='Export Customers' mod='ssbhesabfa'}
-                    </button>
 
-                    <p>{l s='Export and add all online store customers to Hesabfa' mod='ssbhesabfa'}<br></p>
-                    <br>
-                    <div class="modal fade" id="exportCustomers" tabindex="-1" role="dialog" aria-labelledby="exportCustomersLabel" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content">
-                                <div class="modal-body">
-                                    <p>{l s='Are you sure you want to add/update all Customers into Hesabfa?' mod='ssbhesabfa'}</p>
-                                </div>
-                                <div class="modal-footer">
-                                    <form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportCustomers" name="submitSsbhesabfaExportCustomers" onclick="$('#export_loader').show();">{l s='Export customers' mod='ssbhesabfa'}</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            {if $active_tab == 'Settings'}
+                <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='API Connection' mod='ssbhesabfa'}</h3><p>{l s='Enter Hesabfa credentials. Debug logs mask sensitive values.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$Config}</div></div>
+                {if $live_mode == true}
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Catalog Settings' mod='ssbhesabfa'}</h3><p>{l s='Configure barcode, price and stock sync behavior.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$Item}</div></div>
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Customer Settings' mod='ssbhesabfa'}</h3><p>{l s='Configure customer/contact synchronization.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$Contact}</div></div>
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Invoice Settings' mod='ssbhesabfa'}</h3><p>{l s='Configure invoice references, salesman, project and return invoice behavior.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$Invoice}</div></div>
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Accounting Texts' mod='ssbhesabfa'}</h3><p>{l s='Editable descriptions used in Hesabfa receipts and accounting documents.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$AccountingText}</div></div>
+                {/if}
+            {/if}
 
-                </div>
-                <p id="export_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
-            </div>
-        </div>
-        <div class="tab-pane {if $current_form_tab == 'Sync'}active{/if}" id="sync" role="tabpanel" aria-labelledby="sync-tab">
-            <div class="panel">
-                <div class="alert alert-info" role="alert">
-                    {l s='Export/Sync can take several minutes.' mod='ssbhesabfa'}</p>
-                </div>
-                <div class="margin-form" style="clear: both;">
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncChanges" onclick="$('#sync_loader').show();">
-                        {l s='Sync Changes' mod='ssbhesabfa'}
-                    </button>
-                    <p>{l s='Sync all Hesabfa changes with Online Store' mod='ssbhesabfa'}<br></p>
-                    <br>
-                    <div class="modal fade" id="syncChanges" tabindex="-1" role="dialog" aria-labelledby="syncChangesLabel" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content">
-                                <div class="modal-body">
-                                    <p>{l s='Are you sure you want to Sync all changes with Hesabfa?' mod='ssbhesabfa'}</p>
-                                </div>
-                                <div class="modal-footer">
-                                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncChanges" name="submitSsbhesabfaSyncChanges" onclick="$('#sync_loader').show();">{l s='Sync Changes' mod='ssbhesabfa'}</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="margin-form" style="clear: both;">
-                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#syncProducts" onclick="$('#sync_loader').show();">
-                        {l s='Sync Products Quantity and Price' mod='ssbhesabfa'}
-                    </button>
-                    <p>{l s='Sync quantity and price of products in hesabfa with online store' mod='ssbhesabfa'}<br></p>
-                    <br>
-                    <div class="modal fade" id="syncProducts" tabindex="-1" role="dialog" aria-labelledby="syncProductsLabel" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content">
-                                <div class="modal-body">
-                                    <p>{l s='Are you sure you want to Sync all Products price and quantity with Hesabfa?' mod='ssbhesabfa'}</p>
-                                </div>
-                                <div class="modal-footer">
-                                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaSyncProducts" name="submitSsbhesabfaSyncProducts" onclick="$('#sync_loader').show();">{l s='Sync Products' mod='ssbhesabfa'}</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="margin-form" style="clear: both;">
-                    <form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post">
-                        <div class="col-lg-3">
-                            <div class="row">
-                                <div class="input-group">
-                                    <input class="datetimepicker" type="text" id="SSBHESABFA_SYNC_ORDER_FROM" name="SSBHESABFA_SYNC_ORDER_FROM">
-                                    <script type="text/javascript">
-                                        $(document).ready(function(){
-                                            $(".datetimepicker").datepicker({
-                                                prevText: '',
-                                                nextText: '',
-                                                dateFormat: 'yy-mm-dd'
-                                            });
-                                        });
-                                    </script>
-                                <span class="input-group-addon">
-                                    <i class="icon-calendar-empty"></i>
-                                </span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-lg-9">
+            {if $active_tab == 'Payments'}
+                {if $live_mode == true}
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Payment Methods / Banks' mod='ssbhesabfa'}</h3><p>{l s='Each gateway has its own Hesabfa bank, fee policy, income account path and optional contact code.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$Bank}</div></div>
+                {else}
+                    <div class="ssb-card"><div class="ssb-card-body"><div class="alert alert-info">{l s='Payment mapping is disabled until the API connection is configured.' mod='ssbhesabfa'}</div></div></div>
+                {/if}
+            {/if}
 
-                            <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exportInvoices">
-                                {l s='Sync Orders' mod='ssbhesabfa'}
-                            </button>
+            {if $active_tab == 'ManualPayment'}
+                {if $live_mode == true}
+                    <div class="ssb-card"><div class="ssb-card-header"><div><h3>{l s='Manual Gateway Payment' mod='ssbhesabfa'}</h3><p>{l s='Register gateway payments and related income documents manually when needed.' mod='ssbhesabfa'}</p></div></div><div class="ssb-card-body ssb-form-box">{$ManualGatewayPayment}</div></div>
+                {else}
+                    <div class="ssb-card"><div class="ssb-card-body"><div class="alert alert-info">{l s='Manual gateway payment is disabled until the API connection is configured.' mod='ssbhesabfa'}</div></div></div>
+                {/if}
+            {/if}
+
+            {if $active_tab == 'Sync'}
+                <div class="ssb-card">
+                    <div class="ssb-card-header"><div><h3>{l s='Sync / Repair Workflow' mod='ssbhesabfa'}</h3><p>{l s='Sync price and stock safely. Item code remapping is handled by a separate repair action.' mod='ssbhesabfa'}</p></div></div>
+                    <div class="ssb-card-body">
+                        <div class="ssb-info-note">{l s='Price/stock sync no longer changes Hesabfa item code mappings automatically. If a code mismatch is detected, use Repair Hesabfa Item Codes after reviewing the result.' mod='ssbhesabfa'}</div>
+                        <div class="ssb-grid">
+                            <div class="ssb-action-card"><h4>{l s='Sync changes' mod='ssbhesabfa'}</h4><p>{l s='Pull Hesabfa changes through the webhook workflow.' mod='ssbhesabfa'}</p><form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post" class="ssb-confirm-loader-form" data-confirm="{l s='Sync Hesabfa changes now?' mod='ssbhesabfa'}"><button type="submit" class="btn btn-primary" name="submitSsbhesabfaSyncChanges"><i class="icon-refresh"></i> {l s='Sync changes' mod='ssbhesabfa'}</button></form></div>
+                            <div class="ssb-action-card"><h4>{l s='Sync price and stock' mod='ssbhesabfa'}</h4><p>{l s='Update PrestaShop product price and quantity from Hesabfa without remapping item codes.' mod='ssbhesabfa'}</p><form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post" class="ssb-confirm-loader-form" data-confirm="{l s='Sync product price and stock now?' mod='ssbhesabfa'}"><button type="submit" class="btn btn-primary" name="submitSsbhesabfaSyncProducts"><i class="icon-refresh"></i> {l s='Sync price/stock' mod='ssbhesabfa'}</button></form></div>
+                            <div class="ssb-action-card ssb-warning-card"><h4>{l s='Scan item code mismatches' mod='ssbhesabfa'}</h4><p>{l s='List Hesabfa and PrestaShop code differences so each mapping can be approved manually.' mod='ssbhesabfa'}</p><form action="{$sync_action_url|escape:'htmlall':'UTF-8'}" method="post" class="ssb-confirm-loader-form" data-confirm="{l s='Scan item code mismatches now?' mod='ssbhesabfa'}"><button type="submit" class="btn btn-warning" name="submitSsbhesabfaRepairItemCodes"><i class="icon-search"></i> {l s='Scan mismatches' mod='ssbhesabfa'}</button></form></div>
+                            <div class="ssb-action-card"><h4>{l s='Export products' mod='ssbhesabfa'}</h4><p>{l s='Create or update store products in Hesabfa in batches of 100.' mod='ssbhesabfa'}</p><button type="button" class="btn btn-primary ssb-ajax-export-btn" data-export-type="products" data-confirm="{l s='Export all products to Hesabfa?' mod='ssbhesabfa'}"><i class="icon-upload"></i> {l s='Export products' mod='ssbhesabfa'}</button></div>
+                            <div class="ssb-action-card ssb-warning-card"><h4>{l s='Export opening quantity' mod='ssbhesabfa'}</h4><p>{l s='Use only at the beginning of the fiscal year after products are exported.' mod='ssbhesabfa'}</p><form action="{$export_action_url|escape:'htmlall':'UTF-8'}" method="post" class="ssb-confirm-loader-form" data-confirm="{l s='Export opening quantity to Hesabfa?' mod='ssbhesabfa'}"><button type="submit" class="btn btn-warning" name="submitSsbhesabfaSetOpeningQuantity"><i class="icon-upload"></i> {l s='Export opening quantity' mod='ssbhesabfa'}</button></form></div>
+                            <div class="ssb-action-card"><h4>{l s='Export customers' mod='ssbhesabfa'}</h4><p>{l s='Create or update store customers in Hesabfa in batches of 100.' mod='ssbhesabfa'}</p><button type="button" class="btn btn-primary ssb-ajax-export-btn" data-export-type="customers" data-confirm="{l s='Export all customers to Hesabfa?' mod='ssbhesabfa'}"><i class="icon-upload"></i> {l s='Export customers' mod='ssbhesabfa'}</button></div>
                         </div>
-                        <p>{l s='Sync/Add orders in online store with hesabfa from above date' mod='ssbhesabfa'}<br></p>
-                        <br>
-                        <div class="modal fade" id="exportInvoices" tabindex="-1" role="dialog" aria-labelledby="exportInvoicesLabel" aria-hidden="true">
-                            <div class="modal-dialog" role="document">
-                                <div class="modal-content">
-                                    <div class="modal-body">
-                                        <p>{l s='Are you sure you want to Sync all orders with Hesabfa?' mod='ssbhesabfa'}</p>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='ssbhesabfa'}</button>
-                                        <button type="submit" class="btn btn-primary btn-md" id="submitSsbhesabfaExportInvoices" name="submitSsbhesabfaExportInvoices" onclick="$('#export_loader').show();">{l s='Sync Orders' mod='ssbhesabfa'}</button>
-                                    </div>
-                                </div>
-                            </div>
+                        <p id="sync_loader" class="ssb-sync-loader"><img src="../img/loader.gif" alt="" /></p>
+                        <div id="ssb_ajax_export_progress" class="ssb-ajax-export-progress" data-ajax-url="{$export_action_url|escape:'htmlall':'UTF-8'}" data-msg-invalid-response="{l s='Invalid server response.' mod='ssbhesabfa'}" data-msg-export-completed="{l s='Export completed.' mod='ssbhesabfa'}" data-msg-ajax-failed="{l s='Ajax request failed. The export can be started again and will continue from the last stored position.' mod='ssbhesabfa'}" data-msg-export-products="{l s='Export products' mod='ssbhesabfa'}" data-msg-export-customers="{l s='Export customers' mod='ssbhesabfa'}" data-msg-starting-export="{l s='Starting export...' mod='ssbhesabfa'}">
+                            <strong id="ssb_ajax_export_title">{l s='Export progress' mod='ssbhesabfa'}</strong>
+                            <div class="progress"><div id="ssb_ajax_export_bar" class="progress-bar progress-bar-success ssb-progress-bar-empty" role="progressbar">0%</div></div>
+                            <div id="ssb_ajax_export_status" class="text-muted"></div>
+                            <div id="ssb_ajax_export_log" class="ssb-ajax-export-log"></div>
                         </div>
-                    </form>
+
+                    </div>
                 </div>
-                <p id="sync_loader" style="text-align: center; display: none;"><img src="../img/loader.gif" alt=""/></p>
-            </div>
+                {$repair_mismatches_html}
+            {/if}
+
+            {if $active_tab == 'Queue'}
+                {$job_queue_html}
+            {/if}
+
+            {if $active_tab == 'InternalApi'}
+                {$internal_api_html}
+            {/if}
+
+            {if $active_tab == 'Logs'}
+                {$module_logs_html}
+            {/if}
         </div>
     </div>
 </div>
+
+

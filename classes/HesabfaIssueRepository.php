@@ -1,0 +1,88 @@
+<?php
+/**
+ * Data access helper for actionable module issues.
+ */
+
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
+class HesabfaIssueRepository
+{
+    public static function add($issueType, $severity, $message, $objectType = null, $objectId = null, $operationKey = null)
+    {
+        return Db::getInstance()->insert('ssb_hesabfa_issue', array(
+            'issue_type' => pSQL((string) $issueType),
+            'severity' => pSQL((string) $severity),
+            'status' => pSQL('open'),
+            'object_type' => pSQL((string) $objectType),
+            'object_id' => pSQL((string) $objectId),
+            'operation_key' => pSQL((string) $operationKey),
+            'message' => pSQL(HesabfaTextHelper::normalizeLogMessage($message)),
+            'date_add' => date('Y-m-d H:i:s'),
+            'date_upd' => date('Y-m-d H:i:s'),
+        ));
+    }
+
+    public static function resolveByOperationKey($operationKey, $message = null)
+    {
+        $operationKey = (string) $operationKey;
+        if ($operationKey === '') {
+            return false;
+        }
+
+        $fields = array(
+            'status' => pSQL('resolved'),
+            'date_upd' => date('Y-m-d H:i:s'),
+        );
+
+        if ($message !== null) {
+            $fields['message'] = pSQL((string) $message);
+        }
+
+        return Db::getInstance()->update('ssb_hesabfa_issue', $fields, '`operation_key` = "' . pSQL($operationKey) . '" AND `status` != "resolved"');
+    }
+
+    public static function getOpen($limit = 50)
+    {
+        return self::getByStatus(array('open', 'retrying'), $limit);
+    }
+
+    public static function getByStatus(array $statuses, $limit = 50)
+    {
+        $limit = max(1, min(200, (int) $limit));
+        $cleanStatuses = array();
+        foreach ($statuses as $status) {
+            $cleanStatuses[] = '"' . pSQL((string) $status) . '"';
+        }
+        if (empty($cleanStatuses)) {
+            $cleanStatuses[] = '"open"';
+        }
+
+        $query = new DbQuery();
+        $query->select('*');
+        $query->from('ssb_hesabfa_issue');
+        $query->where('`status` IN (' . implode(',', $cleanStatuses) . ')');
+        $query->orderBy('`id_ssb_hesabfa_issue` DESC');
+        $query->limit($limit);
+
+        $rows = Db::getInstance()->executeS($query);
+        return is_array($rows) ? $rows : array();
+    }
+
+    public static function markResolved($idIssue)
+    {
+        return Db::getInstance()->update('ssb_hesabfa_issue', array(
+            'status' => pSQL('resolved'),
+            'date_upd' => date('Y-m-d H:i:s'),
+        ), '`id_ssb_hesabfa_issue` = ' . (int) $idIssue);
+    }
+
+    public static function markRetrying($idIssue)
+    {
+        return Db::getInstance()->update('ssb_hesabfa_issue', array(
+            'status' => pSQL('retrying'),
+            'date_upd' => date('Y-m-d H:i:s'),
+        ), '`id_ssb_hesabfa_issue` = ' . (int) $idIssue);
+    }
+}
