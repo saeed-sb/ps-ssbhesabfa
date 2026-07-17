@@ -1,345 +1,412 @@
+# SSB Hesabfa for PrestaShop
+
+`ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
+
+- **Current version:** `2.3.20`
+- **PrestaShop compatibility:** `1.7.0.0` and newer
+- **Author:** Saeed Sattar Beglou
+
+[Latest release](https://github.com/saeed-sb/ps-ssbhesabfa/releases/latest) · [Changelog](CHANGELOG.md) · [Internal API guide](docs/internal-api-guide.html)
+
+## Table of contents
+
+- [What the module does](#what-the-module-does)
+- [Feature overview](#feature-overview)
+- [Catalog and inventory](#catalog-and-inventory)
+- [Customers and addresses](#customers-and-addresses)
+- [Orders and invoices](#orders-and-invoices)
+- [Payments and transaction fees](#payments-and-transaction-fees)
+- [Webhook synchronization](#webhook-synchronization)
+- [Reliable queues](#reliable-queues)
+- [Logs and administration](#logs-and-administration)
+- [Internal API for other modules](#internal-api-for-other-modules)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Initial configuration](#initial-configuration)
+- [Cron setup](#cron-setup)
+- [Upgrading](#upgrading)
+- [Security notes](#security-notes)
+- [Optional module compatibility](#optional-module-compatibility)
+- [Troubleshooting](#troubleshooting)
+
+## What the module does
+
+The module acts as the accounting bridge between PrestaShop and Hesabfa. It can:
+
+- export products, combinations, customers, addresses, orders, and opening quantities to Hesabfa;
+- register sales invoices, return invoices, invoice payments, and related fee-income documents;
+- receive Hesabfa changes through an authenticated webhook;
+- update mapped product prices and stock quantities through PrestaShop APIs;
+- run customer, product, order, payment, deletion, and external-module requests through persistent queues;
+- keep mappings between PrestaShop objects and Hesabfa codes;
+- expose a controlled Hesabfa API bridge to other PrestaShop modules;
+- record structured logs, retry details, and follow-up issues in the back office.
+
+## Feature overview
+
+| Area | Capabilities |
+| --- | --- |
+| API connection | Hesabfa API key, login token or account credentials, connection test, fiscal-year validation, and automatic webhook registration |
+| Catalog | Product and combination export, barcode source selection, opening quantity export, item-code mapping, and price/stock synchronization |
+| Customers | Customer and address export, automatic hook synchronization, configurable contact group, and address update policy |
+| Orders | Sales and return invoices, configurable invoice reference, salesman and project, historical order synchronization, and order-side registration card |
+| Payments | Payment-method-to-bank mapping, automatic and manual payments, Shaparak/percentage/fixed fees, merchant/customer fee handling, and fee-income documents |
+| Webhooks | Authenticated change endpoint, per-change journal and checkpoint, store-tag filtering, and safe inbound product/contact/invoice processing |
+| Reliability | Persistent queues, delayed retries, request UUID reuse, duplicate-request review, rate limiting, stale-lock recovery, and dead-letter history |
+| Administration | Dedicated dashboard sections, filtered queues, compact pagination, mapping repair tools, structured logs, issue workflow, and Persian translations |
+| Extensibility | Synchronous and queued Internal API calls for other PrestaShop modules |
+
+## Catalog and inventory
+
+### Product and combination export
+
+- Export products and combinations to Hesabfa.
+- Process large exports in resumable batches of 100 records.
+- Display export progress in the back office.
+- Export opening quantities when preparing a new fiscal year.
+- Select the PrestaShop value used as the Hesabfa barcode, or disable barcode export.
+- Preserve a local mapping between each product or combination and its Hesabfa item code.
+
+### Product edit mappings
+
+The product edit panel includes a Hesabfa item-code field for the base product and every combination.
+
+- Positive item codes are validated before saving.
+- Persian and Arabic digits are normalized.
+- Duplicate item codes assigned to another product or combination are rejected.
+- Clearing a field removes only the local mapping.
+- Product and combination deletions keep their mapping until Hesabfa confirms the remote deletion.
+
+### Price and stock updates
+
+Inbound Hesabfa changes can update price and quantity when the related settings are enabled.
+
+- Base product prices are updated through `Product::update()`.
+- Combination price impacts are updated through `Combination::update()`.
+- Quantities are updated through `StockAvailable::setQuantity()` with shop context.
+- An inbound-sync guard prevents a Hesabfa price update from immediately creating an outbound synchronization loop.
+- A mismatch guard skips price and stock changes when the incoming Hesabfa item code conflicts with the saved mapping.
+- The Sync / Repair page can scan, review, dismiss, or safely apply item-code mismatches.
+
+## Customers and addresses
+
+- Export existing customers to Hesabfa in resumable batches.
+- Create or update contacts from customer and address hooks.
+- Queue customer/address synchronization by default so account creation is not delayed by an API request.
+- Configure the Hesabfa contact group used for online-store customers.
+- Choose when customer addresses should be updated in Hesabfa.
+- Keep PrestaShop customer IDs mapped to Hesabfa contact codes.
+- Process linked contact changes received from the Hesabfa webhook.
+
+## Orders and invoices
 
-## Internal API documentation
-A complete standalone guide is included at `docs/internal-api-guide.html`. The Internal API back-office section links directly to this file. It covers inputs, outputs, synchronous and queued examples, status handling, retry-safe request UUID behavior, and the signatures of all allowed wrapper methods.
+- Register a sales invoice when an order is created, immediately or through the queue.
+- Register payment information when payment is confirmed.
+- Create return invoices when an order enters the configured return status.
+- Select the invoice reference source used in Hesabfa.
+- Assign the online-store salesman and Hesabfa project.
+- Synchronize historical orders from a selected date.
+- Register an order manually from the Hesabfa card on the PrestaShop order page.
+- Preserve invoice mappings across fiscal years, including Hesabfa invoice numbers that restart in a new fiscal year.
+- Include supported product notes and serial-number information in invoice descriptions when supplied by compatible modules.
 
-Version: 2.3.5
+## Payments and transaction fees
+
+Each PrestaShop payment method can be mapped to a Hesabfa bank account. The module only lists bank accounts that use the configured Hesabfa currency.
+
+Supported fee modes:
+
+- no fee;
+- Shaparak purchase fee;
+- percentage of the payment amount;
+- fixed fee amount.
+
+Additional payment controls include:
 
-# ssbhesabfa
- Connect "Hesabfa Online Accounting" to Prestashop
+- merchant-paid or customer-paid fee selection;
+- customer extra-charge percentage;
+- fee-income account path and optional contact code;
+- automatic registration of invoice payments;
+- fee-income accounting documents when the customer charge exceeds the transaction fee;
+- a manual gateway-payment form with invoice number, order reference, paid amount, transaction number, and payment date;
+- conversion from the PrestaShop default currency to the Hesabfa currency;
+- idempotency records that prevent the same successful financial operation from being registered twice.
 
+Payment and accounting-document descriptions support these placeholders:
 
-## Version 2.3.4 retry-safe request IDs and Hesabfa log codes
-- Persist UUID v4 request IDs per queued operation and reuse them for automatic retries.
-- Allocate separate stable IDs for multiple write calls inside the same job.
-- Reset persisted IDs when a genuinely new product/customer change is merged into a job.
-- Persist the same retry-safe behavior for queued Internal API requests.
-- Populate the Hesabfa code log column from explicit response messages or existing object mappings when a code is available.
-
-## Version 2.3.3 request ID and postal-code updates
-
-- Increased exported customer postal-code length from 9 to 10 digits.
-- Changed Hesabfa write request identifiers to fresh random UUID v4 values for each API request.
-
-## Version 2.3.2 reliability fixes
-
-- Fixed product-delete mapping lookup so deleting a product cannot remove order/customer mappings that happen to share the same PrestaShop ID.
-
-## 1.0.9
-
-- Rebuilt the module configuration page with a cleaner grouped admin workflow.
-- Added a dedicated Logs / Issues tab for internal module logs.
-- Reorganized API, catalog, customer, invoice, payment mapping, accounting text, manual gateway payment, export, and sync/repair workflows.
-- Kept price/stock sync separate from item-code repair workflow in the admin interface.
-
-
-## 2.0.24
-- Changed the admin order Hesabfa box to use PrestaShop card-style markup while keeping legacy panel fallback classes.
-
-## 2.0.23
-
-- Added mapping table indexes.
-- Added structured log levels and a follow-up issues table.
-- Added idempotency tracking for invoice payment and payment fee income document operations.
-- Improved financial API response handling.
-- Removed Persian text from PHP code paths; Persian translations remain in translation files.
-
-
-## Version 2.0.27
-
-- Added repository classes for module mappings, operation records, follow-up issues, logs, and selected PrestaShop read operations.
-- Moved several direct SQL reads out of the main module class and into repository classes that centralize casting and escaping.
-- Kept financial behavior, hook behavior, API behavior, UI tabs, and database schema unchanged for a safer production refactor step.
-- Added a no-op upgrade file for version 2.0.27.
-
-## Version 2.0.26
-
-- Phase 1 refactor: extracted shared date formatting, text/template rendering and module logging helpers.
-- Kept existing business behavior unchanged to reduce production risk.
-- Added a no-op upgrade file for a safe version transition.
-
-
-## Version 2.1.4
-
-- Moved the Hesabfa request queue out of the Sync / Repair page into its own Request Queue controller and vertical module tab.
-- Kept manual single-job execution and pending-job execution in the dedicated queue page.
-- Merged the separate Date and Time columns in module logs into one Date / Time column.
-- Displayed request queue timestamps in one combined Date / Time column for a cleaner table layout.
-
-## Version 2.1.3
-- Added a dedicated Internal API controller/tab for other PrestaShop modules.
-- Added an internal API request repository and database table for queued/synchronous API requests.
-- Added admin documentation with PHP request examples, queued request examples, and sample responses.
-- Added a manual runner for pending/failed internal API requests.
-- Added a barcode option to use no barcode source.
-- Bank account path for fee income documents is now a module constant again; the legacy configuration key is removed during upgrade.
-- Kept the product-combinations initialization fix and the improved log normalization fix.
-- Cleaned packaging output from macOS and temporary files.
-
-## Version 2.1.2
-
-- Cleaned generated macOS package files and removed the unused legacy GIF logo from the module package.
-- Added a separate time column to module logs, so date and time are both visible.
-- Added a manual item code mismatch review table with PrestaShop item codes, current Hesabfa codes and proposed Hesabfa codes.
-- Added a safe manual apply action for item code mapping repairs after conflict checks.
-- Added a Hesabfa request queue table with manual single-job execution and pending-job execution.
-
-
-## Version 2.1.0
-
-This release completes the staged refactor plan while keeping risky production changes behind disabled-by-default feature flags.
-
-### Phase 3 - API response standardization
-- Added `HesabfaApiResponse` to normalize API responses into a consistent legacy-compatible object shape.
-- Added `HesabfaSafeApi` for new call sites that need centralized exception handling and structured logging.
-- Updated the low-level Hesabfa API transport so cURL errors, empty responses, invalid JSON and HTTP errors always return a normalized object instead of an ambiguous raw failure.
-
-### Phase 4 - Financial safety and idempotency hardening
-- Preserved operation keys and operation repository behavior for invoice payments and payment fee income documents.
-- Added better normalized error handling so financial paths can write actionable issues when a dependent document fails.
-
-### Phase 5 - Follow-up issue workflow
-- Added admin actions to mark issues as resolved or mark them for retry from the Logs / Issues page.
-- Kept issue status changes simple and auditable without automatically repeating financial operations from the UI.
-
-### Phase 6 - Optional async jobs behind feature flags
-- Added `ssb_hesabfa_job` table and `HesabfaJobRepository`.
-- Added disabled-by-default settings for queuing order/payment sync and product sync from hooks.
-- Existing synchronous production behavior remains the default.
-
-### Phase 7 - Stock-safe webhook layer
-- Added `HesabfaStockService` and routed webhook stock writes through PrestaShop stock APIs.
-- Direct stock database writes remain avoided.
-
-## Version 2.1.5
-
-- Moved the internal API request queue into the dedicated Request Queue tab, while keeping the Internal API tab focused on documentation and examples.
-- Added a dismiss action for item code mismatches so admins can intentionally ignore a mismatch without changing the mapping.
-- Added the Hesabfa item name to the item code mismatch review table.
-- Forced log rows to display date and time together in a single column.
-- Added PrestaShop code and Hesabfa code columns to the module logs table.
-
-
-
-
-## Version 2.1.9
-
-- Added idempotency tracking to invoice save operations, not only payment operations. Duplicate invoice-save payloads are skipped after a successful operation, while failed attempts create actionable issues for review.
-- Financial operation success now automatically resolves unresolved issues tied to the same operation key.
-- Hardened queue execution with maximum attempts, stale running-job recovery and guarded job claiming.
-- Added support for queued execution through `callInternalApi()` using the `queue` option while keeping existing direct calls compatible.
-- Added a centralized product price update service used by webhook item sync so price writes are routed through one module service instead of scattered raw updates.
-- Added default `SSBHESABFA_JOB_MAX_ATTEMPTS` configuration during install/upgrade.
-
-## Version 2.1.8
-
-- Refactored the main module file into a lighter module shell by moving large method groups into dedicated compatibility traits under `classes/traits/`.
-- Moved admin rendering/forms, internal API UI/helpers, queue UI/helpers, repair/mismatch UI, payment logic, sync/export logic, and job/admin-order helpers out of `ssbhesabfa.php`.
-- Kept public wrappers and hook entry points in the main module class to avoid breaking production behavior.
-- Preserved legacy direct usage of `classes/HesabfaAPI.php` and made `inquiryNationalIdentity()` signature backward-compatible with older calls.
-- No database schema change in this release.
-
-## Version 2.1.7
-- Preserved backward-compatible Internal API access for external modules through `callInternalApi()` and `enqueueInternalApiRequest()`.
-- Expanded the Internal API guide with method inputs and example calls for each allowed method.
-- Added padding to the log filter form for a cleaner admin layout.
-
-## Version 2.1.6
-
-- Added pagination to the module log table.
-- Added PrestaShop code and Hesabfa code filters to logs.
-- Improved log context labels so object numbers are shown in dedicated code columns instead of the context column.
-- Added the queue cron URL above the Hesabfa request queue list.
-- Added idempotency/dedupe for `sync_product` jobs so repeated product hooks merge into an existing pending or near-current job.
-- Added a setting to enable or disable the Internal API request queue. When disabled, queued helper calls execute immediately and the Internal API queue list is hidden.
-- Added a visible list of allowed Internal API methods to the Internal API guide.
-- Improved RTL support for the module admin interface.
-
-## 2.2.0
-
-- Reduced the main `ssbhesabfa.php` file to a lightweight module shell.
-- Moved module lifecycle data/methods, admin routing/support wrappers, customer hooks, order hooks, and product hooks into dedicated trait files.
-- Kept `HesabfaAPI.php` as the backward-compatible public API class for other modules.
-- No financial, sync, webhook, queue, or Internal API behavior was intentionally changed in this refactor.
-
-## 2.2.1
-- Restored module lifecycle methods, configuration defaults, tab definitions, and hook entry points to `ssbhesabfa.php`.
-- Kept heavy business logic in traits/services so the main file stays readable while exposing the important PrestaShop entry points directly.
-- No financial, sync, webhook, queue, or Internal API behavior changes.
-
-### Version 2.2.2
-- Fixed trait-relative include paths for HesabfaWebhook.php after the main module refactor.
-- No business logic changes.
-
-### Version 2.2.3
-- Standardized module-relative includes to use `_PS_MODULE_DIR_ . 'ssbhesabfa/...'` where PrestaShop is already bootstrapped.
-- Kept front controller bootstrap includes unchanged where PrestaShop constants are not available yet.
-- Added Webhook context to webhook configuration success/failure logs.
-- Added a no-op upgrade file for version 2.2.3.
-
-
-### Version 2.2.4
-- Restored missing static compatibility wrappers after the shell refactor.
-- Audited every `Ssbhesabfa::...()` call and added wrappers for mapping and currency conversion helpers used by webhook/API classes.
-- Fixed webhook fatal errors caused by moved methods such as `getObjectId()`.
-
-## Version 2.2.6
-
-- Added confirmation prompts before running completed queue records again.
-- Area filter in Logs is now a select list.
-- Logs table uses horizontal scrolling when debug columns are visible.
-- Internal API request queue also asks for confirmation before re-running completed requests.
-
-## Version 2.2.5
-
-- Debug mode remains a hidden database-only setting (`SSBHESABFA_DEBUG_MODE`). No `DEBUG_UNTIL` setting is used.
-- Module logs now keep the existing context/object type and add a separate `area` field for the subsystem that produced the log (API, Webhook, Queue, Payment, Sync, Repair, etc.).
-- The logs table stores dedicated PrestaShop and Hesabfa codes instead of extracting them only from message text.
-- When debug mode is enabled from the database, the same Logs tab shows extra debug columns: endpoint, HTTP code, duration, and collapsible payload/request/response data.
-- Debug data is masked and truncated before it is saved.
-
-
-## Version 2.2.8
-- Product and customer exports are processed by AJAX in batches of 100.
-- A progress bar shows the transfer status and the next batch continues even when a batch reports an error.
-
-
-## 2.2.8
-- Masked sensitive Hesabfa API debug payloads.
-- Raised minimum supported PrestaShop version to 1.7.0.0.
-- Replaced legacy webhook token with stored random token.
-- Renamed invoice return status configuration key from STATUE to STATUS with migration.
-- Moved admin CSS and JavaScript to external asset files.
-- Removed unused duplicate trait files.
-- Improved product price refresh by clearing PrestaShop price/static cache after price updates.
-- Debug mode remains database-controlled only.
-
-## Version 2.2.14
-
-- Replaced direct SQL price writes with PrestaShop ObjectModel updates.
-- Base product prices now use `Product::update()`.
-- Combination price impacts now use `Combination::update()`.
-- Stock quantities continue to use `StockAvailable::setQuantity()` with explicit shop resolution.
-- Added an inbound-sync guard to prevent price changes received from Hesabfa from being sent back to Hesabfa by product update hooks.
-- Hardened combination hook parameter handling for legacy and modern product edit flows.
-
-
-## Version 2.3.1 reliability fixes
-
-- Fixed queue merge lookups on PrestaShop 8 by letting `Db::getRow()` apply its own row limit.
-- Fixed product update hooks to queue sync jobs when PrestaShop passes a loaded product object.
-- Added a fallback for admin form language metadata in non-standard render contexts.
-
-## Version 2.3.0 reliability changes
-Queue retries now use delayed backoff and dead-letter handling. Product/customer exports resume from a persistent cursor, and webhook checkpoints only advance after each individual change succeeds. Hesabfa API traffic is limited locally to a safe default of 200 requests per minute.
-
-## Version 2.3.5 error-aware retries
-- Retryable transport and temporary failures reuse the same request UUID.
-- Validation and business errors move to `needs_attention` and are not retried automatically.
-- Duplicate request error 120 and expired 24-hour request IDs move to `duplicate_check`.
-- Starting a new operation clears persisted UUIDs and generates new UUID v4 values.
-- Queue tables display the API error code, request UUID, and payload hash.
-
-
-## Queue and connection behavior (2.3.7)
-When asynchronous synchronization is enabled, hooks record jobs while API credentials are configured even if the current connection status is offline. The queue checks the connection immediately before execution. Offline jobs remain in `retry_wait` and do not consume an attempt. Synchronous operations still require an active connection. Completed jobs are historical records and cannot be run again from the queue.
-
-## Product edit mappings
-The product edit panel accepts a positive Hesabfa item code for the base product and each combination. Persian and Arabic digits are normalized. Clearing a field removes only the local mapping. Duplicate codes assigned to another product or combination are rejected and displayed in the product panel. Product and combination deletions are queued; mappings are deleted only after Hesabfa confirms the remote deletion.
-
-Clearing a product mapping skips automatic product sync for that save request so the mapping is not immediately recreated. A later product synchronization can create a new Hesabfa item when no mapping exists.
-
-## Fiscal-year invoice mapping policy (2.3.8)
-Hesabfa invoice numbers can restart from 1 in each fiscal year. Therefore `order` and `returnOrder` mappings do not enforce global uniqueness on the Hesabfa invoice number. The unique local object mapping `(obj_type, id_ps, id_ps_attribute)` remains enforced, while `(obj_type, id_hesabfa)` is a non-unique lookup index. Customer and product Hesabfa codes continue to be checked for conflicts.
-
-The 2.3.8 upgrade also repairs required queue metadata columns when prior upgrades were skipped and reports invoice mapping persistence failures instead of logging a false success.
-
-
-## Upgrade path from version 2.3.10
-Historical migrations remain consolidated only up to these points:
-
-- `upgrade-1.9.9.php`: consolidated 1.x migration.
-- `upgrade-2.3.9.php`: consolidated 2.x migration through version 2.3.9.
-- `upgrade-2.3.10.php`: separate version-specific upgrade handler for 2.3.10.
-
-An installation upgrading from 1.x runs `1.9.9`, then `2.3.9`, then `2.3.10`. An installation on a 2.x release before 2.3.9 runs `2.3.9` and then `2.3.10`. Future releases keep their own separate upgrade file whenever a database or configuration migration is required; the consolidated 2.3.9 migration must not be renamed or rewritten for later versions.
-
-The consolidated 2.3.9 migration is idempotent and self-healing. It creates missing tables, adds missing final-schema columns through 2.3.9, repairs mapping and queue indexes, preserves repeated fiscal-year invoice numbers, backfills queue UUID metadata, restores required hooks and admin tabs, and adds missing configuration defaults without overwriting existing merchant settings.
-
-
-## Payment and fee-document failure handling (2.3.10)
-The default bank account path used in fee-income accounting documents is:
-
-`دارایی ها : دارایی های جاری : موجودی نقد و بانک : بانک`
-
-When the main invoice payment or its fee-income accounting document fails, `setOrderPayment()` now returns `false`. The queue receives the original Hesabfa response when available and classifies the job according to the retry policy. Missing local configuration is reported as a follow-up issue and is moved to attention instead of being silently treated as successful.
-
-## Upgrade file policy
-
-The consolidated migration ends at version `2.3.9`. Version `2.3.10` has its own upgrade handler. Future versions use separate upgrade files whenever a database or configuration migration is required; previous consolidated migrations must not be renamed or rewritten for a new release.
-## Accounting template placeholders (2.3.11)
-
-The payment-description and accounting-document templates support:
-
-- `{order_id}`: PrestaShop numeric order ID.
-- `{order_reference}`: PrestaShop order reference.
-- `{invoice_number}`: Hesabfa invoice number.
-- `{transaction_number}`: payment/gateway transaction number.
-
-For automatic order payments, `{order_reference}` is read from `Order::reference`. For manual gateway payments, the Manual Payment form includes an optional order-reference field. If it is left empty, `{order_reference}` is rendered as an empty value.
-
-Example:
-
-```text
-Payment for order {order_reference} - Hesabfa invoice {invoice_number} - transaction {transaction_number}
+| Placeholder | Value |
+| --- | --- |
+| `{order_id}` | PrestaShop numeric order ID |
+| `{order_reference}` | PrestaShop order reference |
+| `{invoice_number}` | Hesabfa invoice number |
+| `{transaction_number}` | Payment or gateway transaction number |
+
+## Webhook synchronization
+
+When valid API settings are saved, the module registers its webhook URL and password with Hesabfa.
+
+Webhook processing includes:
+
+- a generated URL token plus a separate webhook password;
+- an ordered change journal and per-change checkpoint;
+- product, contact, and invoice change handling;
+- store-tag filtering so accounting-only objects do not block store synchronization;
+- skipping unlinked invoice lines while keeping errors visible for objects that claim to be linked;
+- mapping validation before inbound price or stock is applied;
+- manual synchronization of pending Hesabfa changes from the Sync / Repair page;
+- structured webhook logs and optional masked debug data.
+
+The store must be reachable from the internet for Hesabfa to call the webhook. A localhost installation cannot receive remote changes.
+
+## Reliable queues
+
+The module maintains two persistent queues:
+
+1. the main Hesabfa job queue for store synchronization;
+2. the Internal API request queue for calls submitted by other modules.
+
+Both queues support filters, separate pagination, manual actions, API error details, payload hashes, and stored request UUIDs.
+
+### Queue statuses
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Waiting for its first execution |
+| `running` | Claimed by a worker |
+| `retry_wait` | Temporary failure; automatically retried after `next_run_at` |
+| `needs_attention` | Validation, configuration, or business error requiring review |
+| `duplicate_check` | Hesabfa reported a duplicate request or the request UUID must be checked before starting a new operation |
+| `done` | Completed successfully and kept as history |
+| `dead` | Manually closed or no longer eligible for automatic execution |
+
+### Reliability controls
+
+- Delayed backoff for temporary network, server, and rate-limit errors.
+- Configurable maximum attempt count.
+- Stale running-job recovery.
+- Guarded job claiming to reduce concurrent execution conflicts.
+- Deduplication and merging of repeated product/customer events where appropriate.
+- Stable UUID v4 request IDs reused during retries of the same logical operation.
+- Fresh request IDs when an administrator explicitly starts a new operation.
+- Special review state for Hesabfa duplicate request error `120`.
+- A local safe API rate limit, configured to 200 requests per minute by default.
+- Queue alerts for retrying jobs and records that require manual attention.
+- `dead` records remain searchable in history but do not keep the global attention warning active.
+
+Queued jobs may be accepted while Hesabfa is temporarily offline if API credentials are configured. The connection is checked immediately before execution; offline jobs remain in `retry_wait` without consuming an attempt.
+
+## Logs and administration
+
+The module adds dedicated PrestaShop administration sections for:
+
+- API Connection;
+- Payment Methods;
+- Manual Gateway Payment;
+- Sync / Repair;
+- Request Queue;
+- Internal API;
+- Logs / Issues.
+
+The Logs / Issues section provides:
+
+- severity, subsystem, object context, PrestaShop code, and Hesabfa code;
+- date, area, and free-text filters;
+- compact database-backed pagination;
+- error and warning summaries;
+- follow-up issues that can be resolved or marked for retry;
+- optional debug columns for endpoint, HTTP status, duration, payload, request, and response;
+- masking and truncation of sensitive debug values before storage.
+
+The administration interface supports RTL layouts and includes Persian translations for its current translatable PHP and Smarty strings.
+
+## Internal API for other modules
+
+Other PrestaShop modules can use `ssbhesabfa` as a central bridge instead of storing Hesabfa credentials or implementing their own transport and retry logic.
+
+### Synchronous call
+
+```php
+$hesabfa = Module::getInstanceByName('ssbhesabfa');
+
+$result = $hesabfa->callInternalApi(
+    'invoiceGet',
+    array(12345, 0),
+    array(
+        'queue' => false,
+        'requester' => 'my_module',
+        'object_type' => 'order',
+        'object_id' => 1001,
+    )
+);
 ```
 
+### Queued call
 
+```php
+$queued = $hesabfa->enqueueInternalApiRequest(
+    'invoiceGet',
+    array(12345, 0),
+    'my_module',
+    'order',
+    1001
+);
 
-## Invoice webhook items (2.3.12)
+if (!empty($queued['success'])) {
+    $request = $hesabfa->getInternalApiRequest((int) $queued['request_id']);
+}
+```
 
-When an invoice change contains a Hesabfa item without an online-store `Tag`, the item is treated as an accounting-only line and is skipped. The invoice change is then marked as done and the webhook checkpoint can advance.
+The bridge validates the requested public `HesabfaApi` method, normalizes responses, manages request UUIDs, and can persist execution details. See [the complete Internal API guide](docs/internal-api-guide.html) for method signatures, response contracts, queue behavior, and examples.
 
-Items that claim to be linked through `Tag` still fail processing when their PrestaShop mapping, product, or combination is missing. This distinction prevents unrelated accounting items from blocking the queue while preserving errors for genuinely broken store relations.
+## Requirements
 
+- PrestaShop `1.7.0.0` or newer.
+- A Hesabfa account with API access enabled.
+- A Hesabfa API key and either a login token or account email/password.
+- PHP cURL and JSON extensions.
+- Database permission to create and update the module tables during installation or upgrade.
+- A public HTTPS store URL for webhook synchronization.
+- A cron service or scheduler when queued execution is enabled.
 
-## Persian translations (2.3.14)
-All current strings wrapped by the module translation system in PHP and Smarty templates have matching entries in `translations/fa.php`. This includes admin pages, queue actions, payment and fee settings, product mappings, order registration messages, logs and AJAX export progress messages.
+## Installation
 
-## Webhook store-tag filtering (2.3.14)
+### From a release package
 
-Webhook changes for invoice items, products and contacts are applied only when the Hesabfa object contains a valid store tag (`id_product` or `id_customer`). Objects that are not connected to the store are ignored so they do not block the checkpoint.
+1. Download the ZIP package from the [latest GitHub release](https://github.com/saeed-sb/ps-ssbhesabfa/releases/latest).
+2. In PrestaShop, open **Modules > Module Manager**.
+3. Select **Upload a module** and upload the ZIP file without extracting it.
+4. Install the module.
+5. Open **Shop Parameters > Hesabfa > API Connection**.
 
+### Manual installation
 
+1. Copy the `ssbhesabfa` directory to `modules/ssbhesabfa` in the PrestaShop installation.
+2. Confirm that `modules/ssbhesabfa/ssbhesabfa.php` exists.
+3. Install the module from **Modules > Module Manager**.
 
-## Item code mismatch guard (2.3.15)
+## Initial configuration
 
-When a Hesabfa item Tag points to a PrestaShop product or combination whose saved mapping contains a different Hesabfa item code, the module logs the mismatch and skips price/stock application for that item. The mapping is not changed automatically, and the webhook change is allowed to continue so later changes are not blocked. Use the manual mismatch review before changing the mapping.
+Recommended setup order:
 
+1. Enter the Hesabfa API key and either the login token or account credentials.
+2. Save the API Connection form. The module tests the connection and registers the webhook.
+3. Review the automatic synchronization master switch.
+4. Configure queued customer, product, and order/payment processing. Product and order queue modes are marked experimental in the current admin form and should be enabled only after cron is working.
+5. Configure the API safe request budget and maximum queue attempts.
+6. Select catalog barcode, inbound price, and inbound quantity behavior.
+7. Configure the customer group and address update policy.
+8. Configure invoice reference, return status, salesman, and project.
+9. Map every active PrestaShop payment method to the correct Hesabfa bank and fee policy.
+10. Schedule the queue cron URL shown on the Request Queue page.
+11. Run the initial customer/product exports and opening quantity only when appropriate for the active fiscal year.
 
-## Queue filters and compact pagination (2.3.16)
+## Cron setup
 
-- Added SQL-backed filters and pagination to the Hesabfa request queue.
-- Added SQL-backed filters and pagination to the Internal API request queue.
-- Queue filters cover status, operation type/method, object context, error code, date range, and free-text payload/error search.
-- Each queue page contains up to 50 rows.
-- Log pagination now uses a compact first/current/last page window instead of rendering every page number.
+The Request Queue page displays a signed cron URL containing the generated queue token. Use that exact URL and keep it private.
 
+Example cron entry:
 
-## Automatic retries and manual dead action (2.3.17)
+```cron
+* * * * * curl -fsS 'COPY_THE_SIGNED_CRON_URL_FROM_THE_MODULE' >/dev/null
+```
 
-Retryable failures are moved to `retry_wait` and are selected automatically by cron when `next_run_at` is reached and the maximum attempt count has not been reached. Records in `needs_attention`, `duplicate_check`, or `dead` are not retried automatically. Administrators can now mark unwanted pending or blocked records as `dead` from both queue tables. Running and done records are protected from this action.
+The endpoint processes both the main queue and, when enabled, the Internal API queue. Its optional `limit` parameter is restricted to a value between 1 and 50; the default is 20.
 
+Choose a schedule suitable for the store's traffic. Running once per minute is typical for active queues.
 
-### Queue tabs and pagination
+## Upgrading
 
-The Queue controller displays the Hesabfa request queue and the Internal API request queue in separate tabs. Each tab keeps its own filters and page number. Pagination is compact and uses a stable left-to-right visual order, including in RTL admin pages.
+1. Back up the PrestaShop database and the current module directory.
+2. Upload the new module package over the existing installation.
+3. Use PrestaShop's module upgrade action so the bundled files in `upgrade/` are executed in version order.
+4. Do not rename or remove historical upgrade files.
+5. Review the module dashboard, queue, and logs after the upgrade.
 
+Keep **Delete module data on uninstall** disabled when uninstalling only for troubleshooting or reinstallation. When that option is enabled, uninstall permanently removes module tables, logs, mappings, queues, issues, and configuration.
 
+Release-by-release technical changes are maintained in [CHANGELOG.md](CHANGELOG.md).
 
-## Queue alert excludes manually closed dead jobs (2.3.20)
+## Security notes
 
-The global queue alert now treats only `needs_attention` and `duplicate_check` as manual-attention statuses. Records marked as `dead` remain available in queue history and filters, but they no longer keep the global `Queue attention required` warning active. Jobs in `retry_wait` still produce the retry warning.
+- Never publish the signed webhook or cron URL.
+- Use HTTPS for the store and cron requests.
+- Do not copy Hesabfa credentials into other modules; use the Internal API bridge.
+- Do not log raw API credentials, login tokens, or unmasked financial payloads.
+- Treat queue acceptance as confirmation that a request was stored, not that Hesabfa completed it.
+- Review `duplicate_check` records in Hesabfa before starting a new operation with a new UUID.
+- Keep the uninstall data-deletion option disabled unless permanent removal is intended.
 
-## Queue alerts and corrected log statistics (2.3.19)
+## Optional module compatibility
 
-The module displays a global back-office alert when either the main queue or the Internal API queue contains jobs waiting for retry or requiring manual attention. Manual-attention statuses include only `needs_attention` and `duplicate_check`. Records marked as `dead` remain visible in queue history but do not keep the global attention alert active. The log summary now counts only severity 3 and 4 as errors; severity 2 is counted only as a warning.
+The current code includes compatibility paths for:
+
+- `psy_paymenthelper` payment-method discovery;
+- `Ssbpurchaseprocess` product invoice notes;
+- serial-number data supplied in the `ssbserialorder`-compatible order format;
+- selected `ssbprofitloyalty` webhook actions.
+
+These modules are optional and are not required for the core Hesabfa integration.
+
+## Project structure
+
+```text
+ssbhesabfa/
+├── classes/
+│   ├── services/     # Queue, export, webhook, payment-fee and mapping services
+│   └── traits/       # Admin, sync, payment, job and compatibility behavior
+├── controllers/admin # Standard PrestaShop admin controllers
+├── docs/             # Internal API documentation
+├── sql/              # Install and uninstall schema handlers
+├── translations/     # Legacy PrestaShop translations, including Persian
+├── upgrade/          # Version-specific upgrade handlers
+├── views/            # Admin assets and Smarty templates
+├── ssbhesabfa.php    # Main module entry point
+├── ssbhesabfa-cron.php
+└── ssbhesabfa-webhook.php
+```
+
+## Troubleshooting
+
+### The module cannot connect to Hesabfa
+
+- Confirm that PHP cURL is enabled.
+- Recheck the API key, login token, email, and password.
+- Confirm that the active Hesabfa fiscal year includes the current date.
+- Check outbound internet access from the PrestaShop server.
+- Review the Logs / Issues section for the Hesabfa error code.
+
+### Webhook changes do not reach the store
+
+- Confirm that the store uses a public URL and is not running on localhost.
+- Save the API Connection form again to test the connection and register the webhook.
+- Confirm that the webhook URL is reachable through HTTPS.
+- Check Webhook-area logs for token, password, or payload errors.
+
+### Queue records are not moving
+
+- Open the signed cron URL manually and inspect its JSON response.
+- Confirm that the scheduler calls the current URL and token.
+- Check `next_run_at`, attempt count, and the record status.
+- Review `needs_attention` and `duplicate_check` records manually; they are not automatic retries.
+- Verify the configured maximum attempts and API rate limit.
+
+### Price or stock is not updated
+
+- Enable the related inbound catalog setting.
+- Verify the product or combination mapping.
+- Run the item-code mismatch scan from Sync / Repair.
+- Confirm that the Hesabfa object contains the correct store tag.
+
+### Payments are not registered
+
+- Map the PrestaShop payment method to a Hesabfa bank.
+- Verify the fee type, fee payer, income account path, and optional contact code.
+- Confirm that the order has a Hesabfa invoice mapping.
+- Review Payment-area logs and follow-up issues.
+
+## Releases and support information
+
+- Download stable packages from [GitHub Releases](https://github.com/saeed-sb/ps-ssbhesabfa/releases).
+- Read version history in [CHANGELOG.md](CHANGELOG.md).
+- Read integration details in [docs/internal-api-guide.html](docs/internal-api-guide.html).
+- Report reproducible problems through the repository's [GitHub Issues](https://github.com/saeed-sb/ps-ssbhesabfa/issues).
