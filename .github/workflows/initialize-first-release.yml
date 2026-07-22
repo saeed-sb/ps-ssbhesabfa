@@ -1,0 +1,61 @@
+name: Initialize first release
+
+on:
+  push:
+    paths:
+      - .github/workflows/initialize-first-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  initialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create release only when repository has no tags or releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          tag_count="$(git tag -l | wc -l | tr -d ' ')"
+          release_count="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=1" --jq 'length')"
+
+          if [ "$tag_count" = "0" ] && [ "$release_count" = "0" ]; then
+            module_name="${GITHUB_REPOSITORY#*/}"
+            module_name="${module_name#ps-}"
+            candidates=("./${module_name}.php")
+            while IFS= read -r file; do candidates+=("$file"); done < <(find . -maxdepth 2 -type f -name '*.php' -not -path './vendor/*' | sort)
+
+            version=""
+            for file in "${candidates[@]}"; do
+              [ -f "$file" ] || continue
+              version="$(sed -nE "s/.*(this->version|['\"]version['\"])[[:space:]]*=[>[:space:]]*['\"]([^'\"]+)['\"].*/\2/p" "$file" | head -n1)"
+              [ -n "$version" ] && break
+            done
+
+            if [ -z "$version" ]; then
+              echo "::warning::No module version found; release was not created."
+            else
+              tag="v${version#v}"
+              git tag "$tag"
+              git push origin "$tag"
+              gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes
+              echo "Created release $tag"
+            fi
+          else
+            echo "Skipped: repository already has tag(s) or release(s)."
+          fi
+      - name: Remove one-shot workflow
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/initialize-first-release.yml
+          git commit -m "chore: remove one-shot release workflow"
+          git push
