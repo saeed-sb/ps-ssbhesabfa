@@ -26,11 +26,17 @@ jobs:
       - name: Verify release target
         shell: bash
         run: |
-          test "$(git rev-parse "${RELEASE_SHA}^{tree}")" = "451ef3adcc151bbfdbf115c0ae81dd411210b0f4"
-          test "$(git show "${RELEASE_SHA}:ssbhesabfa.php" | sed -n "s/.*\\$this->version = '\\([^']*\\)'.*/\\1/p")" = "2.3.21"
-          test "$(git show "${RELEASE_SHA}:config.xml" | sed -n 's:.*<version>\\([^<]*\\)</version>.*:\\1:p')" = "2.3.21"
-          test "$(git show "${RELEASE_SHA}:config_fa.xml" | sed -n 's:.*<version>\\([^<]*\\)</version>.*:\\1:p')" = "2.3.21"
-          test -z "$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}")"
+          set -euxo pipefail
+          git cat-file -e "${RELEASE_SHA}^{commit}"
+          actual_tree="$(git rev-parse "${RELEASE_SHA}^{tree}")"
+          test "${actual_tree}" = "451ef3adcc151bbfdbf115c0ae81dd411210b0f4"
+          git show "${RELEASE_SHA}:ssbhesabfa.php" | grep -Fq "\$this->version = '2.3.21';"
+          git show "${RELEASE_SHA}:config.xml" | grep -Fq '<version>2.3.21</version>'
+          git show "${RELEASE_SHA}:config_fa.xml" | grep -Fq '<version>2.3.21</version>'
+          if git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | grep -q .; then
+            echo "Tag ${RELEASE_TAG} already exists." >&2
+            exit 1
+          fi
 
       - name: Build installable module package
         shell: bash
