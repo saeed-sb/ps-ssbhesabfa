@@ -30,13 +30,19 @@ class HesabfaWebhook
     public $invoiceItemsCode = array();
     public $itemsObjectId = array();
     public $contactsObjectId = array();
+    protected $lastResult = null;
+
     public function __construct($autoProcess = true)
     {
         if ($autoProcess) {
-            (new HesabfaWebhookService($this))->run();
+            $this->lastResult = (new HesabfaWebhookService($this))->run();
         }
     }
 
+    public function getLastResult()
+    {
+        return $this->lastResult;
+    }
 
     public function setChanges() {
         //Invoices
@@ -81,7 +87,7 @@ class HesabfaWebhook
 
         if (!empty($items)) {
             foreach ($items as $item) {
-                $this->setItemChanges($item);
+                $this->setItemChanges($item, false, true);
             }
         }
 
@@ -229,6 +235,10 @@ class HesabfaWebhook
             $hesabfa = new HesabfaModel($id_obj);
             $product = new Product($id_product);
             if (!Validate::isLoadedObject($product)) {
+                if ($ignoreUnlinkedItem) {
+                    return true;
+                }
+
                 Ssbhesabfa::addLegacyLog(
                     'Hesabfa item Tag points to a missing PrestaShop product. Item code: ' . (int) $item->Code . '. Product ID: ' . (int) $id_product,
                     3,
@@ -263,6 +273,10 @@ class HesabfaWebhook
                 if ($id_attribute != 0) {
                     $combination = new Combination($id_attribute);
                     if (!Validate::isLoadedObject($combination) || (int) $combination->id_product !== (int) $id_product) {
+                        if ($ignoreUnlinkedItem) {
+                            return true;
+                        }
+
                         Ssbhesabfa::addLegacyLog(
                             'Hesabfa item Tag points to a missing or mismatched PrestaShop combination. Item code: ' . (int) $item->Code . '. Product: ' . (int) $id_product . '-' . (int) $id_attribute,
                             3,
@@ -351,6 +365,10 @@ class HesabfaWebhook
                     }
                 }
             }
+            return true;
+        }
+
+        if ($ignoreUnlinkedItem) {
             return true;
         }
 

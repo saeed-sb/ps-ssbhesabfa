@@ -3,20 +3,169 @@ if (!defined('_PS_VERSION_')) { exit; }
 class HesabfaWebhookService
 {
     protected $handler;
-    public function __construct($handler) { $this->handler=$handler; }
+
+    public function __construct($handler)
+    {
+        $this->handler = $handler;
+    }
+
+    protected function createResult($checkpoint)
+    {
+        return array(
+            'success' => false,
+            'api_success' => false,
+            'received_count' => 0,
+            'stored_count' => 0,
+            'processed_count' => 0,
+            'failed_count' => 0,
+            'failed_change_id' => null,
+            'last_error' => '',
+            'last_checkpoint' => (int) $checkpoint,
+            'pending_count' => 0,
+            'running_count' => 0,
+            'failed_total' => 0,
+            'remaining_count' => 0,
+        );
+    }
+
+    protected function finalizeResult($result)
+    {
+        $result['last_checkpoint'] = (int) Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
+        $result['pending_count'] = HesabfaWebhookChangeRepository::countByStatuses('pending');
+        $result['running_count'] = HesabfaWebhookChangeRepository::countByStatuses('running');
+        $result['failed_total'] = HesabfaWebhookChangeRepository::countByStatuses('failed');
+        $result['remaining_count'] = (int) $result['pending_count']
+            + (int) $result['running_count']
+            + (int) $result['failed_total'];
+        $result['success'] = !empty($result['api_success'])
+            && (int) $result['failed_count'] === 0
+            && (int) $result['remaining_count'] === 0;
+
+        return $result;
+    }
+
+    protected function failResult($result, $message, $changeId = null)
+    {
+        $result['failed_count'] = (int) $result['failed_count'] + 1;
+        $result['failed_change_id'] = $changeId === null ? null : (int) $changeId;
+        $result['last_error'] = trim((string) $message);
+
+        return $result;
+    }
+
     public function run()
     {
-        $api=new HesabfaApi(); $last=(int)Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID'); $changes=$api->settingGetChanges($last+1);
-        if (!$changes->Success) { Ssbhesabfa::addLegacyLog('Failed to check latest Hesabfa changes. '.$changes->ErrorMessage,2,$changes->ErrorCode,'Webhook',null,true); return false; }
-        if (isset($changes->Result)) foreach ((array)$changes->Result as $change) HesabfaWebhookChangeRepository::save($change);
-        foreach (HesabfaWebhookChangeRepository::getPending(200) as $row) {
-            $id=(int)$row['change_id']; if (!HesabfaWebhookChangeRepository::markRunning($id)) continue;
-            try {
-                $change=json_decode($row['payload']); if (!is_object($change)) throw new Exception('Invalid webhook payload.');
-                $this->processChange($change); HesabfaWebhookChangeRepository::markDone($id); Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID',$id);
-            } catch (Exception $e) { HesabfaWebhookChangeRepository::markFailed($id,$e->getMessage()); Ssbhesabfa::addLegacyLog('Webhook change '.$id.' failed and checkpoint was not advanced. '.$e->getMessage(),3,'WEBHOOK_CHANGE_FAILED','Webhook',$id,true); break; }
+        $last = (int) Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
+        $result = $this->createResult($last);
+
+        try {
+            $changes = (new HesabfaApi())->settingGetChanges($last + 1);
+        } catch (Exception $e) {
+            $result['last_error'] = $e->getMessage();
+            Ssbhesabfa::addLegacyLog(
+                'Failed to check latest Hesabfa changes. ' . $result['last_error'],
+                2,
+                'WEBHOOK_GET_CHANGES_FAILED',
+                'Webhook',
+                null,
+                true
+            );
+
+            return $this->finalizeResult($result);
         }
-        return true;
+
+        if (!is_object($changes) || empty($changes->Success)) {
+            $errorMessage = is_object($changes) && isset($changes->ErrorMessage)
+                ? trim((string) $changes->ErrorMessage)
+                : 'Hesabfa returned an invalid GetChanges response.';
+            $errorCode = is_object($changes) && isset($changes->ErrorCode)
+                ? (string) $changes->ErrorCode
+                : 'WEBHOOK_GET_CHANGES_FAILED';
+            $result['last_error'] = $errorMessage;
+            Ssbhesabfa::addLegacyLog(
+                'Failed to check latest Hesabfa changes. ' . $errorMessage,
+                2,
+                $errorCode,
+                'Webhook',
+                null,
+                true
+            );
+
+            return $this->finalizeResult($result);
+        }
+
+        $result['api_success'] = true;
+        $receivedChanges = array();
+        if (isset($changes->Result)) {
+            if (is_array($changes->Result)) {
+                $receivedChanges = $changes->Result;
+            } elseif (is_object($changes->Result)) {
+                $receivedChanges = array($changes->Result);
+            }
+        }
+        $result['received_count'] = count($receivedChanges);
+
+        foreach ($receivedChanges as $change) {
+            if (HesabfaWebhookChangeRepository::save($change)) {
+                $result['stored_count']++;
+                continue;
+            }
+
+            $changeId = is_object($change) && isset($change->Id) ? (int) $change->Id : null;
+            $message = $changeId
+                ? 'Hesabfa change ' . $changeId . ' could not be stored in the webhook journal.'
+                : 'A Hesabfa change could not be stored in the webhook journal.';
+            $result = $this->failResult($result, $message, $changeId);
+            Ssbhesabfa::addLegacyLog(
+                $message . ' Checkpoint was not advanced.',
+                3,
+                'WEBHOOK_CHANGE_SAVE_FAILED',
+                'Webhook',
+                $changeId,
+                true
+            );
+
+            // Do not process later changes when the ordered journal has a gap.
+            return $this->finalizeResult($result);
+        }
+
+        foreach (HesabfaWebhookChangeRepository::getPending(200) as $row) {
+            $id = (int) $row['change_id'];
+            if (!HesabfaWebhookChangeRepository::markRunning($id)) {
+                continue;
+            }
+
+            try {
+                $change = json_decode($row['payload']);
+                if (!is_object($change)) {
+                    throw new Exception('Invalid webhook payload.');
+                }
+                if (!$this->processChange($change)) {
+                    throw new Exception('Webhook change could not be applied.');
+                }
+                if (!HesabfaWebhookChangeRepository::markDone($id)) {
+                    throw new Exception('Webhook change could not be marked as completed.');
+                }
+                if (!Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $id)) {
+                    throw new Exception('Webhook checkpoint could not be saved.');
+                }
+                $result['processed_count']++;
+            } catch (Exception $e) {
+                HesabfaWebhookChangeRepository::markFailed($id, $e->getMessage());
+                $result = $this->failResult($result, $e->getMessage(), $id);
+                Ssbhesabfa::addLegacyLog(
+                    'Webhook change ' . $id . ' failed and checkpoint was not advanced. ' . $e->getMessage(),
+                    3,
+                    'WEBHOOK_CHANGE_FAILED',
+                    'Webhook',
+                    $id,
+                    true
+                );
+                break;
+            }
+        }
+
+        return $this->finalizeResult($result);
     }
     protected function hasStoreTag($object, $idField)
     {
@@ -44,14 +193,14 @@ class HesabfaWebhookService
                     $itemResponse = $api->itemGet((int) $code);
 
                     if (!$itemResponse->Success) {
-                        continue;
+                        throw new Exception($itemResponse->ErrorMessage);
                     }
 
                     if (!$this->hasStoreTag($itemResponse->Result, 'id_product')) {
                         continue;
                     }
 
-                    if (!$this->handler->setItemChanges($itemResponse->Result)) {
+                    if (!$this->handler->setItemChanges($itemResponse->Result, false, true)) {
                         throw new Exception('Invoice item change could not be applied.');
                     }
                 }
@@ -75,7 +224,7 @@ class HesabfaWebhookService
                     continue;
                 }
 
-                if (!$this->handler->setItemChanges($item)) {
+                if (!$this->handler->setItemChanges($item, false, true)) {
                     throw new Exception('Product change could not be applied.');
                 }
             }

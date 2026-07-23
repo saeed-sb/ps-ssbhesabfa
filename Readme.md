@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.20`
+- **Current version:** `2.3.21`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -151,9 +151,10 @@ Webhook processing includes:
 - an ordered change journal and per-change checkpoint;
 - product, contact, and invoice change handling;
 - store-tag filtering so accounting-only objects do not block store synchronization;
-- skipping unlinked invoice lines while keeping errors visible for objects that claim to be linked;
+- skipping accounting-only invoice lines and tagged Hesabfa items whose local product, combination, or mapping no longer exists;
 - mapping validation before inbound price or stock is applied;
 - manual synchronization of pending Hesabfa changes from the Sync / Repair page;
+- accurate manual-sync feedback for API errors, no-change results, partial failures, processed counts, and the last checkpoint;
 - structured webhook logs and optional masked debug data.
 
 The store must be reachable from the internet for Hesabfa to call the webhook. A localhost installation cannot receive remote changes.

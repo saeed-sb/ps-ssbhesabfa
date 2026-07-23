@@ -423,6 +423,82 @@ trait HesabfaCoreSupportTrait
         return array();
     }
 
+    protected function displayHesabfaInformation($message)
+    {
+        if (method_exists($this, 'displayInformation')) {
+            return $this->displayInformation($message);
+        }
+
+        return '<div class="alert alert-info">' . Tools::safeOutput($message) . '</div>';
+    }
+
+    protected function renderHesabfaWebhookResult($result)
+    {
+        if (!is_array($result)) {
+            return $this->displayError(
+                $this->l('Hesabfa change sync returned an invalid result. Check Logs and Queue.')
+            );
+        }
+
+        $received = isset($result['received_count']) ? (int) $result['received_count'] : 0;
+        $processed = isset($result['processed_count']) ? (int) $result['processed_count'] : 0;
+        $failed = isset($result['failed_count']) ? (int) $result['failed_count'] : 0;
+        $remaining = isset($result['remaining_count']) ? (int) $result['remaining_count'] : 0;
+        $checkpoint = isset($result['last_checkpoint']) ? (int) $result['last_checkpoint'] : 0;
+        $failedChangeId = isset($result['failed_change_id']) ? (int) $result['failed_change_id'] : 0;
+        $lastError = isset($result['last_error']) ? trim(strip_tags((string) $result['last_error'])) : '';
+        if ($lastError === '') {
+            $lastError = $this->l('Unknown Hesabfa sync error.');
+        }
+
+        if (empty($result['api_success'])) {
+            return $this->displayError(sprintf(
+                $this->l('Hesabfa changes could not be fetched. Error: %s'),
+                $lastError
+            ));
+        }
+
+        if ($failed > 0) {
+            if ($failedChangeId > 0) {
+                return $this->displayWarning(sprintf(
+                    $this->l('Hesabfa changes were only partially synced. Change ID %d failed: %s. Check Logs and Queue.'),
+                    $failedChangeId,
+                    $lastError
+                ));
+            }
+
+            return $this->displayWarning(sprintf(
+                $this->l('Hesabfa changes were only partially synced: %s. Check Logs and Queue.'),
+                $lastError
+            ));
+        }
+
+        if ($remaining > 0) {
+            return $this->displayWarning(sprintf(
+                $this->l('Hesabfa change sync is incomplete. Processed: %d. Remaining: %d. Run sync again and check Logs and Queue.'),
+                $processed,
+                $remaining
+            ));
+        }
+
+        if ($received === 0 && $processed === 0) {
+            return $this->displayHesabfaInformation($this->l('No new Hesabfa changes.'));
+        }
+
+        if (!empty($result['success'])) {
+            return $this->displayConfirmation(sprintf(
+                $this->l('Hesabfa changes synced successfully. Received: %d. Processed: %d. Checkpoint: %d.'),
+                $received,
+                $processed,
+                $checkpoint
+            ));
+        }
+
+        return $this->displayError(
+            $this->l('Hesabfa change sync did not complete successfully. Check Logs and Queue.')
+        );
+    }
+
     public function getContent()
     {
         // $orders = array(29012);
@@ -544,8 +620,8 @@ trait HesabfaCoreSupportTrait
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaSyncChanges')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
                 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaWebhook.php');
-                new HesabfaWebhook();
-                $output .= $this->displayConfirmation($this->l('Changes synced with Hesabfa successfully.'));
+                $webhook = new HesabfaWebhook();
+                $output .= $this->renderHesabfaWebhookResult($webhook->getLastResult());
             } else {
                 $output .= $this->displayWarning($this->l('The API Connection must be connected before sync Changes.'));
             }

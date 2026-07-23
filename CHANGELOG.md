@@ -1,3 +1,12 @@
+## 2.3.21
+
+- Changed webhook synchronization to return structured API, received, processed, failed, error, checkpoint, and remaining-work details.
+- Corrected the manual **Sync changes** action so API failures are errors, empty results are informational, partial failures are warnings, and confirmation appears only after all available changes complete.
+- Preserved the failing change ID and error for operator diagnosis, and stopped silently accepting journal, item-fetch, completion-state, or checkpoint persistence failures.
+- Changed inbound item synchronization to skip Hesabfa items whose tagged PrestaShop product, combination, or local mapping no longer exists, instead of failing the ordered change journal.
+- Added Persian translations for the new synchronization outcomes.
+- Added a standalone no-schema upgrade handler for version 2.3.21.
+
 ## 2.3.20
 - Removed `dead` jobs from the global manual-attention alert count.
 - Global queue warnings now treat only `needs_attention` and `duplicate_check` as manual-attention states.

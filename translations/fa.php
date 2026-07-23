@@ -26,6 +26,15 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4e28c35cc9d0a92bb7a3d67c1378d64f'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_340781f607666441e2952dd909bf87fc'] = 'همسان‌سازی سفارشات با حسابفا موفقیت آمیز بود. شماره سفارشات: ';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_48f275b8bf07d204065f7f2711e0cb72'] = 'قبل از همسان‌سازی سفارشات، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6d87590bb2b93f41888eaef43591fdeb'] = 'همسان‌سازی تغییرات با حسابفا موفقیت آمیز بود.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f28e95e7c52f71c7dc5c4dd6889d6528'] = 'همگام‌سازی تغییرات حسابفا نتیجه معتبری برنگرداند. لاگ‌ها و صف را بررسی کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_07a8a9893c25930f4592a4237568b100'] = 'خطای ناشناخته در همگام‌سازی حسابفا.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_38ef9615b3f9f5e4c42bebcf38c18981'] = 'دریافت تغییرات از حسابفا ناموفق بود. خطا: %s';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ab478ae5b6b6f030b3c7ce72d82bec38'] = 'همگام‌سازی تغییرات حسابفا فقط تا حدی انجام شد. تغییر با شناسه %d ناموفق بود: %s. لاگ‌ها و صف را بررسی کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_df42f250b5d2acbf83954e738f56f69d'] = 'همگام‌سازی تغییرات حسابفا فقط تا حدی انجام شد: %s. لاگ‌ها و صف را بررسی کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_05ac717bc1cebd9fef9853150d53f902'] = 'همگام‌سازی تغییرات حسابفا کامل نشده است. پردازش‌شده: %d. باقی‌مانده: %d. همگام‌سازی را دوباره اجرا کرده و لاگ‌ها و صف را بررسی کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_9a023cca75d6cd60c16ff1d02386db5f'] = 'تغییر جدیدی در حسابفا وجود ندارد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_0addfb69fda13d80d5f75a6057c94eb3'] = 'تغییرات حسابفا با موفقیت همگام‌سازی شد. دریافت‌شده: %d. پردازش‌شده: %d. آخرین نقطه کنترل: %d.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_64be684022bfd946bf0db62216a53a5e'] = 'همگام‌سازی تغییرات حسابفا با موفقیت کامل نشد. لاگ‌ها و صف را بررسی کنید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d658bd89a2377c89e42907dbcf9ebfdf'] = 'قبل از همسان‌سازی تغییرات، ابتدا اتصال API را برقرار نمایید';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f6e6e22dd377f0b134fc906ca26e3560'] = 'همسان‌سازی محصولات با حسابفا موفقیت آمیز بود.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1edf5f2aa44f35f65e7c5249aac91e37'] = 'قبل از همسان‌سازی محصولات، ابتدا اتصال API را برقرار نمایید';

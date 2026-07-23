@@ -598,7 +598,7 @@ trait HesabfaSyncTrait
             $products = $response->Result->List;
             require_once(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaWebhook.php');
             foreach ($products as $item) {
-                HesabfaWebhook::setItemChanges($item, false);
+                HesabfaWebhook::setItemChanges($item, false, true);
             }
 
             if (count($products) >= self::HESABFA_BATCH_SIZE) {

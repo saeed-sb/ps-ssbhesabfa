@@ -19,4 +19,28 @@ class HesabfaWebhookChangeRepository
     public static function markDone($id) { return Db::getInstance()->update('ssb_hesabfa_webhook_change',array('status'=>'done','last_error'=>null,'date_upd'=>date('Y-m-d H:i:s')),'`change_id`='.(int)$id); }
     public static function markFailed($id,$error) { return Db::getInstance()->update('ssb_hesabfa_webhook_change',array('status'=>'failed','last_error'=>pSQL((string)$error),'date_upd'=>date('Y-m-d H:i:s')),'`change_id`='.(int)$id); }
     public static function isDone($id) { return (string)Db::getInstance()->getValue('SELECT `status` FROM `'._DB_PREFIX_.'ssb_hesabfa_webhook_change` WHERE `change_id`='.(int)$id)==='done'; }
+
+    public static function countByStatuses($statuses)
+    {
+        if (!is_array($statuses)) {
+            $statuses = array($statuses);
+        }
+
+        $quotedStatuses = array();
+        foreach ($statuses as $status) {
+            $status = trim((string) $status);
+            if ($status !== '') {
+                $quotedStatuses[] = '"' . pSQL($status) . '"';
+            }
+        }
+
+        if (empty($quotedStatuses)) {
+            return 0;
+        }
+
+        return (int) Db::getInstance()->getValue(
+            'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_change`'
+            . ' WHERE `status` IN (' . implode(',', $quotedStatuses) . ')'
+        );
+    }
 }
