@@ -946,12 +946,72 @@ trait HesabfaPaymentTrait
 
         $bankCode = Configuration::get($configurationName);
 
+        /*
+         * psy_paymenthelper may save a short payment title on the order
+         * (for example "تارا") while exposing a longer display title in
+         * the module settings (for example "درگاه پرداخت تارا").
+         * Keep the existing configuration keys intact and resolve the
+         * matching configured method by a normalized lookup name.
+         */
+        if (
+            $moduleName === 'psy_paymenthelper'
+            && ($bankCode === false || $bankCode === null || $bankCode === '')
+        ) {
+            $lookupName = $this->normalizePaymentLookupName($paymentName, $moduleName);
+
+            foreach ($this->getPaymentMethodsName() as $configuredMethod) {
+                if (
+                    empty($configuredMethod['module'])
+                    || (string) $configuredMethod['module'] !== $moduleName
+                    || empty($configuredMethod['id'])
+                ) {
+                    continue;
+                }
+
+                $configuredLookupName = $this->normalizePaymentLookupName(
+                    isset($configuredMethod['name']) ? $configuredMethod['name'] : '',
+                    $moduleName
+                );
+
+                if ($lookupName === '' || $configuredLookupName !== $lookupName) {
+                    continue;
+                }
+
+                $configuredBankCode = Configuration::get($configuredMethod['id']);
+                if (
+                    $configuredBankCode === false
+                    || $configuredBankCode === null
+                    || $configuredBankCode === ''
+                ) {
+                    continue;
+                }
+
+                $configurationName = (string) $configuredMethod['id'];
+                $bankCode = $configuredBankCode;
+                $paymentName = isset($configuredMethod['name'])
+                    ? (string) $configuredMethod['name']
+                    : $paymentName;
+                break;
+            }
+        }
+
         return array(
             'configuration_name' => $configurationName,
             'bank_code' => $bankCode,
             'module' => $moduleName,
             'payment' => $paymentName,
         );
+    }
+
+    private function normalizePaymentLookupName($paymentName, $moduleName = null)
+    {
+        $paymentName = $this->normalizePaymentName($paymentName, $moduleName);
+        $paymentName = preg_replace('/^درگاه\s+پرداخت\s+/u', '', $paymentName);
+        $paymentName = preg_replace('/\s+/u', ' ', trim((string) $paymentName));
+
+        return function_exists('mb_strtolower')
+            ? mb_strtolower($paymentName, 'UTF-8')
+            : strtolower($paymentName);
     }
 
     public function getInvoiceCodeByOrderId($id_order)

@@ -1,3 +1,10 @@
+## 2.3.22
+
+- Fixed automatic payment registration when `psy_paymenthelper` stores a short order payment title such as `تارا` but exposes a longer configured title such as `درگاه پرداخت تارا`.
+- Preserved the existing payment-method configuration key so the Hesabfa bank code, fee type, fee payer and related fee settings remain attached to the selected gateway.
+- Added lookup-only normalization for the Persian payment-gateway prefix, repeated whitespace and letter case.
+- Added a standalone no-schema upgrade handler for version 2.3.22.
+
 ## 2.3.21
 
 - Changed webhook synchronization to return structured API, received, processed, failed, error, checkpoint, and remaining-work details.

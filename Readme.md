@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.21`
+- **Current version:** `2.3.22`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -123,6 +123,7 @@ Supported fee modes:
 
 Additional payment controls include:
 
+- matching short order payment titles such as `تارا` to the full configured gateway title without changing the existing bank and fee configuration key;
 - merchant-paid or customer-paid fee selection;
 - customer extra-charge percentage;
 - fee-income account path and optional contact code;
