@@ -1,0 +1,101 @@
+name: Release v2.3.24
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.24.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: 71693b36ddedd572417506e8de55df8d97d4d57c
+      TAG: v2.3.24
+      ASSET: ssbhesabfa-v2.3.24.zip
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Verify release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          grep -Fq "\$this->version = '2.3.24';" ssbhesabfa.php
+          grep -Fq '<version>2.3.24</version>' config.xml
+          grep -Fq '<version>2.3.24</version>' config_fa.xml
+          test -f upgrade/upgrade-2.3.24.php
+          grep -Fq 'function upgrade_module_2_3_24' upgrade/upgrade-2.3.24.php
+          grep -Fq 'public function processPendingOnly($limit = 200)' classes/services/HesabfaWebhookService.php
+          grep -Fq 'processPendingChanges($result, 200)' classes/services/HesabfaWebhookService.php
+          grep -Fq 'Tools::getValue("webhook_limit", 20)' ssbhesabfa-cron.php
+          grep -Fq 'max(0, min(50, $webhookLimit))' ssbhesabfa-cron.php
+          grep -Fq 'new HesabfaWebhook(false)' ssbhesabfa-cron.php
+          grep -Fq 'processPendingOnly($webhookLimit)' ssbhesabfa-cron.php
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+          python3 -c "import xml.etree.ElementTree as ET; ET.parse('config.xml'); ET.parse('config_fa.xml')"
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive \
+            --format=zip \
+            --prefix=ssbhesabfa/ \
+            --output="$ASSET" \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore'
+          unzip -t "$ASSET"
+          test "$(unzip -Z1 "$ASSET" | awk '/\.php$/ { count++ } END { print count + 0 }')" -eq 74
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.24.php'
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|\.bak([.-]|$)|\.log$|(^|/)\.env($|\.)'; then
+            echo 'Development, secret, or backup file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          printf '%s\n' \
+            '## Changes' \
+            '' \
+            '- Allows the signed cron endpoint to resume Hesabfa webhook changes already stored in the ordered local journal without calling `setting/getChanges` again.' \
+            '- Adds an independent `webhook_limit` parameter with a default of 20, a maximum of 50, and 0 as an opt-out for a cron request.' \
+            '- Adds processed, pending, failed, checkpoint, and last-error webhook fields to the cron JSON response.' \
+            '- Reuses the existing journal processor for live webhook requests and cron backlog recovery.' \
+            '- Includes a no-schema PrestaShop upgrade handler for version 2.3.24.' \
+            '' \
+            '## Live verification' \
+            '' \
+            'The change was validated on Pixel: 800 pending webhook changes were processed to zero, failed changes remained zero, and the checkpoint advanced from 1109271 to 1110435.' \
+            '' \
+            '## Package' \
+            '' \
+            'Upload `ssbhesabfa-v2.3.24.zip` through PrestaShop Module Manager and run the module upgrade action.' \
+            '' \
+            'Validation: 74 PHP files parsed successfully, two XML files validated, release invariants checked, and the installable ZIP integrity was verified.' \
+            > release-notes.md
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.24' \
+            --notes-file release-notes.md \
+            --latest
