@@ -1,3 +1,11 @@
+## 2.3.24
+
+- Added cron processing for Hesabfa webhook changes already stored in the local journal, without calling `setting/getChanges` again.
+- Added the optional `webhook_limit` cron parameter, defaulting to 20 and capped at 50; setting it to 0 disables webhook-backlog processing for that request.
+- Added processed, pending, failed, checkpoint and last-error webhook fields to the cron JSON response.
+- Reused the ordered webhook journal processor for both live webhook requests and cron backlog recovery.
+- Added a standalone no-schema upgrade handler for version 2.3.24.
+
 ## 2.3.23
 
 - Made `ssbpurchaseprocess` optional for invoice notes, returning an empty note when the module is unavailable, disabled, incomplete, or returns invalid feature data.
