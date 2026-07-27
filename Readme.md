@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.23`
+- **Current version:** `2.3.24`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -312,7 +312,9 @@ Example cron entry:
 * * * * * curl -fsS 'COPY_THE_SIGNED_CRON_URL_FROM_THE_MODULE' >/dev/null
 ```
 
-The endpoint processes both the main queue and, when enabled, the Internal API queue. Its optional `limit` parameter is restricted to a value between 1 and 50; the default is 20.
+The endpoint processes the main queue, the Internal API queue when enabled, and pending Hesabfa webhook-journal changes when automatic synchronization is enabled. Its optional `limit` parameter controls the main and Internal API queues and is restricted to a value between 1 and 50; the default is 20.
+
+Webhook backlog processing has a separate optional `webhook_limit` parameter. It defaults to 20, is capped at 50, and can be set to 0 to skip webhook processing for a specific cron request. The JSON response reports the processed and remaining webhook counts, failed total, latest checkpoint, and last error.
 
 Choose a schedule suitable for the store's traffic. Running once per minute is typical for active queues.
 
