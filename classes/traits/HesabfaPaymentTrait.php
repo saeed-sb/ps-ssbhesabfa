@@ -2,12 +2,36 @@
 
 trait HesabfaPaymentTrait
 {
-    public function getInvoiceNote($id_ppp) {
+    public function getInvoiceNote($id_ppp)
+    {
         $note = '';
+
+        if (
+            !Module::isInstalled('ssbpurchaseprocess')
+            || !Module::isEnabled('ssbpurchaseprocess')
+        ) {
+            return $note;
+        }
+
+        $purchaseProcessModule = Module::getInstanceByName('ssbpurchaseprocess');
+        if (
+            !Validate::isLoadedObject($purchaseProcessModule)
+            || !class_exists('PurchaseProcessFeatureValueModel')
+            || !is_callable(array('PurchaseProcessFeatureValueModel', 'getProductFeaturesValue'))
+        ) {
+            return $note;
+        }
+
         $features = PurchaseProcessFeatureValueModel::getProductFeaturesValue($id_ppp);
+        if (!is_array($features)) {
+            return $note;
+        }
+
         foreach ($features as $feature) {
-            if ($feature['use_for_invoice_note']) {
-                $note .= $feature['name'] . ': ' . $feature['value'] . '
+            if (!empty($feature['use_for_invoice_note'])) {
+                $name = isset($feature['name']) ? (string) $feature['name'] : '';
+                $value = isset($feature['value']) ? (string) $feature['value'] : '';
+                $note .= $name . ': ' . $value . '
             ';
             }
         }
