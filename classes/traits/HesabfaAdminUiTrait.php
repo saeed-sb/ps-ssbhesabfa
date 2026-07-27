@@ -320,7 +320,7 @@ trait HesabfaAdminUiTrait
                 $html .= '<td><span class="label ' . $statusClass . '">' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</span><br /><small>' . htmlspecialchars($row['note'], ENT_QUOTES, 'UTF-8') . '</small></td>';
                 $html .= '<td>';
                 if ($row['can_apply']) {
-                    $html .= '<form method="post" action="' . $actionUrl . '" class="ssb-inline-action-form" class="ssb-inline-action-form ssb-confirm-form" data-confirm="' . htmlspecialchars($this->l('Apply this Hesabfa item code mapping?'), ENT_QUOTES, 'UTF-8') . '">';
+                    $html .= '<form method="post" action="' . $actionUrl . '" class="ssb-inline-action-form" data-confirm="' . htmlspecialchars($this->l('Apply this Hesabfa item code mapping?'), ENT_QUOTES, 'UTF-8') . '">';
                     $html .= '<input type="hidden" name="id_product" value="' . (int) $row['id_product'] . '" />';
                     $html .= '<input type="hidden" name="id_product_attribute" value="' . (int) $row['id_product_attribute'] . '" />';
                     $html .= '<input type="hidden" name="new_hesabfa_code" value="' . (int) $row['proposed_hesabfa_code'] . '" />';

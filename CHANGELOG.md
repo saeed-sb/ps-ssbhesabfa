@@ -1,3 +1,11 @@
+## 2.3.23
+
+- Made `ssbpurchaseprocess` optional for invoice notes, returning an empty note when the module is unavailable, disabled, incomplete, or returns invalid feature data.
+- Fixed duplicate confirmation dialogs on item-code mapping and other inline admin actions.
+- Namespaced and de-duplicated the delegated confirmation handler so loading the admin asset again cannot register a second prompt.
+- Removed the duplicate `class` attribute from the item-code mapping approval form.
+- Added a standalone no-schema upgrade handler for version 2.3.23.
+
 ## 2.3.22
 
 - Fixed automatic payment registration when `psy_paymenthelper` stores a short order payment title such as `تارا` but exposes a longer configured title such as `درگاه پرداخت تارا`.

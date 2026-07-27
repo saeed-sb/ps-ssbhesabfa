@@ -172,7 +172,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.22';
+        $this->version = '2.3.23';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

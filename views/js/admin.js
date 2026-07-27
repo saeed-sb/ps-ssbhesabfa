@@ -97,10 +97,15 @@
         return false;
     });
 })(jQuery);
-$(document).on('submit', '.ssb-confirm-form, .ssb-inline-action-form, .ssb-inline-action-form-last', function () {
-    var confirmText = $(this).data('confirm');
-    return confirmText ? confirm(confirmText) : true;
-});
+(function ($) {
+    var confirmFormSelector = '.ssb-confirm-form, .ssb-inline-action-form, .ssb-inline-action-form-last';
+    $(document)
+        .off('submit.ssbhesabfaConfirm', confirmFormSelector)
+        .on('submit.ssbhesabfaConfirm', confirmFormSelector, function () {
+            var confirmText = $(this).data('confirm');
+            return confirmText ? confirm(confirmText) : true;
+        });
+})(jQuery);
 
 $(document).ready(function () {
     function ssbhesabfaTogglePaymentFeeBlock(bankSelectElement) {
@@ -136,4 +141,3 @@ $(document).ready(function () {
     $(document).on('change', "select[name$='_FEE_PAYER']", function () { ssbhesabfaToggleFeePayerFields(this); });
     $(document).on('submit', 'form', function () { var deleteDataInput = $(this).find("input[name='SSBHESABFA_DELETE_DATA_ON_UNINSTALL']:checked"); var warning = $('.ssb-admin-wrap').data('delete-warning'); if (deleteDataInput.length && deleteDataInput.val() == '1' && warning) { return confirm(warning); } return true; });
 });
-$(document).on('submit', '.ssb-confirm-form, .ssb-inline-action-form, .ssb-inline-action-form-last', function () { var confirmText = $(this).data('confirm'); return confirmText ? confirm(confirmText) : true; });
