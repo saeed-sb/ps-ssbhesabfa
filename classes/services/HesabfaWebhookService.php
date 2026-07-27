@@ -129,7 +129,20 @@ class HesabfaWebhookService
             return $this->finalizeResult($result);
         }
 
-        foreach (HesabfaWebhookChangeRepository::getPending(200) as $row) {
+        return $this->finalizeResult($this->processPendingChanges($result, 200));
+    }
+
+    public function processPendingOnly($limit = 200)
+    {
+        $result = $this->createResult((int) Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID'));
+        $result['api_success'] = true;
+
+        return $this->finalizeResult($this->processPendingChanges($result, $limit));
+    }
+
+    protected function processPendingChanges($result, $limit)
+    {
+        foreach (HesabfaWebhookChangeRepository::getPending($limit) as $row) {
             $id = (int) $row['change_id'];
             if (!HesabfaWebhookChangeRepository::markRunning($id)) {
                 continue;
@@ -165,7 +178,7 @@ class HesabfaWebhookService
             }
         }
 
-        return $this->finalizeResult($result);
+        return $result;
     }
     protected function hasStoreTag($object, $idField)
     {
