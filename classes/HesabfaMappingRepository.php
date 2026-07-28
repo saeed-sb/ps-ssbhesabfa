@@ -151,15 +151,35 @@ class HesabfaMappingRepository
     }
     public static function upsert($type, $idPs, $idHesabfa, $idPsAttribute = 0)
     {
-        $type=(string)$type; $idPs=(int)$idPs; $idHesabfa=(int)$idHesabfa; $idPsAttribute=(int)$idPsAttribute;
-        if ($type==='' || $idPs<=0 || $idHesabfa<=0) return false;
-        $existing=self::getObjectRowId($type,$idPs,$idPsAttribute);
+        $type = (string) $type;
+        $idPs = (int) $idPs;
+        $idHesabfa = (int) $idHesabfa;
+        $idPsAttribute = (int) $idPsAttribute;
+
+        if ($type === '' || $idPs <= 0 || $idHesabfa <= 0) {
+            return false;
+        }
+
+        $existing = self::getObjectRowId($type, $idPs, $idPsAttribute);
         $conflict = self::shouldEnforceUniqueHesabfaCode($type)
             ? self::getObjectRowIdByCode($type, $idHesabfa)
             : 0;
-        if ($conflict && $conflict !== $existing) return false;
-        if ($existing) return Db::getInstance()->update('ssb_hesabfa',array('id_hesabfa'=>$idHesabfa),'`id_ssb_hesabfa`='.(int)$existing);
-        return Db::getInstance()->insert('ssb_hesabfa',array('obj_type'=>pSQL($type),'id_hesabfa'=>$idHesabfa,'id_ps'=>$idPs,'id_ps_attribute'=>$idPsAttribute));
+
+        if ($conflict && $conflict !== $existing) {
+            return false;
+        }
+
+        // The unique obj_type/id_ps/id_ps_attribute index makes this atomic.
+        // Concurrent responses can no longer race between SELECT and INSERT.
+        $sql = 'INSERT INTO ' . _DB_PREFIX_ . 'ssb_hesabfa '
+            . '(obj_type, id_hesabfa, id_ps, id_ps_attribute) VALUES ('
+            . '"' . pSQL($type) . '", '
+            . (int) $idHesabfa . ', '
+            . (int) $idPs . ', '
+            . (int) $idPsAttribute . ') '
+            . 'ON DUPLICATE KEY UPDATE id_hesabfa = VALUES(id_hesabfa)';
+
+        return (bool) Db::getInstance()->execute($sql);
     }
 
     public static function deleteProductMapping($idPs, $idPsAttribute = 0)

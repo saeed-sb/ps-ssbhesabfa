@@ -1,3 +1,12 @@
+## 2.3.25
+
+- Prevented empty product-form fields from silently deleting existing Hesabfa item mappings.
+- Added cross-process product synchronization locks to serialize concurrent product and combination hooks.
+- Added preflight mapping recovery from exact Hesabfa `ProductCode` and JSON `Tag` matches before any request can send `Code=null`.
+- Made mapping writes atomic with `INSERT ... ON DUPLICATE KEY UPDATE` and stopped reporting success when local persistence fails.
+- Added duplicate-candidate logging while deterministically keeping the oldest matching Hesabfa item as the canonical mapping.
+- Added a standalone no-schema upgrade handler for version 2.3.25.
+
 ## 2.3.24
 
 - Added cron processing for Hesabfa webhook changes already stored in the local journal, without calling `setting/getChanges` again.

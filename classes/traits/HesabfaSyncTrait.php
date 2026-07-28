@@ -116,32 +116,93 @@ trait HesabfaSyncTrait
 
     public function setItems($id_product_array)
     {
-        //ToDo: why key 0 must be null?????
-        if (!isset($id_product_array) || $id_product_array[0] == null) {
+        if (!is_array($id_product_array)) {
             return false;
         }
 
-        if (is_array($id_product_array) && empty($id_product_array)) {
+        $idProducts = array();
+        foreach ($id_product_array as $idProduct) {
+            $idProduct = (int) $idProduct;
+            if ($idProduct > 0) {
+                $idProducts[] = $idProduct;
+            }
+        }
+
+        $idProducts = array_values(array_unique($idProducts));
+        if (empty($idProducts)) {
             return true;
         }
 
-        $items = array();
-        foreach ($id_product_array as $id_product) {
-            $product = new Product($id_product);
-            $itemType = ($product->is_virtual == 1 ? 1 : 0);
+        sort($idProducts, SORT_NUMERIC);
+        $locks = $this->acquireProductSyncLocks($idProducts);
+        if ($locks === false) {
+            self::addLegacyLog(
+                'Product sync was stopped because its cross-process lock could not be acquired.',
+                3,
+                'PRODUCT_SYNC_LOCK_FAILED',
+                'Product',
+                implode(',', $idProducts),
+                true
+            );
+            return false;
+        }
 
-            //add base product
-            $code = $this->getItemCodeByProductId($id_product, 0);
+        try {
+            $items = $this->buildHesabfaItems($idProducts);
+            if ($items === false) {
+                return false;
+            }
+
+            // A mapping may have been lost while the Hesabfa item still exists.
+            // Recover it before sending Code=null, otherwise Hesabfa creates a new item.
+            if (!$this->recoverMissingItemMappings($items)) {
+                return false;
+            }
+
+            return $this->saveItems($items);
+        } catch (Exception $e) {
+            self::addLegacyLog(
+                'Product sync failed inside the protected section. Details: ' . $e->getMessage(),
+                3,
+                'PRODUCT_SYNC_PROTECTED_SECTION_FAILED',
+                'Product',
+                implode(',', $idProducts),
+                true
+            );
+            return false;
+        } finally {
+            $this->releaseProductSyncLocks($locks);
+        }
+    }
+
+    private function buildHesabfaItems(array $idProducts)
+    {
+        $items = array();
+
+        foreach ($idProducts as $idProduct) {
+            $product = new Product((int) $idProduct);
+            if (!Validate::isLoadedObject($product)) {
+                self::addLegacyLog(
+                    'Product sync was stopped because the PrestaShop product could not be loaded.',
+                    3,
+                    'PRODUCT_SYNC_PRODUCT_NOT_FOUND',
+                    'Product',
+                    (int) $idProduct,
+                    true
+                );
+                return false;
+            }
+
+            $itemType = ((int) $product->is_virtual === 1 ? 1 : 0);
             $item = array(
-                'Code' => $code,
+                'Code' => $this->getItemCodeByProductId((int) $idProduct, 0),
                 'Name' => mb_substr($product->name[$this->id_default_lang], 0, 99),
                 'ItemType' => $itemType,
-//                'Barcode' => $this->getBarcode($id_product),
                 'SellPrice' => $product->price * 10,
-                'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => 0)),
+                'Tag' => json_encode(array('id_product' => (int) $idProduct, 'id_attribute' => 0)),
                 'Active' => $product->active ? true : false,
                 'NodeFamily' => $this->getCategoryPathForExport($product->id_category_default),
-                'ProductCode' => $id_product,
+                'ProductCode' => (int) $idProduct,
             );
 
             if (!Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
@@ -151,23 +212,34 @@ trait HesabfaSyncTrait
             $items[] = $item;
 
             if ($product->hasAttributes() > 0) {
-                //Combinations
                 $combinations = $product->getAttributesResume($this->id_default_lang);
+                if (!is_array($combinations)) {
+                    continue;
+                }
+
                 foreach ($combinations as $combination) {
-                    $code = $this->getItemCodeByProductId($id_product, $combination['id_product_attribute']);
+                    $idAttribute = (int) $combination['id_product_attribute'];
                     $item = array(
-                        'Code' => $code,
-                        'Name' => mb_substr($product->name[$this->id_default_lang].' - '. $combination['attribute_designation'], 0, 99),
+                        'Code' => $this->getItemCodeByProductId((int) $idProduct, $idAttribute),
+                        'Name' => mb_substr(
+                            $product->name[$this->id_default_lang] . ' - ' . $combination['attribute_designation'],
+                            0,
+                            99
+                        ),
                         'ItemType' => $itemType,
-//                        'Barcode' => $this->getBarcode($id_product, $combination['id_product_attribute']),
-                        'Tag' => json_encode(array('id_product' => $id_product, 'id_attribute' => $combination['id_product_attribute'])),
+                        'Tag' => json_encode(array(
+                            'id_product' => (int) $idProduct,
+                            'id_attribute' => $idAttribute,
+                        )),
                         'Active' => $product->active ? true : false,
                         'NodeFamily' => $this->getCategoryPathForExport($product->id_category_default),
-                        'ProductCode' => $id_product,
+                        'ProductCode' => (int) $idProduct,
                     );
 
                     if (!Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
-                        $item['SellPrice'] = $this->getPriceInHesabfaDefaultCurrency($product->price + $combination['price']);
+                        $item['SellPrice'] = $this->getPriceInHesabfaDefaultCurrency(
+                            $product->price + $combination['price']
+                        );
                     }
 
                     $items[] = $item;
@@ -175,50 +247,333 @@ trait HesabfaSyncTrait
             }
         }
 
-        if (!$this->saveItems($items)) {
-            return false;
+        return $items;
+    }
+
+    private function recoverMissingItemMappings(array &$items)
+    {
+        $missingKeys = array();
+        $productCodes = array();
+
+        foreach ($items as $item) {
+            if (!empty($item['Code'])) {
+                continue;
+            }
+
+            $identity = $this->getProductIdentityFromTag(isset($item['Tag']) ? $item['Tag'] : null);
+            if ($identity === false) {
+                self::addLegacyLog(
+                    'Product sync was stopped because an outbound item has an invalid Tag.',
+                    3,
+                    'PRODUCT_SYNC_INVALID_TAG',
+                    'Product',
+                    null,
+                    true
+                );
+                return false;
+            }
+
+            $key = $identity['id_product'] . ':' . $identity['id_attribute'];
+            $missingKeys[$key] = $identity;
+            $productCodes[(string) $identity['id_product']] = (string) $identity['id_product'];
         }
+
+        if (empty($missingKeys)) {
+            return true;
+        }
+
+        $hesabfa = new HesabfaApi();
+        $skip = 0;
+        $take = 100;
+        $candidates = array();
+        $candidateCodes = array();
+
+        do {
+            $response = $hesabfa->itemGetItems(array(
+                'take' => $take,
+                'skip' => $skip,
+                'sortBy' => 'Code',
+                'sortDesc' => false,
+                'filters' => array(
+                    array(
+                        'property' => 'ProductCode',
+                        'operator' => 'in',
+                        'value' => array_values($productCodes),
+                    ),
+                ),
+            ));
+
+            if (!is_object($response) || empty($response->Success) || !isset($response->Result)) {
+                $details = is_object($response) && isset($response->ErrorMessage)
+                    ? (string) $response->ErrorMessage
+                    : 'No valid response was received.';
+                $errorCode = is_object($response) && isset($response->ErrorCode)
+                    ? (string) $response->ErrorCode
+                    : 'PRODUCT_MAPPING_RECOVERY_FAILED';
+
+                self::addLegacyLog(
+                    'Product sync was stopped because existing Hesabfa items could not be checked. Details: ' . $details,
+                    3,
+                    $errorCode,
+                    'Product',
+                    implode(',', array_values($productCodes)),
+                    true
+                );
+                return false;
+            }
+
+            $list = isset($response->Result->List) && is_array($response->Result->List)
+                ? $response->Result->List
+                : array();
+
+            foreach ($list as $remoteItem) {
+                if (!is_object($remoteItem) || empty($remoteItem->Code)) {
+                    continue;
+                }
+
+                $identity = $this->getProductIdentityFromTag(
+                    isset($remoteItem->Tag) ? $remoteItem->Tag : null
+                );
+                if ($identity === false) {
+                    continue;
+                }
+
+                $key = $identity['id_product'] . ':' . $identity['id_attribute'];
+                if (!isset($missingKeys[$key])) {
+                    continue;
+                }
+
+                $code = (int) $remoteItem->Code;
+                if ($code <= 0) {
+                    continue;
+                }
+
+                if (!isset($candidateCodes[$key])) {
+                    $candidateCodes[$key] = array();
+                }
+                $candidateCodes[$key][$code] = $code;
+
+                if (!isset($candidates[$key]) || $code < $candidates[$key]) {
+                    $candidates[$key] = $code;
+                }
+            }
+
+            $count = count($list);
+            $skip += $count;
+            $filteredCount = isset($response->Result->FilteredCount)
+                ? (int) $response->Result->FilteredCount
+                : $skip;
+
+            if ($skip >= 10000 && $skip < $filteredCount) {
+                self::addLegacyLog(
+                    'Product sync was stopped because the mapping recovery result exceeded its safety limit.',
+                    3,
+                    'PRODUCT_MAPPING_RECOVERY_LIMIT',
+                    'Product',
+                    implode(',', array_values($productCodes)),
+                    true
+                );
+                return false;
+            }
+        } while ($count > 0 && $skip < $filteredCount);
+
+        foreach ($items as $index => $item) {
+            if (!empty($item['Code'])) {
+                continue;
+            }
+
+            $identity = $this->getProductIdentityFromTag($item['Tag']);
+            $key = $identity['id_product'] . ':' . $identity['id_attribute'];
+            if (!isset($candidates[$key])) {
+                continue;
+            }
+
+            $code = (int) $candidates[$key];
+            if (!HesabfaMappingRepository::upsert(
+                'product',
+                $identity['id_product'],
+                $code,
+                $identity['id_attribute']
+            )) {
+                self::addLegacyLog(
+                    'Product sync was stopped because a recovered Hesabfa mapping could not be saved. Item code: ' . $code,
+                    3,
+                    'PRODUCT_MAPPING_RECOVERY_SAVE_FAILED',
+                    'Product',
+                    $identity['id_product'],
+                    true
+                );
+                return false;
+            }
+
+            $items[$index]['Code'] = $code;
+            $codes = array_values($candidateCodes[$key]);
+            sort($codes, SORT_NUMERIC);
+
+            $message = 'Recovered missing Hesabfa product mapping. Item code: ' . $code;
+            if (count($codes) > 1) {
+                $message .= '. Duplicate candidates detected: ' . implode(',', $codes);
+            }
+            self::addLegacyLog(
+                $message,
+                count($codes) > 1 ? 2 : 1,
+                count($codes) > 1 ? 'PRODUCT_DUPLICATE_CANDIDATES_FOUND' : null,
+                'Product',
+                $identity['id_product'],
+                true
+            );
+        }
+
         return true;
     }
 
     private function saveItems($items)
     {
-        $hesabfa = new HesabfaApi();
-        $response = $hesabfa->itemBatchSave($items);
-        if ($response->Success) {
-            foreach ($response->Result as $item) {
-                $json = json_decode($item->Tag);
-                $id_ssb_hesabfa = $this->getObjectId('product', (int)$json->id_product, (int)$json->id_attribute);
-
-                if ($id_ssb_hesabfa == 0) {
-                    $obj = new HesabfaModel();
-                    $obj->id_hesabfa = (int)$item->Code;
-                    $obj->obj_type = 'product';
-                    $obj->id_ps = (int)$json->id_product;
-                    $obj->id_ps_attribute = (int)$json->id_attribute;
-
-                    $obj->add();
-                    $msg = 'Hesabfa item was added successfully. Item code: ' . $item->Code;
-                    self::addLegacyLog($msg, 1, null, 'Product', $json->id_product, true);
-                } else {
-                    $obj = new HesabfaModel($id_ssb_hesabfa);
-                    $obj->id_hesabfa = (int)$item->Code;
-                    $obj->obj_type = 'product';
-                    $obj->id_ps = (int)$json->id_product;
-                    $obj->id_ps_attribute = (int)$json->id_attribute;
-
-                    $obj->update();
-                    $msg = 'Hesabfa item was updated successfully. Item code: ' . $item->Code;
-                    self::addLegacyLog($msg, 1, null, 'Product', $json->id_product, true);
-                }
-            }
+        if (empty($items)) {
             return true;
-        } else {
-            $msg = 'Failed to add or update Hesabfa items. Details: ' . $response->ErrorMessage;
-            self::addLegacyLog($msg, 2, $response->ErrorCode, 'Products', null, true);
         }
 
-        return false;
+        $hesabfa = new HesabfaApi();
+        $response = $hesabfa->itemBatchSave($items);
+
+        if (!is_object($response) || empty($response->Success) || !isset($response->Result) || !is_array($response->Result)) {
+            $details = is_object($response) && isset($response->ErrorMessage)
+                ? (string) $response->ErrorMessage
+                : 'No valid response was received.';
+            $errorCode = is_object($response) && isset($response->ErrorCode)
+                ? $response->ErrorCode
+                : 'PRODUCT_BATCH_SAVE_FAILED';
+
+            self::addLegacyLog(
+                'Failed to add or update Hesabfa items. Details: ' . $details,
+                3,
+                $errorCode,
+                'Products',
+                null,
+                true
+            );
+            return false;
+        }
+
+        $success = true;
+        foreach ($response->Result as $item) {
+            if (!is_object($item) || empty($item->Code)) {
+                $success = false;
+                self::addLegacyLog(
+                    'Hesabfa returned an invalid item while saving products.',
+                    3,
+                    'PRODUCT_BATCH_SAVE_INVALID_ITEM',
+                    'Products',
+                    null,
+                    true
+                );
+                continue;
+            }
+
+            $identity = $this->getProductIdentityFromTag(isset($item->Tag) ? $item->Tag : null);
+            if ($identity === false) {
+                $success = false;
+                self::addLegacyLog(
+                    'Hesabfa returned an item with an invalid Tag while saving products. Item code: ' . (int) $item->Code,
+                    3,
+                    'PRODUCT_BATCH_SAVE_INVALID_TAG',
+                    'Products',
+                    null,
+                    true
+                );
+                continue;
+            }
+
+            $previousCode = HesabfaMappingRepository::getHesabfaCode(
+                'product',
+                $identity['id_product'],
+                $identity['id_attribute']
+            );
+            $code = (int) $item->Code;
+
+            if (!HesabfaMappingRepository::upsert(
+                'product',
+                $identity['id_product'],
+                $code,
+                $identity['id_attribute']
+            )) {
+                $success = false;
+                self::addLegacyLog(
+                    'Hesabfa item was saved remotely, but its local mapping could not be persisted. Item code: ' . $code,
+                    3,
+                    'PRODUCT_MAPPING_PERSIST_FAILED',
+                    'Product',
+                    $identity['id_product'],
+                    true
+                );
+                continue;
+            }
+
+            $msg = $previousCode === null
+                ? 'Hesabfa item was added successfully. Item code: ' . $code
+                : 'Hesabfa item was updated successfully. Item code: ' . $code;
+            self::addLegacyLog($msg, 1, null, 'Product', $identity['id_product'], true);
+        }
+
+        return $success;
+    }
+
+    private function getProductIdentityFromTag($tag)
+    {
+        if (!is_string($tag) || trim($tag) === '') {
+            return false;
+        }
+
+        $decoded = json_decode($tag, true);
+        if (!is_array($decoded) || empty($decoded['id_product'])) {
+            return false;
+        }
+
+        $idProduct = (int) $decoded['id_product'];
+        $idAttribute = isset($decoded['id_attribute']) ? (int) $decoded['id_attribute'] : 0;
+        if ($idProduct <= 0 || $idAttribute < 0) {
+            return false;
+        }
+
+        return array(
+            'id_product' => $idProduct,
+            'id_attribute' => $idAttribute,
+        );
+    }
+
+    private function acquireProductSyncLocks(array $idProducts)
+    {
+        $handles = array();
+        $databaseName = defined('_DB_NAME_') ? (string) _DB_NAME_ : 'prestashop';
+        $databasePrefix = defined('_DB_PREFIX_') ? (string) _DB_PREFIX_ : '';
+        $namespace = sha1($databaseName . '|' . $databasePrefix);
+        $directory = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR;
+
+        foreach ($idProducts as $idProduct) {
+            $path = $directory . 'ssbhesabfa-' . $namespace . '-product-' . (int) $idProduct . '.lock';
+            $handle = @fopen($path, 'c');
+            if ($handle === false || !@flock($handle, LOCK_EX)) {
+                if (is_resource($handle)) {
+                    @fclose($handle);
+                }
+                $this->releaseProductSyncLocks($handles);
+                return false;
+            }
+            $handles[] = $handle;
+        }
+
+        return $handles;
+    }
+
+    private function releaseProductSyncLocks(array $handles)
+    {
+        for ($index = count($handles) - 1; $index >= 0; $index--) {
+            if (!is_resource($handles[$index])) {
+                continue;
+            }
+            @flock($handles[$index], LOCK_UN);
+            @fclose($handles[$index]);
+        }
     }
 
     public function getCategoryPathForExport($id_category)

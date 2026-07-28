@@ -57,15 +57,10 @@ class HesabfaProductMappingService
         $current = HesabfaMappingRepository::getProductMappingRow((int) $idProduct, (int) $idAttribute);
 
         if ($raw === '') {
-            if ($current && !HesabfaMappingRepository::deleteProductMapping((int) $idProduct, (int) $idAttribute)) {
-                $result['success'] = false;
-                $result['errors'][] = sprintf($this->module->l('Could not remove the Hesabfa mapping for %s.', 'ssbhesabfa'), $label);
-                return;
-            }
-            if ($current) {
-                $result['removed'] = true;
-                $result['messages'][] = sprintf($this->module->l('The Hesabfa mapping for %s was removed.', 'ssbhesabfa'), $label);
-            }
+            // Product forms can submit this field empty even when the operator did
+            // not explicitly edit the mapping. Empty therefore means "unchanged".
+            // Removing a mapping implicitly is unsafe because the next outbound
+            // sync would create a second Hesabfa item.
             return;
         }
 
