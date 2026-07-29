@@ -7,23 +7,18 @@ trait HesabfaAdminUiTrait
         $jobStats = HesabfaJobRepository::getAlertStats();
         $apiStats = HesabfaInternalApiRequestRepository::getAlertStats();
 
-        $retryWait = (int) $jobStats['retry_wait'] + (int) $apiStats['retry_wait'];
         $needsAttention = (int) $jobStats['needs_attention'] + (int) $apiStats['needs_attention'];
         $duplicateCheck = (int) $jobStats['duplicate_check'] + (int) $apiStats['duplicate_check'];
         $manualAttention = $needsAttention + $duplicateCheck;
 
-        if ($retryWait <= 0 && $manualAttention <= 0) {
+        if ($manualAttention <= 0) {
             return '';
         }
 
-        $alertClass = $manualAttention > 0 ? 'alert-danger' : 'alert-warning';
-        $parts = array();
-        if ($manualAttention > 0) {
-            $parts[] = sprintf($this->l('%d queue jobs require manual attention.'), $manualAttention);
-        }
-        if ($retryWait > 0) {
-            $parts[] = sprintf($this->l('%d queue jobs are waiting for retry.'), $retryWait);
-        }
+        $alertClass = 'alert-danger';
+        $parts = array(
+            sprintf($this->l('%d queue jobs require manual attention.'), $manualAttention),
+        );
 
         $html = '<div class="alert ' . $alertClass . ' ssb-queue-alert">';
         $html .= '<i class="icon-warning-sign"></i> <strong>' . htmlspecialchars($this->l('Queue attention required'), ENT_QUOTES, 'UTF-8') . '</strong> ';

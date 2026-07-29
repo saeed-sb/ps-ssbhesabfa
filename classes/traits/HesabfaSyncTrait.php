@@ -728,6 +728,21 @@ trait HesabfaSyncTrait
         }
 
         $code = $this->getContactCodeByCustomerId($id_customer);
+        if ($code === false || (int) $code <= 0) {
+            HesabfaApiResponse::normalize((object) array(
+                'Success' => false,
+                'ErrorCode' => 'CUSTOMER_SYNC_PENDING',
+                'ErrorMessage' => 'Customer mapping is not available yet. Address synchronization must wait for customer synchronization.',
+            ));
+            self::addLegacyLog(
+                'Hesabfa contact address synchronization was deferred until the customer mapping is available.',
+                1,
+                'CUSTOMER_SYNC_PENDING',
+                'Customer',
+                $id_customer
+            );
+            return false;
+        }
 
         $customer = new Customer($id_customer);
         $address = new Address($id_address);

@@ -30,7 +30,7 @@ class HesabfaRetryPolicy
             return self::STATUS_DUPLICATE_CHECK;
         }
 
-        if ($code === '100' || $code === '101' || $code === 'RATE_LIMIT' || $code === 'INVOICE_MAPPING_NOT_FOUND') {
+        if ($code === '100' || $code === '101' || $code === 'RATE_LIMIT' || $code === 'INVOICE_MAPPING_NOT_FOUND' || $code === 'CUSTOMER_SYNC_PENDING') {
             return self::STATUS_RETRY_WAIT;
         }
 
@@ -80,6 +80,46 @@ class HesabfaRetryPolicy
         }
 
         return self::STATUS_NEEDS_ATTENTION;
+    }
+
+    public static function shouldRetryUntilSuccess($errorCode, $message = '', $httpCode = null)
+    {
+        $code = strtoupper(trim((string) $errorCode));
+        $message = strtolower((string) $message);
+
+        if (in_array($code, array('100', '101', 'RATE_LIMIT', 'CUSTOMER_SYNC_PENDING'), true)) {
+            return true;
+        }
+
+        if (strpos($code, 'CURL_') === 0) {
+            $curlCode = (int) substr($code, 5);
+            return in_array($curlCode, array(5, 6, 7, 18, 28, 35, 47, 52, 55, 56, 92), true);
+        }
+
+        if (strpos($code, 'HTTP_') === 0) {
+            $statusCode = (int) substr($code, 5);
+            return $statusCode === 408 || $statusCode === 425 || $statusCode === 429 || $statusCode >= 500;
+        }
+
+        if ($httpCode !== null) {
+            $httpCode = (int) $httpCode;
+            if ($httpCode === 408 || $httpCode === 425 || $httpCode === 429 || $httpCode >= 500) {
+                return true;
+            }
+        }
+
+        if (in_array($code, array('NO_RESPONSE', 'INVALID_JSON', 'INVALID_HESABFA_RESPONSE'), true)) {
+            return true;
+        }
+
+        return strpos($message, 'timeout') !== false
+            || strpos($message, 'timed out') !== false
+            || strpos($message, 'could not resolve') !== false
+            || strpos($message, 'resolving') !== false
+            || strpos($message, 'connection') !== false
+            || strpos($message, 'network') !== false
+            || strpos($message, 'temporar') !== false
+            || strpos($message, 'rate limit') !== false;
     }
 
     public static function isRequestIdExpired($createdAt)

@@ -84,6 +84,10 @@ class HesabfaQueueService
             return false;
         }
 
+        if ($this->deferUntilCustomerMappingExists($job, $payload)) {
+            return false;
+        }
+
         if (!HesabfaJobRepository::markRunning($id)) {
             return false;
         }
@@ -137,11 +141,54 @@ class HesabfaQueueService
                 $status = $response ? HesabfaRetryPolicy::classifyResponse($response) : HesabfaRetryPolicy::classify($code, $message);
             }
             HesabfaJobRepository::markOutcome($id, $status, $message, $code, $response);
+            $status = $this->getPersistedStatus($id, $status);
             $this->logFailure($job, $payload, $status, $code, $message);
             return false;
         } finally {
             HesabfaRequestUniqueId::endContext();
         }
+    }
+
+    protected function deferUntilCustomerMappingExists(array $job, array $payload)
+    {
+        if ((string) $job['job_type'] !== 'sync_customer_address') {
+            return false;
+        }
+
+        $idCustomer = isset($payload['id_customer']) ? (int) $payload['id_customer'] : 0;
+        if ($idCustomer <= 0) {
+            return false;
+        }
+
+        $contactCode = $this->module->getContactCodeByCustomerId($idCustomer);
+        if ($contactCode !== false && (int) $contactCode > 0) {
+            return false;
+        }
+
+        HesabfaJobRepository::enqueue(
+            'sync_customer',
+            array(
+                'id_customer' => $idCustomer,
+                'source_hook' => 'sync_customer_address_dependency',
+            ),
+            'Customer',
+            $idCustomer
+        );
+
+        HesabfaJobRepository::markDeferred(
+            (int) $job['id_ssb_hesabfa_job'],
+            'Customer mapping is not available yet. The address job will retry automatically after customer synchronization.',
+            'CUSTOMER_SYNC_PENDING',
+            120
+        );
+
+        return true;
+    }
+
+    protected function getPersistedStatus($id, $fallbackStatus)
+    {
+        $updated = HesabfaJobRepository::getById((int) $id);
+        return $updated && !empty($updated['status']) ? (string) $updated['status'] : (string) $fallbackStatus;
     }
 
     protected function executeJob(array $job, array $payload)
@@ -199,6 +246,7 @@ class HesabfaQueueService
             $status = HesabfaRetryPolicy::classifyResponse($response);
         }
         HesabfaJobRepository::markOutcome($id, $status, $message, $code, $response);
+        $status = $this->getPersistedStatus($id, $status);
         $this->logFailure($job, $payload, $status, $code, $message);
         return false;
     }
@@ -211,7 +259,7 @@ class HesabfaQueueService
         }
         Ssbhesabfa::addLegacyLog(
             'Hesabfa async job changed to ' . $status . '. ' . $message,
-            $status === HesabfaRetryPolicy::STATUS_RETRY_WAIT ? 2 : 3,
+            $status === HesabfaRetryPolicy::STATUS_RETRY_WAIT ? 1 : 3,
             $code,
             $job['object_type'],
             $job['object_id'],

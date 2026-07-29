@@ -5,7 +5,6 @@ if (!defined('_PS_VERSION_')) {
 
 class HesabfaJobRepository
 {
-    const SYNC_DEDUPE_SECONDS = 120;
     const DEFAULT_MAX_ATTEMPTS = 5;
     const STALE_RUNNING_MINUTES = 15;
 
@@ -55,7 +54,6 @@ class HesabfaJobRepository
         $query->where('`object_type`="' . pSQL((string) $objectType) . '"');
         $query->where('`object_id`="' . pSQL((string) $objectId) . '"');
         $query->where('`status` IN ("pending","retry_wait")');
-        $query->where('`date_add`>=DATE_SUB(NOW(),INTERVAL ' . self::SYNC_DEDUPE_SECONDS . ' SECOND)');
         $query->orderBy('`id_ssb_hesabfa_job` DESC');
         $row = Db::getInstance()->getRow($query);
         return is_array($row) ? $row : null;
@@ -254,17 +252,22 @@ class HesabfaJobRepository
         );
     }
 
-    public static function markWaitingForConnection($id, $message = 'Hesabfa API is not connected.', $delay = 600)
+    public static function markDeferred($id, $message, $errorCode, $delay = 600)
     {
         return Db::getInstance()->update('ssb_hesabfa_job', array(
             'status' => 'retry_wait',
             'last_error' => pSQL((string) $message),
-            'last_error_code' => 'HESABFA_NOT_CONNECTED',
+            'last_error_code' => pSQL((string) $errorCode),
             'next_run_at' => date('Y-m-d H:i:s', time() + max(60, (int) $delay)),
             'locked_at' => null,
             'finished_at' => null,
             'date_upd' => date('Y-m-d H:i:s'),
         ), '`id_ssb_hesabfa_job`=' . (int) $id);
+    }
+
+    public static function markWaitingForConnection($id, $message = 'Hesabfa API is not connected.', $delay = 600)
+    {
+        return self::markDeferred($id, $message, 'HESABFA_NOT_CONNECTED', $delay);
     }
 
     public static function markFinished($id)
@@ -287,14 +290,26 @@ class HesabfaJobRepository
         $status = (string) $status;
         $nextRunAt = null;
         $finishedAt = null;
+        $storedAttempts = $attempts;
 
         if ($status === HesabfaRetryPolicy::STATUS_RETRY_WAIT) {
-            if ($attempts >= self::getMaxAttempts()) {
+            $httpCode = null;
+            if (is_object($response) && isset($response->HttpCode)) {
+                $httpCode = (int) $response->HttpCode;
+            } elseif (is_array($response) && isset($response['http_code'])) {
+                $httpCode = (int) $response['http_code'];
+            }
+
+            $retryUntilSuccess = HesabfaRetryPolicy::shouldRetryUntilSuccess($errorCode, $error, $httpCode);
+            if ($attempts >= self::getMaxAttempts() && !$retryUntilSuccess) {
                 $status = HesabfaRetryPolicy::STATUS_DEAD;
                 $finishedAt = date('Y-m-d H:i:s');
             } else {
                 $delay = HesabfaRetryPolicy::getRetryAfter($response, self::getRetryDelay($attempts));
                 $nextRunAt = date('Y-m-d H:i:s', time() + $delay);
+                if ($attempts >= self::getMaxAttempts()) {
+                    $storedAttempts = max(0, self::getMaxAttempts() - 1);
+                }
             }
         } else {
             $finishedAt = date('Y-m-d H:i:s');
@@ -302,6 +317,7 @@ class HesabfaJobRepository
 
         return Db::getInstance()->update('ssb_hesabfa_job', array(
             'status' => pSQL($status),
+            'attempts' => (int) $storedAttempts,
             'last_error' => pSQL((string) $error),
             'last_error_code' => pSQL((string) $errorCode),
             'last_response' => $response === null ? null : pSQL(json_encode($response), true),
