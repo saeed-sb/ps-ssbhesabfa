@@ -202,20 +202,62 @@ class HesabfaWebhookService
         if ($type==='Invoice') {
             $r=$api->invoiceGetById(array($change->ObjectId)); if (!$r->Success) throw new Exception($r->ErrorMessage); foreach ((array)$r->Result as $o) if (!$this->handler->setInvoiceChanges($o)) throw new Exception('Invoice change could not be applied.');
             if (!empty($change->Extra)) {
-                foreach (array_filter(explode(',', $change->Extra)) as $code) {
-                    $itemResponse = $api->itemGet((int) $code);
+                $itemCodes = array_values(array_unique(array_filter(
+                    array_map('trim', explode(',', (string) $change->Extra)),
+                    'strlen'
+                )));
+                $queryInfo = array(
+                    'Filters' => array(array(
+                        'Property' => 'Code',
+                        'Operator' => 'in',
+                        'Value' => $itemCodes,
+                    )),
+                );
+                $itemResponse = $api->itemGetItems($queryInfo);
 
-                    if (!$itemResponse->Success) {
-                        throw new Exception($itemResponse->ErrorMessage);
+                if (!is_object($itemResponse) || empty($itemResponse->Success)) {
+                    $errorMessage = is_object($itemResponse) && isset($itemResponse->ErrorMessage)
+                        ? trim((string) $itemResponse->ErrorMessage)
+                        : '';
+                    $errorCode = is_object($itemResponse) && isset($itemResponse->ErrorCode)
+                        ? trim((string) $itemResponse->ErrorCode)
+                        : '';
+                    if ($errorMessage === '') {
+                        $errorMessage = 'Hesabfa invoice items could not be fetched.';
                     }
+                    if ($errorCode !== '' && $errorCode !== '0') {
+                        $errorMessage .= ' Hesabfa error code: ' . $errorCode . '.';
+                    }
+                    throw new Exception($errorMessage);
+                }
 
-                    if (!$this->hasStoreTag($itemResponse->Result, 'id_product')) {
+                $items = isset($itemResponse->Result->List) && is_array($itemResponse->Result->List)
+                    ? $itemResponse->Result->List
+                    : array();
+                $returnedCodes = array();
+
+                foreach ($items as $item) {
+                    if (isset($item->Code)) {
+                        $returnedCodes[] = (string) $item->Code;
+                    }
+                    if (!$this->hasStoreTag($item, 'id_product')) {
                         continue;
                     }
-
-                    if (!$this->handler->setItemChanges($itemResponse->Result, false, true)) {
+                    if (!$this->handler->setItemChanges($item, false, true)) {
                         throw new Exception('Invoice item change could not be applied.');
                     }
+                }
+
+                $missingCodes = array_values(array_diff($itemCodes, $returnedCodes));
+                if (!empty($missingCodes)) {
+                    Ssbhesabfa::addLegacyLog(
+                        'Invoice webhook referenced item codes that no longer exist in Hesabfa and were skipped: ' . implode(', ', $missingCodes),
+                        2,
+                        'WEBHOOK_INVOICE_ITEMS_MISSING',
+                        'Webhook',
+                        isset($change->Id) ? (int) $change->Id : null,
+                        true
+                    );
                 }
             }
             if (Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty') && in_array((int)$change->Action,array(121,122,123),true)) {

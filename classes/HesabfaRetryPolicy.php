@@ -30,7 +30,7 @@ class HesabfaRetryPolicy
             return self::STATUS_DUPLICATE_CHECK;
         }
 
-        if ($code === '100' || $code === '101' || $code === 'RATE_LIMIT') {
+        if ($code === '100' || $code === '101' || $code === 'RATE_LIMIT' || $code === 'INVOICE_MAPPING_NOT_FOUND') {
             return self::STATUS_RETRY_WAIT;
         }
 

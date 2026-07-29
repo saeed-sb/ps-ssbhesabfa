@@ -11,14 +11,40 @@ class HesabfaIssueRepository
 {
     public static function add($issueType, $severity, $message, $objectType = null, $objectId = null, $operationKey = null)
     {
+        $issueType = (string) $issueType;
+        $objectType = (string) $objectType;
+        $objectId = (string) $objectId;
+        $operationKey = (string) $operationKey;
+        $normalizedMessage = HesabfaTextHelper::normalizeLogMessage($message);
+
+        $query = new DbQuery();
+        $query->select('`id_ssb_hesabfa_issue`');
+        $query->from('ssb_hesabfa_issue');
+        $query->where('`issue_type` = "' . pSQL($issueType) . '"');
+        $query->where('`object_type` = "' . pSQL($objectType) . '"');
+        $query->where('`object_id` = "' . pSQL($objectId) . '"');
+        $query->where('`operation_key` = "' . pSQL($operationKey) . '"');
+        $query->where('`status` IN ("open","retrying")');
+        $query->orderBy('`id_ssb_hesabfa_issue` DESC');
+
+        $existingId = (int) Db::getInstance()->getValue($query);
+        if ($existingId > 0) {
+            return Db::getInstance()->update('ssb_hesabfa_issue', array(
+                'severity' => pSQL((string) $severity),
+                'status' => pSQL('open'),
+                'message' => pSQL($normalizedMessage),
+                'date_upd' => date('Y-m-d H:i:s'),
+            ), '`id_ssb_hesabfa_issue` = ' . $existingId);
+        }
+
         return Db::getInstance()->insert('ssb_hesabfa_issue', array(
-            'issue_type' => pSQL((string) $issueType),
+            'issue_type' => pSQL($issueType),
             'severity' => pSQL((string) $severity),
             'status' => pSQL('open'),
-            'object_type' => pSQL((string) $objectType),
-            'object_id' => pSQL((string) $objectId),
-            'operation_key' => pSQL((string) $operationKey),
-            'message' => pSQL(HesabfaTextHelper::normalizeLogMessage($message)),
+            'object_type' => pSQL($objectType),
+            'object_id' => pSQL($objectId),
+            'operation_key' => pSQL($operationKey),
+            'message' => pSQL($normalizedMessage),
             'date_add' => date('Y-m-d H:i:s'),
             'date_upd' => date('Y-m-d H:i:s'),
         ));
@@ -41,6 +67,27 @@ class HesabfaIssueRepository
         }
 
         return Db::getInstance()->update('ssb_hesabfa_issue', $fields, '`operation_key` = "' . pSQL($operationKey) . '" AND `status` != "resolved"');
+    }
+
+    public static function resolveByObject($issueType, $objectType, $objectId, $message = null)
+    {
+        $fields = array(
+            'status' => pSQL('resolved'),
+            'date_upd' => date('Y-m-d H:i:s'),
+        );
+
+        if ($message !== null) {
+            $fields['message'] = pSQL((string) $message);
+        }
+
+        return Db::getInstance()->update(
+            'ssb_hesabfa_issue',
+            $fields,
+            '`issue_type` = "' . pSQL((string) $issueType) . '"'
+            . ' AND `object_type` = "' . pSQL((string) $objectType) . '"'
+            . ' AND `object_id` = "' . pSQL((string) $objectId) . '"'
+            . ' AND `status` != "resolved"'
+        );
     }
 
     public static function getOpen($limit = 50)

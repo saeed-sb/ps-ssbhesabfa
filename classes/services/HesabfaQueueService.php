@@ -103,6 +103,16 @@ class HesabfaQueueService
             $ok = $this->executeJob($job, $payload);
             if ($ok) {
                 HesabfaJobRepository::markFinished($id);
+
+                if ((string) $job['job_type'] === 'set_order_payment' && class_exists('HesabfaIssueRepository')) {
+                    HesabfaIssueRepository::resolveByObject(
+                        'invoice_mapping_not_found_for_payment',
+                        'Order',
+                        (string) $job['object_id'],
+                        'The Hesabfa invoice mapping is available and the payment job completed successfully.'
+                    );
+                }
+
                 return true;
             }
 
