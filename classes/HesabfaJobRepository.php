@@ -129,7 +129,10 @@ class HesabfaJobRepository
             'request_unique_ids' => pSQL(json_encode($requestIds), true),
             'date_upd' => date('Y-m-d H:i:s'),
         );
-        if (!$row || empty($row['request_unique_ids_created_at'])) {
+        $requestIdsCreatedAt = $row && isset($row['request_unique_ids_created_at'])
+            ? trim((string) $row['request_unique_ids_created_at'])
+            : '';
+        if ($requestIdsCreatedAt === '' || $requestIdsCreatedAt === '0000-00-00 00:00:00') {
             $data['request_unique_ids_created_at'] = date('Y-m-d H:i:s');
         }
         return Db::getInstance()->update('ssb_hesabfa_job', $data, '`id_ssb_hesabfa_job`=' . (int) $id);
