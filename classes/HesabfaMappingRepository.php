@@ -145,10 +145,24 @@ class HesabfaMappingRepository
             return false;
         }
 
-        return Db::getInstance()->update('ssb_hesabfa', array(
-            'id_hesabfa' => (int) $hesabfaCode,
-        ), '`id_ssb_hesabfa` = ' . (int) $idMapping);
+        $query = new DbQuery();
+        $query->select('`obj_type`, `id_ps`, `id_ps_attribute`');
+        $query->from('ssb_hesabfa');
+        $query->where('`id_ssb_hesabfa` = ' . (int) $idMapping);
+
+        $mapping = Db::getInstance()->getRow($query);
+        if (!is_array($mapping) || empty($mapping)) {
+            return false;
+        }
+
+        return self::upsert(
+            (string) $mapping['obj_type'],
+            (int) $mapping['id_ps'],
+            (int) $hesabfaCode,
+            (int) $mapping['id_ps_attribute']
+        );
     }
+
     public static function upsert($type, $idPs, $idHesabfa, $idPsAttribute = 0)
     {
         $type = (string) $type;
@@ -179,7 +193,52 @@ class HesabfaMappingRepository
             . (int) $idPsAttribute . ') '
             . 'ON DUPLICATE KEY UPDATE id_hesabfa = VALUES(id_hesabfa)';
 
-        return (bool) Db::getInstance()->execute($sql);
+        if (!Db::getInstance()->execute($sql)) {
+            return false;
+        }
+
+        if (
+            $type === 'product'
+            && self::isProductReferenceSyncEnabled()
+            && !self::syncProductReference($idPs, $idPsAttribute, $idHesabfa)
+        ) {
+            self::logProductReferenceSyncFailure($idPs, $idPsAttribute, $idHesabfa);
+        }
+
+        // The mapping is the source of truth. A reference write failure is
+        // logged for repair, but must not make callers create another item.
+        return true;
+    }
+
+    public static function syncAllProductReferences()
+    {
+        $db = Db::getInstance();
+
+        $productSql = 'UPDATE `' . _DB_PREFIX_ . 'product` p '
+            . 'INNER JOIN `' . _DB_PREFIX_ . 'ssb_hesabfa` h '
+            . 'ON p.`id_product` = h.`id_ps` '
+            . 'AND h.`id_ps_attribute` = 0 '
+            . "AND h.`obj_type` = 'product' "
+            . 'SET p.`reference` = h.`id_hesabfa`';
+
+        if (!$db->execute($productSql)) {
+            self::logProductReferenceSyncFailure(0, 0, 0, true);
+            return false;
+        }
+
+        $combinationSql = 'UPDATE `' . _DB_PREFIX_ . 'product_attribute` pa '
+            . 'INNER JOIN `' . _DB_PREFIX_ . 'ssb_hesabfa` h '
+            . 'ON pa.`id_product` = h.`id_ps` '
+            . 'AND pa.`id_product_attribute` = h.`id_ps_attribute` '
+            . "AND h.`obj_type` = 'product' "
+            . 'SET pa.`reference` = h.`id_hesabfa`';
+
+        if (!$db->execute($combinationSql)) {
+            self::logProductReferenceSyncFailure(0, 0, 0, true);
+            return false;
+        }
+
+        return true;
     }
 
     public static function deleteProductMapping($idPs, $idPsAttribute = 0)
@@ -193,6 +252,60 @@ class HesabfaMappingRepository
         return Db::getInstance()->delete(
             'ssb_hesabfa',
             '`obj_type` = "product" AND `id_ps` = ' . (int) $idPs . ' AND `id_ps_attribute` = ' . (int) $idPsAttribute
+        );
+    }
+
+    private static function isProductReferenceSyncEnabled()
+    {
+        return (bool) Configuration::get('SSBHESABFA_ITEM_CODE_AS_REFERENCE');
+    }
+
+    private static function syncProductReference($idPs, $idPsAttribute, $idHesabfa)
+    {
+        $idPs = (int) $idPs;
+        $idPsAttribute = (int) $idPsAttribute;
+        $idHesabfa = (int) $idHesabfa;
+
+        if ($idPs <= 0 || $idHesabfa <= 0) {
+            return false;
+        }
+
+        if ($idPsAttribute === 0) {
+            return (bool) Db::getInstance()->update(
+                'product',
+                array('reference' => (string) $idHesabfa),
+                '`id_product` = ' . (int) $idPs
+            );
+        }
+
+        return (bool) Db::getInstance()->update(
+            'product_attribute',
+            array('reference' => (string) $idHesabfa),
+            '`id_product` = ' . (int) $idPs
+            . ' AND `id_product_attribute` = ' . (int) $idPsAttribute
+        );
+    }
+
+    private static function logProductReferenceSyncFailure($idPs, $idPsAttribute, $idHesabfa, $bulk = false)
+    {
+        if (!class_exists('HesabfaLogService')) {
+            return;
+        }
+
+        $message = $bulk
+            ? 'Could not synchronize existing Hesabfa item codes with PrestaShop product references.'
+            : 'Could not synchronize a Hesabfa item code with the PrestaShop product reference.';
+
+        HesabfaLogService::addModuleLog(
+            $message,
+            'ERROR',
+            'PRODUCT_REFERENCE_SYNC_FAILED',
+            'Product',
+            $bulk ? null : (int) $idPs . '-' . (int) $idPsAttribute,
+            array(
+                'prestashop_code' => $bulk ? null : (int) $idPs . '-' . (int) $idPsAttribute,
+                'hesabfa_code' => $bulk ? null : (string) (int) $idHesabfa,
+            )
         );
     }
 

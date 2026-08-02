@@ -13,6 +13,7 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_b86f3b758d8c3ce8cb851dc8d51b5c56'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_240cf5899a9d3f1449892c07d7dda83e'] = 'اتصال به حسابفا برقرار نیست، لطفا اتصال اینترنت را بررسی نمایید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_53521a753e7391dd3097826c2e8af253'] = 'تنظیمات روش‌های پرداخت به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ff06e7155572ac98fea068ccc5f7c461'] = 'تنظیمات محصولات به روزرسانی شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_e466e9da8aa5ac646cc097b931cd2fad'] = 'تنظیمات محصولات به‌طور کامل اعمال نشد. لاگ‌های ماژول را بررسی کنید و برای تلاش مجدد، دوباره ذخیره کنید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7a0c95e27f886c2df32dcf5f4091d467'] = 'تنظیمات مشتریان به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_5941e2012f5455d006f03fa7d624e049'] = 'تنظیمات فاکتور به روزرسانی شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7dcacc291836c08efd98b7bf38d589ce'] = 'استخراج محصولات به حسابفا با موفقیت انجام شد.';
@@ -57,6 +58,8 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1e860e56970a81a1ba3e1fcb7fccc846'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_2b5c66b6911e458deaa56508c10ce30b'] = 'وضعیت سفارش صدور فاکتور برگشت از فروش';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_39cc3b26068d986b6cac247d397a8b58'] = 'در کدام وضعیت سفارش، فاکتور برگشت از فروش ثبت شود؟';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_0487cf57f73cc9c55d1dff8671385589'] = 'کد فروشنده وب‌سایت';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f9f849bed6a33f0571df5e81ffe6353f'] = 'استفاده از کد کالای حسابفا به‌عنوان مرجع محصول';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_948ecd2413ff1fb7be7ac2b1afeec2d6'] = 'با فعال‌کردن این گزینه، مرجع فعلی محصولات و ترکیب‌ها با کد کالای نگاشت‌شده در حسابفا بازنویسی می‌شود. ذخیره این بخش، مرجع همه نگاشت‌های موجود را نیز اصلاح می‌کند.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3f832e1c931efb4c7df0c24acdac7753'] = 'بارکد:';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_c249ccb3913aded415764c098026949d'] = 'کدام اطلاعات برای بارکد استفاده شود. یکی را انتخاب کنید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_63d5049791d9d79d86e9a108b0a999ca'] = 'کد مرجع';

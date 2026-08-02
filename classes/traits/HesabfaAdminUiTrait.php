@@ -1074,6 +1074,25 @@ trait HesabfaAdminUiTrait
             'form' => array(
                 'input' => array(
                     array(
+                        'type' => 'switch',
+                        'label' => $this->l('Use Hesabfa item code as product reference'),
+                        'name' => 'SSBHESABFA_ITEM_CODE_AS_REFERENCE',
+                        'is_bool' => true,
+                        'desc' => $this->l('When enabled, existing product and combination references are overwritten with their mapped Hesabfa item codes. Saving this section repairs all existing mappings.'),
+                        'values' => array(
+                            array(
+                                'id' => 'item_code_reference_on',
+                                'value' => true,
+                                'label' => $this->l('Enabled')
+                            ),
+                            array(
+                                'id' => 'item_code_reference_off',
+                                'value' => false,
+                                'label' => $this->l('Disabled')
+                            )
+                        ),
+                    ),
+                    array(
                         'type' => 'select',
                         'label' => $this->l('Barcode:'),
                         'desc' => $this->l('Choose which data field selected for Barcode'),
@@ -1227,6 +1246,7 @@ trait HesabfaAdminUiTrait
             case 'Item':
                 $keys =  array(
                     'SSBHESABFA_ITEM_BARCODE' => Configuration::get('SSBHESABFA_ITEM_BARCODE'),
+                    'SSBHESABFA_ITEM_CODE_AS_REFERENCE' => Configuration::get('SSBHESABFA_ITEM_CODE_AS_REFERENCE'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
                 );
@@ -1295,6 +1315,7 @@ trait HesabfaAdminUiTrait
                     'SSBHESABFA_INTERNAL_API_USE_QUEUE' => (int) Configuration::get('SSBHESABFA_INTERNAL_API_USE_QUEUE'),
 
                     'SSBHESABFA_ITEM_BARCODE' => Configuration::get('SSBHESABFA_ITEM_BARCODE'),
+                    'SSBHESABFA_ITEM_CODE_AS_REFERENCE' => Configuration::get('SSBHESABFA_ITEM_CODE_AS_REFERENCE'),
                     'SSBHESABFA_ITEM_UPDATE_PRICE' => Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE'),
                     'SSBHESABFA_ITEM_UPDATE_QUANTITY' => Configuration::get('SSBHESABFA_ITEM_UPDATE_QUANTITY'),
 
@@ -1330,6 +1351,7 @@ trait HesabfaAdminUiTrait
     protected function setConfigFormsValues($form = null)
     {
         $form_values = $this->getConfigFormValues($form);
+        $success = true;
 
         foreach (array_keys($form_values) as $key) {
             $value = Tools::getValue($key);
@@ -1379,7 +1401,19 @@ trait HesabfaAdminUiTrait
                 $value = 'merchant';
             }
 
-            Configuration::updateValue($key, $value);
+            if (!Configuration::updateValue($key, $value)) {
+                $success = false;
+            }
         }
+
+        if (
+            $form === 'Item'
+            && Configuration::get('SSBHESABFA_ITEM_CODE_AS_REFERENCE')
+            && !HesabfaMappingRepository::syncAllProductReferences()
+        ) {
+            $success = false;
+        }
+
+        return $success;
     }
 }

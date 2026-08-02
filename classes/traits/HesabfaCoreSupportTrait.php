@@ -556,8 +556,11 @@ trait HesabfaCoreSupportTrait
             $this->setConfigFormsValues('AccountingText');
             $output .= $this->displayConfirmation($this->l('Accounting text settings updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleItem')) == true) {
-            $this->setConfigFormsValues('Item');
-            $output .= $this->displayConfirmation($this->l('Catalog Setting updated.'));
+            if ($this->setConfigFormsValues('Item')) {
+                $output .= $this->displayConfirmation($this->l('Catalog Setting updated.'));
+            } else {
+                $output .= $this->displayError($this->l('Catalog settings could not be applied completely. Review module logs and save again to retry.'));
+            }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleContact')) == true) {
             $this->setConfigFormsValues('Contact');
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));

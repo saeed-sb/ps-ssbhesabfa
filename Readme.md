@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.24`
+- **Current version:** `2.3.26`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -66,6 +66,7 @@ The module acts as the accounting bridge between PrestaShop and Hesabfa. It can:
 - Export opening quantities when preparing a new fiscal year.
 - Select the PrestaShop value used as the Hesabfa barcode, or disable barcode export.
 - Preserve a local mapping between each product or combination and its Hesabfa item code.
+- Optionally use the mapped Hesabfa item code as the PrestaShop reference for products and combinations.
 
 ### Product edit mappings
 
@@ -74,8 +75,10 @@ The product edit panel includes a Hesabfa item-code field for the base product a
 - Positive item codes are validated before saving.
 - Persian and Arabic digits are normalized.
 - Duplicate item codes assigned to another product or combination are rejected.
-- Clearing a field removes only the local mapping.
+- Leaving a submitted field empty keeps the current mapping unchanged.
 - Product and combination deletions keep their mapping until Hesabfa confirms the remote deletion.
+
+When **Use Hesabfa item code as product reference** is enabled in the catalog settings, every successful product mapping write immediately updates the matching `product.reference` or `product_attribute.reference`. Saving the catalog settings also repairs references for all existing mappings, so an external MySQL event is not required. The option is disabled by default because enabling it overwrites existing product and combination references.
 
 ### Price and stock updates
 

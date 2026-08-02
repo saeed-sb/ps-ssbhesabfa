@@ -157,6 +157,7 @@ class Ssbhesabfa extends Module
         'SSBHESABFA_ITEM_ROOT_NODE' => 'Products:',
         'SSBHESABFA_ITEM_GIFT_WRAPPING_ID' => 0,
         'SSBHESABFA_ITEM_BARCODE' => 2,
+        'SSBHESABFA_ITEM_CODE_AS_REFERENCE' => 0,
         'SSBHESABFA_ITEM_UPDATE_PRICE' => 0,
         'SSBHESABFA_ITEM_UPDATE_QUANTITY' => 0,
         'SSBHESABFA_LAST_LOG_CHECK_ID' => 0,
@@ -172,7 +173,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.25';
+        $this->version = '2.3.26';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

@@ -1,3 +1,14 @@
+## 2.3.26
+
+- Added an optional catalog setting that stores mapped Hesabfa item codes in PrestaShop product and combination references.
+- Added immediate reference updates after every successful product mapping write, including manual item-code repairs.
+- Added a bulk reference repair when the catalog settings are saved with the option enabled, replacing the need for an hourly MySQL event.
+- Kept the Hesabfa mapping as the source of truth when a reference write fails and added a structured repair log instead of returning a misleading mapping failure.
+- Batched invoice-webhook item retrieval, skipped deleted remote items safely, and resolved completed payment-mapping issues.
+- Added automatic customer-before-address queue recovery and continued retries for transient connection, rate-limit, and dependency failures.
+- Preserved request UUID creation timestamps when legacy rows contain zero dates.
+- Added a standalone upgrade handler that creates the new setting without overwriting existing references by default.
+
 ## 2.3.25
 
 - Prevented empty product-form fields from silently deleting existing Hesabfa item mappings.
