@@ -1,3 +1,10 @@
+## 2.3.27
+
+- Fixed missing `returnOrder` mappings by persisting invoice results through the atomic mapping repository instead of updating a nonexistent ObjectModel row.
+- Verified the stored invoice number before an invoice operation or queue job can report success.
+- Made completed invoice operations repair a missing local mapping from their saved Hesabfa reference without issuing another financial API request.
+- Added an idempotent upgrade repair for missing return-invoice mappings backed by successful historical operations.
+
 ## 2.3.26
 
 - Added an optional catalog setting that stores mapped Hesabfa item codes in PrestaShop product and combination references.

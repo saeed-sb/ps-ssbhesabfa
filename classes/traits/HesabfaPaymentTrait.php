@@ -346,46 +346,87 @@ trait HesabfaPaymentTrait
 
         $invoicePayloadHash = md5(json_encode($data));
         $invoiceOperationKey = $this->buildOperationKey('invoice_save', array($id_order, $orderType, $number ? $number : 'new', $invoicePayloadHash));
-        if ($this->getCompletedOperation($invoiceOperationKey)) {
-            self::addModuleLog('Skipped duplicate Hesabfa invoice save operation.', 'INFO', null, $orderType == 2 ? 'ReturnOrder' : 'Order', $id_order);
-            return true;
+        $mappingType = $orderType == 2 ? 'returnOrder' : 'order';
+        $operationObjectType = $orderType == 2 ? 'ReturnOrder' : 'Order';
+        $existingMappingCode = HesabfaMappingRepository::getHesabfaCode($mappingType, $id_order);
+        $completedOperation = $this->getCompletedOperation($invoiceOperationKey);
+
+        if ($completedOperation) {
+            $completedInvoiceNumber = isset($completedOperation['external_reference'])
+                ? (int) $completedOperation['external_reference']
+                : 0;
+            $canRepairMissingMapping = $existingMappingCode === null && $completedInvoiceNumber > 0;
+
+            if (
+                $completedInvoiceNumber > 0
+                && (int) $existingMappingCode === $completedInvoiceNumber
+            ) {
+                self::addModuleLog('Skipped duplicate Hesabfa invoice save operation.', 'INFO', null, $operationObjectType, $id_order);
+                return true;
+            }
+
+            if (
+                $canRepairMissingMapping
+                && $this->persistInvoiceMapping($mappingType, $id_order, $completedInvoiceNumber)
+            ) {
+                $message = 'Repaired the missing local mapping for a completed Hesabfa invoice operation.';
+                self::addModuleLog($message, 'INFO', null, $operationObjectType, $id_order);
+                return true;
+            }
+
+            $msg = 'A completed Hesabfa invoice operation was found, but its local mapping could not be verified. Invoice number: ' . $completedInvoiceNumber;
+            $errorCode = $existingMappingCode !== null
+                ? 'INVOICE_MAPPING_CONFLICT'
+                : ($completedInvoiceNumber > 0 ? 'INVOICE_MAPPING_SAVE_FAILED' : 'INVOICE_OPERATION_REFERENCE_MISSING');
+            $this->finishOperation($invoiceOperationKey, 'failed', $msg, $completedInvoiceNumber ?: null);
+            $this->addFollowUpIssue(
+                'invoice_mapping_save_failed',
+                $msg,
+                $operationObjectType,
+                $id_order,
+                $invoiceOperationKey,
+                'ERROR'
+            );
+            self::addLegacyLog(
+                $msg,
+                3,
+                $errorCode,
+                $operationObjectType,
+                $id_order,
+                true,
+                array('hesabfa_code' => $completedInvoiceNumber ? (string) $completedInvoiceNumber : null)
+            );
+
+            if ($canRepairMissingMapping) {
+                HesabfaApiResponse::normalize((object) array(
+                    'Success' => true,
+                    'Result' => (object) array('Number' => $completedInvoiceNumber),
+                ));
+            } else {
+                HesabfaApiResponse::normalize((object) array(
+                    'Success' => false,
+                    'ErrorCode' => $errorCode,
+                    'ErrorMessage' => $msg,
+                ));
+            }
+
+            return false;
         }
 
-        $this->startOperation($invoiceOperationKey, 'invoice_save', $orderType == 2 ? 'ReturnOrder' : 'Order', $id_order);
+        $this->startOperation($invoiceOperationKey, 'invoice_save', $operationObjectType, $id_order);
         $hesabfa = new HesabfaApi();
-        $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSave($data), 'invoiceSave', $orderType == 2 ? 'ReturnOrder' : 'Order', $id_order);
+        $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSave($data), 'invoiceSave', $operationObjectType, $id_order);
         if ($this->isHesabfaSuccess($response)) {
-            $obj = new HesabfaModel();
-            $obj->id_hesabfa = (int)$response->Result->Number;
-
-            switch ($orderType) {
-                case 0:
-                    $obj->obj_type = 'order';
-                    break;
-                case 2:
-                    $obj->obj_type = 'returnOrder';
-                    break;
-            }
-
-            $obj->id_ps = $id_order;
-            $obj->id_ps_attribute = 0;
-            $mappingSaved = false;
-
-            if ($number == null) {
-                $mappingSaved = $obj->add();
-            } else {
-                $obj->id_ssb_hesabfa = $this->getObjectId($orderType == 2 ? 'returnOrder' : 'order', $id_order);
-                $obj->id = $obj->id_ssb_hesabfa;
-                $mappingSaved = $obj->update();
-            }
+            $hesabfaInvoiceNumber = (int) $response->Result->Number;
+            $mappingSaved = $this->persistInvoiceMapping($mappingType, $id_order, $hesabfaInvoiceNumber);
 
             if (!$mappingSaved) {
-                $msg = 'Hesabfa invoice was saved, but the local invoice mapping could not be stored. Invoice number: ' . (int) $response->Result->Number;
-                $this->finishOperation($invoiceOperationKey, 'failed', $msg, (int) $response->Result->Number);
+                $msg = 'Hesabfa invoice was saved, but the local invoice mapping could not be stored and verified. Invoice number: ' . $hesabfaInvoiceNumber;
+                $this->finishOperation($invoiceOperationKey, 'failed', $msg, $hesabfaInvoiceNumber);
                 $this->addFollowUpIssue(
                     'invoice_mapping_save_failed',
                     $msg,
-                    $orderType == 2 ? 'ReturnOrder' : 'Order',
+                    $operationObjectType,
                     $id_order,
                     $invoiceOperationKey,
                     'ERROR'
@@ -394,16 +435,16 @@ trait HesabfaPaymentTrait
                     $msg,
                     3,
                     'INVOICE_MAPPING_SAVE_FAILED',
-                    $orderType == 2 ? 'ReturnOrder' : 'Order',
+                    $operationObjectType,
                     $id_order,
                     true,
-                    array('hesabfa_code' => (string) $response->Result->Number)
+                    array('hesabfa_code' => (string) $hesabfaInvoiceNumber)
                 );
                 return false;
             }
 
             if ($orderType == 2) {
-                $msg = $number == null
+                $msg = $existingMappingCode === null
                     ? 'Hesabfa return sales invoice was added successfully. Invoice number: ' . $response->Result->Number
                     : 'Hesabfa return sales invoice was updated successfully. Invoice number: ' . $response->Result->Number;
                 self::addLegacyLog($msg, 1, null, 'ReturnOrder', $id_order, true, array(
@@ -427,6 +468,27 @@ trait HesabfaPaymentTrait
             self::addLegacyLog($msg, 2, HesabfaApiResponse::getErrorCode($response), 'Order', $id_order, true);
             return false;
         }
+    }
+
+    private function persistInvoiceMapping($mappingType, $idOrder, $hesabfaInvoiceNumber)
+    {
+        $mappingType = (string) $mappingType;
+        $idOrder = (int) $idOrder;
+        $hesabfaInvoiceNumber = (int) $hesabfaInvoiceNumber;
+
+        if (
+            !in_array($mappingType, array('order', 'returnOrder'), true)
+            || $idOrder <= 0
+            || $hesabfaInvoiceNumber <= 0
+        ) {
+            return false;
+        }
+
+        if (!HesabfaMappingRepository::upsert($mappingType, $idOrder, $hesabfaInvoiceNumber, 0)) {
+            return false;
+        }
+
+        return HesabfaMappingRepository::getHesabfaCode($mappingType, $idOrder, 0) === $hesabfaInvoiceNumber;
     }
 
     public function setOrderPayment($id_order)
