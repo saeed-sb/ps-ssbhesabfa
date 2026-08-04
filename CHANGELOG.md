@@ -1,3 +1,9 @@
+## 2.3.28
+
+- Replaced the removed `Tools::jsonEncode()` call with native `json_encode()` in the admin batch-export AJAX response for PrestaShop 8 compatibility.
+- Preserved the existing JSON encoding behavior on PHP 7.4 and PHP 8.1.
+- Added a standalone no-schema upgrade handler; existing Hesabfa settings, mappings, queues, logs, and accounting data remain unchanged.
+
 ## 2.3.27
 
 - Fixed missing `returnOrder` mappings by persisting invoice results through the atomic mapping repository instead of updating a nonexistent ObjectModel row.

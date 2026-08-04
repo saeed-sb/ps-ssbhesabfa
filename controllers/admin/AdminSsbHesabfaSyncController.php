@@ -27,6 +27,6 @@ class AdminSsbHesabfaSyncController extends ModuleAdminController
         $response = $module->ajaxExportBatch($type, $reset);
 
         header('Content-Type: application/json; charset=utf-8');
-        die(Tools::jsonEncode($response));
+        die(json_encode($response));
     }
 }
