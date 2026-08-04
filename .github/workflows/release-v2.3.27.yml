@@ -1,0 +1,265 @@
+name: Release v2.3.27
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.27.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: d636c4217cdb85b44ddc37975d2f3b20b5bc3945
+      TAG: v2.3.27
+      ASSET: ssbhesabfa-v2.3.27.zip
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Set up PHP 8.1
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: none
+
+      - name: Verify release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.27';" ssbhesabfa.php
+          grep -Fq '<version>2.3.27</version>' config.xml
+          grep -Fq '<version>2.3.27</version>' config_fa.xml
+          grep -Fq 'Current version:' Readme.md
+          grep -Fq '## 2.3.27' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.27.php
+          grep -Fq 'function upgrade_module_2_3_27' upgrade/upgrade-2.3.27.php
+          grep -Fq 'HesabfaMappingRepository::upsert($mappingType, $idOrder, $hesabfaInvoiceNumber, 0)' classes/traits/HesabfaPaymentTrait.php
+          grep -Fq 'HesabfaMappingRepository::getHesabfaCode($mappingType, $idOrder, 0) === $hesabfaInvoiceNumber' classes/traits/HesabfaPaymentTrait.php
+          grep -Fq '$canRepairMissingMapping' classes/traits/HesabfaPaymentTrait.php
+          grep -Fq "'INVOICE_MAPPING_CONFLICT'" classes/traits/HesabfaPaymentTrait.php
+          grep -Fq "HesabfaMappingRepository::upsert('returnOrder', \$idOrder, \$hesabfaInvoiceNumber, 0)" upgrade/upgrade-2.3.27.php
+          if grep -Fq '$obj->update()' classes/traits/HesabfaPaymentTrait.php; then
+            echo 'The false-success ObjectModel update path is still present.' >&2
+            exit 1
+          fi
+          git diff --check "$TARGET_SHA^" "$TARGET_SHA"
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+          test "$(find . -path './.git' -prune -o -type f -name '*.php' -print | wc -l)" -eq 77
+          python3 -c "import xml.etree.ElementTree as ET; ET.parse('config.xml'); ET.parse('config_fa.xml')"
+
+      - name: Run focused return-mapping regression checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/ssbhesabfa-return-mapping-test.php <<'PHP'
+          <?php
+
+          define('_PS_VERSION_', '8.1.7');
+
+          function assertSameValue($expected, $actual, $message)
+          {
+              if ($expected !== $actual) {
+                  throw new RuntimeException(
+                      $message . ' Expected: ' . var_export($expected, true) . '; actual: ' . var_export($actual, true)
+                  );
+              }
+          }
+
+          class HesabfaMappingRepository
+          {
+              public static $rows = array();
+              public static $upsertCalls = 0;
+              public static $failUpsert = false;
+              public static $readbackOverride = null;
+
+              public static function reset()
+              {
+                  self::$rows = array();
+                  self::$upsertCalls = 0;
+                  self::$failUpsert = false;
+                  self::$readbackOverride = null;
+              }
+
+              public static function key($type, $idPs, $idPsAttribute)
+              {
+                  return (string) $type . '|' . (int) $idPs . '|' . (int) $idPsAttribute;
+              }
+
+              public static function upsert($type, $idPs, $idHesabfa, $idPsAttribute = 0)
+              {
+                  self::$upsertCalls++;
+                  if (self::$failUpsert) {
+                      return false;
+                  }
+                  self::$rows[self::key($type, $idPs, $idPsAttribute)] = (int) $idHesabfa;
+                  return true;
+              }
+
+              public static function getHesabfaCode($type, $idPs, $idPsAttribute = 0)
+              {
+                  if (self::$readbackOverride !== null) {
+                      return self::$readbackOverride;
+                  }
+                  $key = self::key($type, $idPs, $idPsAttribute);
+                  return array_key_exists($key, self::$rows) ? self::$rows[$key] : null;
+              }
+          }
+
+          require getcwd() . '/classes/traits/HesabfaPaymentTrait.php';
+
+          class PaymentTraitHarness
+          {
+              use HesabfaPaymentTrait;
+
+              public function persist($type, $idOrder, $invoiceNumber)
+              {
+                  return $this->persistInvoiceMapping($type, $idOrder, $invoiceNumber);
+              }
+          }
+
+          $harness = new PaymentTraitHarness();
+          HesabfaMappingRepository::reset();
+          assertSameValue(true, $harness->persist('returnOrder', 37827, 1496), 'First return mapping must be inserted.');
+          assertSameValue(
+              array('returnOrder|37827|0' => 1496),
+              HesabfaMappingRepository::$rows,
+              'The return mapping identity or number is incorrect.'
+          );
+          assertSameValue(true, $harness->persist('returnOrder', 37827, 1496), 'An identical mapping retry must stay idempotent.');
+          assertSameValue(1, count(HesabfaMappingRepository::$rows), 'An identical retry created a second mapping.');
+          assertSameValue(true, $harness->persist('returnOrder', 37827, 1497), 'An existing mapping must update in place.');
+          assertSameValue(1497, HesabfaMappingRepository::$rows['returnOrder|37827|0'], 'The updated number was not persisted.');
+
+          HesabfaMappingRepository::$failUpsert = true;
+          assertSameValue(false, $harness->persist('returnOrder', 37828, 1498), 'A failed upsert must not report success.');
+          HesabfaMappingRepository::$failUpsert = false;
+          HesabfaMappingRepository::$readbackOverride = 9999;
+          assertSameValue(false, $harness->persist('returnOrder', 37829, 1499), 'A read-back mismatch must not report success.');
+          HesabfaMappingRepository::$readbackOverride = null;
+          $callsBeforeInvalidInput = HesabfaMappingRepository::$upsertCalls;
+          assertSameValue(false, $harness->persist('invalid', 37830, 1500), 'An invalid mapping type must be rejected.');
+          assertSameValue($callsBeforeInvalidInput, HesabfaMappingRepository::$upsertCalls, 'Invalid input reached persistence.');
+
+          class DbQuery
+          {
+              public function select($value) { return $this; }
+              public function from($value) { return $this; }
+              public function where($value) { return $this; }
+              public function orderBy($value) { return $this; }
+          }
+
+          class DbStub
+          {
+              public $rows = array();
+              public function executeS($query) { return $this->rows; }
+          }
+
+          class Db
+          {
+              private static $instance;
+              public static function getInstance()
+              {
+                  if (!self::$instance) {
+                      self::$instance = new DbStub();
+                  }
+                  return self::$instance;
+              }
+          }
+
+          require getcwd() . '/upgrade/upgrade-2.3.27.php';
+
+          HesabfaMappingRepository::reset();
+          HesabfaMappingRepository::$rows['returnOrder|55|0'] = 777;
+          Db::getInstance()->rows = array(
+              array('object_type' => 'ReturnOrder', 'object_id' => '37827', 'external_reference' => '1495'),
+              array('object_type' => 'ReturnOrder', 'object_id' => '37827', 'external_reference' => '1496'),
+              array('object_type' => 'return_order', 'object_id' => '55', 'external_reference' => '888'),
+              array('object_type' => 'Order', 'object_id' => '70', 'external_reference' => '900'),
+              array('object_type' => 'ReturnOrder', 'object_id' => '71', 'external_reference' => '900x'),
+              array('object_type' => 'ReturnOrder', 'object_id' => '0', 'external_reference' => '901')
+          );
+          assertSameValue(true, upgrade_module_2_3_27(null), 'The backfill migration failed.');
+          assertSameValue(1496, HesabfaMappingRepository::getHesabfaCode('returnOrder', 37827, 0), 'The newest valid operation was not backfilled.');
+          assertSameValue(777, HesabfaMappingRepository::getHesabfaCode('returnOrder', 55, 0), 'An existing return mapping was overwritten.');
+          assertSameValue(null, HesabfaMappingRepository::getHesabfaCode('returnOrder', 70, 0), 'A sales operation was treated as a return.');
+          assertSameValue(null, HesabfaMappingRepository::getHesabfaCode('returnOrder', 71, 0), 'A nonnumeric reference was accepted.');
+          $rowCountAfterFirstRun = count(HesabfaMappingRepository::$rows);
+          $upsertCallsAfterFirstRun = HesabfaMappingRepository::$upsertCalls;
+          assertSameValue(true, upgrade_module_2_3_27(null), 'The backfill migration is not rerunnable.');
+          assertSameValue($rowCountAfterFirstRun, count(HesabfaMappingRepository::$rows), 'The second migration run changed row count.');
+          assertSameValue($upsertCallsAfterFirstRun, HesabfaMappingRepository::$upsertCalls, 'The second migration run wrote existing mappings.');
+
+          HesabfaMappingRepository::reset();
+          HesabfaMappingRepository::$failUpsert = true;
+          Db::getInstance()->rows = array(
+              array('object_type' => 'ReturnOrder', 'object_id' => '99', 'external_reference' => '999')
+          );
+          assertSameValue(false, upgrade_module_2_3_27(null), 'A failed migration upsert must fail the upgrade.');
+
+          echo "Focused return-mapping regression checks passed.\n";
+          PHP
+          php -l /tmp/ssbhesabfa-return-mapping-test.php
+          php /tmp/ssbhesabfa-return-mapping-test.php
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive \
+            --format=zip \
+            --prefix=ssbhesabfa/ \
+            --output="$ASSET" \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore'
+          unzip -t "$ASSET"
+          test "$(unzip -Z1 "$ASSET" | awk '/\.php$/ { count++ } END { print count + 0 }')" -eq 77
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.27.php'
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|\.bak([.-]|$)|\.log$|(^|/)\.env($|\.)'; then
+            echo 'Development, secret, or backup file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          printf '%s\n' \
+            '## Changes' \
+            '' \
+            '- Fixes missing local mappings after Hesabfa return-sales invoices are created.' \
+            '- Uses atomic mapping upserts plus read-back verification before an invoice operation or queue job can report success.' \
+            '- Repairs missing mappings for completed operations without sending another financial API request.' \
+            '- Backfills historical missing return mappings from successful operation records during upgrade, without overwriting existing mappings.' \
+            '' \
+            '## Package' \
+            '' \
+            'Upload ssbhesabfa-v2.3.27.zip through PrestaShop Module Manager and run the module upgrade action.' \
+            '' \
+            'Validation: all 77 PHP files passed PHP 8.1 lint, both XML files parsed, focused persistence and migration regression checks passed, and the installable ZIP integrity was verified.' \
+            > release-notes.md
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.27' \
+            --notes-file release-notes.md \
+            --latest
