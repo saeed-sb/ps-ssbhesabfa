@@ -1,0 +1,224 @@
+name: Release v2.3.29
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.29.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: 21b1b1422f26f110f7441b2d9e5a0860b607cffc
+      TAG: v2.3.29
+      ASSET: ssbhesabfa-v2.3.29.zip
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Validate legacy PHP sources on PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: none
+
+      - name: Lint non-MCP sources on PHP 7.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate release source and MCP declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.29';" ssbhesabfa.php
+          grep -Fq 'public function isMcpCompliant()' ssbhesabfa.php
+          grep -Fq '<version>2.3.29</version>' config.xml
+          grep -Fq '<version>2.3.29</version>' config_fa.xml
+          grep -Fq '**Current version:** `2.3.29`' Readme.md
+          grep -Fq '## 2.3.29' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.29.php
+          grep -Fq 'function upgrade_module_2_3_29' upgrade/upgrade-2.3.29.php
+          test -f src/Mcp/HesabfaTools.php
+          test "$(grep -c '#\[PsMcpTool(' src/Mcp/HesabfaTools.php)" -eq 7
+          if grep -Eq 'SSBHESABFA_(ACCOUNT_API|ACCOUNT_TOKEN|ACCOUNT_PASSWORD|WEBHOOK_TOKEN|WEBHOOK_PASSWORD|QUEUE_CRON_TOKEN)' src/Mcp/HesabfaTools.php; then
+            echo 'An MCP tool references secret configuration.' >&2
+            exit 1
+          fi
+          git diff --check "$TARGET_SHA^" "$TARGET_SHA"
+          test "$(find . -path './.git' -prune -o -type f -name '*.php' -print | wc -l)" -eq 80
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+
+          git clone --depth 1 --branch v1.0.3 \
+            https://github.com/PrestaShopCorp/ps-mcp-server-stubs.git \
+            /tmp/ps-mcp-server-stubs
+
+          php <<'PHP'
+          <?php
+          require '/tmp/ps-mcp-server-stubs/ps-mcp-server.php';
+          require 'vendor/autoload.php';
+
+          $toolClass = 'PrestaShop\\Module\\PsMcpServer\\Server\\Attributes\\PsMcpTool';
+          $schemaClass = 'PrestaShop\\Module\\PsMcpServer\\Server\\Attributes\\PsMcpSchema';
+          $annotationsClass = 'PrestaShop\\Module\\PsMcpServer\\Server\\Attributes\\PsMcpToolAnnotations';
+          $reflection = new ReflectionClass('SsbHesabfa\\Mcp\\HesabfaTools');
+          $expected = [
+              'hesabfa_get_job',
+              'hesabfa_get_mapping',
+              'hesabfa_get_status',
+              'hesabfa_list_issues',
+              'hesabfa_list_jobs',
+              'hesabfa_process_job',
+              'hesabfa_queue_sync',
+          ];
+          $names = [];
+          $readOnly = 0;
+          $write = 0;
+          $schemas = 0;
+
+          foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
+              $toolAttributes = $method->getAttributes($toolClass);
+              if (!$toolAttributes) {
+                  continue;
+              }
+              if (count($toolAttributes) !== 1) {
+                  throw new RuntimeException('Each MCP method must declare exactly one PsMcpTool attribute.');
+              }
+
+              $arguments = $toolAttributes[0]->getArguments();
+              $name = $arguments['name'] ?? '';
+              $description = $arguments['description'] ?? '';
+              $annotations = $arguments['annotations'] ?? null;
+              if (!is_string($name) || !preg_match('/^hesabfa_[a-z0-9_]+$/', $name)) {
+                  throw new RuntimeException('Invalid MCP tool name.');
+              }
+              if (!is_string($description) || strlen($description) < 30) {
+                  throw new RuntimeException('MCP tool description is missing or too short.');
+              }
+              if (!$annotations instanceof $annotationsClass) {
+                  throw new RuntimeException('MCP tool annotations are missing.');
+              }
+              if ($annotations->readOnlyHint) {
+                  $readOnly++;
+              } else {
+                  $write++;
+              }
+
+              $schemaAttributes = $method->getAttributes($schemaClass);
+              if ($name !== 'hesabfa_get_status' && count($schemaAttributes) !== 1) {
+                  throw new RuntimeException($name . ' must declare exactly one input schema.');
+              }
+              if ($schemaAttributes) {
+                  $schemaArguments = $schemaAttributes[0]->getArguments();
+                  if (!isset($schemaArguments['properties']) || !is_array($schemaArguments['properties'])) {
+                      throw new RuntimeException($name . ' has no schema properties.');
+                  }
+                  $schemas++;
+              }
+              $names[] = $name;
+          }
+
+          sort($names);
+          if ($names !== $expected || count(array_unique($names)) !== 7) {
+              throw new RuntimeException('Unexpected MCP tool set.');
+          }
+          if ($readOnly !== 5 || $write !== 2 || $schemas !== 6) {
+              throw new RuntimeException('Unexpected MCP annotation/schema classification.');
+          }
+
+          echo "Validated seven MCP tools, six schemas, five read-only tools, and two write tools.\n";
+          PHP
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/ssbhesabfa
+          git archive \
+            --format=tar \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore' \
+            | tar -xf - -C build/ssbhesabfa
+          cp -a vendor build/ssbhesabfa/vendor
+          (
+            cd build
+            zip -qr "../$ASSET" ssbhesabfa
+          )
+          unzip -t "$ASSET"
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/vendor/autoload.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/src/Mcp/HesabfaTools.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.29.php'
+          test "$(unzip -Z1 "$ASSET" | awk '/^ssbhesabfa\/.*\.php$/ && $0 !~ /^ssbhesabfa\/vendor\// { count++ } END { print count + 0 }')" -eq 80
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|\.bak([.-]|$)|\.log$|(^|/)\.env($|\.)'; then
+            echo 'Development, secret, or backup file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          cat > release-notes.md <<'NOTES'
+          ## Changes
+
+          - Adds seven schema-validated tools for the official PrestaShop MCP Server.
+          - Provides secret-free module status, mapping lookup, bounded queue and issue inspection, controlled sync queueing, and explicit single-job execution.
+          - Reuses the existing mapping, queue, retry, rate-limit, and request-UUID safeguards instead of exposing an unrestricted Hesabfa API proxy.
+          - Adds Composer PSR-4 autoloading for MCP discovery and a no-schema upgrade handler.
+          - Keeps existing settings, mappings, queues, logs, and accounting data unchanged.
+
+          ## Requirements
+
+          MCP discovery requires the official PrestaShop MCP Server and its dependencies. MCP execution follows that server's PHP 8.1+ and PrestaShop requirements. Existing non-MCP module functionality remains available on older supported PrestaShop installations.
+
+          ## Package
+
+          Upload `ssbhesabfa-v2.3.29.zip` through PrestaShop Module Manager and run the module upgrade action. If the tools are not listed immediately, clear the PrestaShop MCP Server discovery cache.
+
+          Validation: legacy sources passed PHP 7.4 lint; all 80 module PHP files passed PHP 8.1 lint; seven tools and six schemas were reflected against the official v1.0.3 stubs; Composer autoloading, both XML files, release invariants, secret exclusions, and ZIP integrity passed.
+          NOTES
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.29' \
+            --notes-file release-notes.md \
+            --latest
