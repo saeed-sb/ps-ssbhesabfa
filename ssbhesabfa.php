@@ -28,6 +28,11 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+$ssbhesabfaAutoload = __DIR__ . '/vendor/autoload.php';
+if (is_file($ssbhesabfaAutoload)) {
+    require_once $ssbhesabfaAutoload;
+}
+
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaDateHelper.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaTextHelper.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaLogService.php');
@@ -173,7 +178,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.28';
+        $this->version = '2.3.29';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -191,6 +196,16 @@ class Ssbhesabfa extends Module
 
         $this->ps_versions_compliancy = array('min' => '1.7.0.0', 'max' => _PS_VERSION_);
         $this->id_default_lang = Configuration::get('PS_LANG_DEFAULT');
+    }
+
+    /**
+     * Allows ps_mcp_server to discover the MCP tools declared under src/.
+     *
+     * @return bool
+     */
+    public function isMcpCompliant()
+    {
+        return true;
     }
 
     public function install()

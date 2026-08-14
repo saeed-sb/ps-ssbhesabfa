@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.28`
+- **Current version:** `2.3.29`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -20,6 +20,7 @@
 - [Reliable queues](#reliable-queues)
 - [Logs and administration](#logs-and-administration)
 - [Internal API for other modules](#internal-api-for-other-modules)
+- [MCP tools for AI applications](#mcp-tools-for-ai-applications)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Initial configuration](#initial-configuration)
@@ -263,6 +264,24 @@ if (!empty($queued['success'])) {
 ```
 
 The bridge validates the requested public `HesabfaApi` method, normalizes responses, manages request UUIDs, and can persist execution details. See [the complete Internal API guide](docs/internal-api-guide.html) for method signatures, response contracts, queue behavior, and examples.
+
+## MCP tools for AI applications
+
+Version 2.3.29 declares the module as MCP-compatible and exposes seven focused tools through the official PrestaShop MCP Server:
+
+| Tool | Behavior |
+| --- | --- |
+| `hesabfa_get_status` | Reads a secret-free connection, queue, mapping, log, and issue summary |
+| `hesabfa_get_mapping` | Reads one product, customer, sales-invoice, or return-invoice mapping |
+| `hesabfa_list_jobs` | Lists filtered synchronization jobs with bounded pagination |
+| `hesabfa_get_job` | Reads one job and its sanitized payload and error details |
+| `hesabfa_list_issues` | Lists open, retrying, or resolved follow-up issues |
+| `hesabfa_queue_sync` | Validates a PrestaShop object and queues a product, customer, address, order, or payment synchronization |
+| `hesabfa_process_job` | Executes one eligible pending/retry job and may create or update data in Hesabfa |
+
+The tools never return Hesabfa API keys, login tokens, passwords, webhook secrets, or cron tokens. They reuse the module's existing validation, mapping, queue, retry, rate-limit, and request-UUID services instead of exposing an unrestricted Hesabfa API proxy.
+
+MCP discovery requires PrestaShop MCP Server and its dependencies. MCP execution requires the PHP 8.1+/PrestaShop version supported by that server; the module's existing non-MCP features remain compatible with older supported PrestaShop installations. After installing or upgrading, clear the PrestaShop MCP Server discovery cache if the new tools are not listed.
 
 ## Requirements
 

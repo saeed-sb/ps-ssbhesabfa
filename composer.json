@@ -1,0 +1,28 @@
+{
+  "name": "saeed-sb/ps-ssbhesabfa",
+  "description": "Hesabfa Online Accounting integration for PrestaShop",
+  "type": "prestashop-module",
+  "license": "AFL-3.0",
+  "autoload": {
+    "classmap": [
+      "ssbhesabfa.php"
+    ],
+    "psr-4": {
+      "SsbHesabfa\\Mcp\\": "src/Mcp/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "prepend-autoloader": false,
+    "platform-check": false
+  },
+  "extra": {
+    "prestashop": {
+      "autoload": {
+        "psr-4": {
+          "SsbHesabfa\\Mcp\\": "src/Mcp/"
+        }
+      }
+    }
+  }
+}

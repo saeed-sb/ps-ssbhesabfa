@@ -9,6 +9,26 @@ if (!defined('_PS_VERSION_')) {
 
 class HesabfaIssueRepository
 {
+    public static function countByStatus(array $statuses)
+    {
+        $cleanStatuses = array();
+        foreach ($statuses as $status) {
+            if (in_array((string) $status, array('open', 'retrying', 'resolved'), true)) {
+                $cleanStatuses[] = '"' . pSQL((string) $status) . '"';
+            }
+        }
+        if (empty($cleanStatuses)) {
+            return 0;
+        }
+
+        $query = new DbQuery();
+        $query->select('COUNT(*)');
+        $query->from('ssb_hesabfa_issue');
+        $query->where('`status` IN (' . implode(',', array_unique($cleanStatuses)) . ')');
+
+        return (int) Db::getInstance()->getValue($query);
+    }
+
     public static function add($issueType, $severity, $message, $objectType = null, $objectId = null, $operationKey = null)
     {
         $issueType = (string) $issueType;

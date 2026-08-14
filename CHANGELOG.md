@@ -1,3 +1,10 @@
+## 2.3.29
+- Declared the module as compatible with the official PrestaShop MCP Server.
+- Added seven schema-validated MCP tools for secret-free status and mapping inspection, bounded queue and issue reads, controlled synchronization queueing, and explicit single-job execution.
+- Reused the existing mapping, queue, retry, rate-limit, and request-UUID services instead of exposing an unrestricted Hesabfa API bridge.
+- Added Composer PSR-4 metadata for MCP discovery while keeping the MCP server itself as an external runtime dependency.
+- Added a no-schema upgrade handler; existing settings, mappings, queues, logs, and accounting records are unchanged.
+
 ## 2.3.28
 
 - Replaced the removed `Tools::jsonEncode()` call with native `json_encode()` in the admin batch-export AJAX response for PrestaShop 8 compatibility.
