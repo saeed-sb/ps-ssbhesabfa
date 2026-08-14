@@ -9,6 +9,29 @@ if (!defined('_PS_VERSION_')) {
 
 class HesabfaMappingRepository
 {
+    public static function getStats()
+    {
+        $query = new DbQuery();
+        $query->select('`obj_type`, COUNT(*) AS `total`');
+        $query->from('ssb_hesabfa');
+        $query->groupBy('`obj_type`');
+
+        $rows = Db::getInstance()->executeS($query);
+        $stats = array('total' => 0, 'by_type' => array());
+        if (!is_array($rows)) {
+            return $stats;
+        }
+
+        foreach ($rows as $row) {
+            $type = (string) $row['obj_type'];
+            $count = (int) $row['total'];
+            $stats['by_type'][$type] = $count;
+            $stats['total'] += $count;
+        }
+
+        return $stats;
+    }
+
     public static function shouldEnforceUniqueHesabfaCode($type)
     {
         $type = (string) $type;
