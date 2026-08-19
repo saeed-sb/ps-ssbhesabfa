@@ -1,0 +1,141 @@
+name: Release v2.3.31
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.31.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: 942593effabf7ceaf2f893d57f9466f1cc750c02
+      TAG: v2.3.31
+      ASSET: ssbhesabfa-v2.3.31.zip
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Validate legacy PHP sources on PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: none
+
+      - name: Lint non-MCP sources on PHP 7.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.31';" ssbhesabfa.php
+          grep -Fq 'public function isMcpCompliant()' ssbhesabfa.php
+          grep -Fq '<version>2.3.31</version>' config.xml
+          grep -Fq '<version>2.3.31</version>' config_fa.xml
+          grep -Fq '**Current version:** `2.3.31`' Readme.md
+          grep -Fq '## 2.3.31' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.31.php
+          grep -Fq 'function upgrade_module_2_3_31' upgrade/upgrade-2.3.31.php
+          grep -Fq "'customer_charge_percent'" classes/services/HesabfaPaymentFeeService.php
+          grep -Fq "'income_percent'" classes/services/HesabfaPaymentFeeService.php
+          test -f src/Mcp/HesabfaTools.php
+          test "$(grep -c '#\[PsMcpTool(' src/Mcp/HesabfaTools.php)" -eq 7
+          test "$(find . -path './.git' -prune -o -type f -name '*.php' -print | wc -l)" -eq 82
+          git diff --check "$TARGET_SHA^" "$TARGET_SHA"
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/ssbhesabfa
+          git archive \
+            --format=tar \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore' \
+            | tar -xf - -C build/ssbhesabfa
+          cp -a vendor build/ssbhesabfa/vendor
+          (
+            cd build
+            zip -qr "../$ASSET" ssbhesabfa
+          )
+          unzip -t "$ASSET"
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/vendor/autoload.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/src/Mcp/HesabfaTools.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.31.php'
+          test "$(unzip -Z1 "$ASSET" | awk '/^ssbhesabfa\/.*\.php$/ && $0 !~ /^ssbhesabfa\/vendor\// { count++ } END { print count + 0 }')" -eq 82
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|\.bak([.-]|$)|\.log$|(^|/)\.env($|\.)|release-v2\.3\.31\.yml$'; then
+            echo 'Development, secret, backup, or temporary workflow file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          cat > release-notes.md <<'NOTES'
+          ## Changes
+
+          - Preserves the v2.3.30 fix that makes the active Payment Helper method authoritative over obsolete short-title configuration keys.
+          - Adds `{customer_charge_percent}`, `{fee_percent}`, and `{income_percent}` to automatic and manual fee-income document descriptions.
+          - Records the configured customer surcharge, gateway fee, and calculated net income rate in accounting-document descriptions.
+          - Safely upgrades unchanged English or Persian default templates while preserving custom templates.
+          - Adds a configuration-only upgrade handler; mappings, queues, logs, invoices, and existing accounting records are unchanged.
+
+          ## Technopay regression case
+
+          The release verifies the active 7.5% customer surcharge and 5.5% gateway fee for the affected Technopay flow. For a 2,353,175,000 IRR gateway payment, the expected invoice payment is 2,189,000,000 IRR, investor income is 34,750,375 IRR, and net income rate is 1.5875%.
+
+          ## Package
+
+          Upload `ssbhesabfa-v2.3.31.zip` through PrestaShop Module Manager and run the module upgrade action.
+
+          Validation: source regression tests passed before release; legacy sources passed PHP 7.4 lint; all 82 module PHP files passed PHP 8.1 lint; Composer metadata, MCP discovery, both XML files, release invariants, and ZIP integrity passed.
+          NOTES
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.31' \
+            --notes-file release-notes.md \
+            --latest
