@@ -1,3 +1,11 @@
+## 2.3.31
+
+- Added `{customer_charge_percent}`, `{fee_percent}`, and `{income_percent}` placeholders to automatic and manual fee-income document descriptions.
+- Exposed the configured customer-charge and gateway-fee rates plus the calculated net income rate in the payment fee breakdown.
+- Updated default fee-income templates and safely migrates unchanged English or Persian templates to include all three rates.
+- Expanded back-office help and internal documentation for the new accounting-description placeholders.
+- Added a standalone configuration-only upgrade handler; mappings, queues, logs, invoices, and accounting records remain unchanged.
+
 ## 2.3.30
 
 - Fixed `psy_paymenthelper` payment resolution so the currently active gateway method takes precedence over historical short-title configuration keys.

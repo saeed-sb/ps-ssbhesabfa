@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.30`
+- **Current version:** `2.3.31`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Author:** Saeed Sattar Beglou
 
@@ -146,6 +146,9 @@ Payment and accounting-document descriptions support these placeholders:
 | `{order_reference}` | PrestaShop order reference |
 | `{invoice_number}` | Hesabfa invoice number |
 | `{transaction_number}` | Payment or gateway transaction number |
+| `{customer_charge_percent}` | Customer extra-charge percentage configured for the payment method |
+| `{fee_percent}` | Gateway fee percentage configured for the payment method |
+| `{income_percent}` | Net fee-income percentage relative to the invoice base amount |
 
 ## Webhook synchronization
 

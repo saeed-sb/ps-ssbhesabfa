@@ -638,6 +638,9 @@ trait HesabfaPaymentTrait
                     'order_reference' => (string) $order->reference,
                     'invoice_number' => (int) $number,
                     'transaction_number' => $payment->transaction_id,
+                    'customer_charge_percent' => $feeBreakdown['customer_charge_percent'],
+                    'fee_percent' => $feeBreakdown['fee_percent'],
+                    'income_percent' => $feeBreakdown['income_percent'],
                 ));
 
                 $incomeOperationKey = $this->buildOperationKey('payment_fee_income_document', array($id_order, $number, $paymentId, $payment->transaction_id));
@@ -852,6 +855,9 @@ trait HesabfaPaymentTrait
                 'order_reference' => $orderReference,
                 'invoice_number' => (int) $invoiceNumber,
                 'transaction_number' => $transactionNumber,
+                'customer_charge_percent' => $feeBreakdown['customer_charge_percent'],
+                'fee_percent' => $feeBreakdown['fee_percent'],
+                'income_percent' => $feeBreakdown['income_percent'],
             ));
             $manualIncomeOperationKey = $this->buildOperationKey('manual_payment_fee_income_document', array($invoiceNumber, $paymentConfigName, $transactionNumber));
             if (!$this->getCompletedOperation($manualIncomeOperationKey)) {

@@ -170,15 +170,15 @@ class Ssbhesabfa extends Module
         'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
         'SSBHESABFA_INVOICE_PROJECT' => '1',
         'SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment - invoice {invoice_number}',
-        'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Online payment fee income - order {order_id} - transaction {transaction_number}',
-        'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number}',
+        'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Online payment fee income - order {order_id} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
+        'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
     );
 
     public function __construct()
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.30';
+        $this->version = '2.3.31';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

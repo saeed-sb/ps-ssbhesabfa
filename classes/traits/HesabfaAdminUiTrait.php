@@ -863,7 +863,7 @@ trait HesabfaAdminUiTrait
     {
         return array(
             'form' => array(
-                'description' => $this->l('These templates are used in Hesabfa payment descriptions and accounting documents. Available placeholders: {order_id}, {order_reference}, {invoice_number}, {transaction_number}.'),
+                'description' => $this->l('These templates are used in Hesabfa payment descriptions and accounting documents. Available placeholders: {order_id}, {order_reference}, {invoice_number}, {transaction_number}, {customer_charge_percent}, {fee_percent}, {income_percent}.'),
                 'input' => array(
                     array(
                         'col' => 6,

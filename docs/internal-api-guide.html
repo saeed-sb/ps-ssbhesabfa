@@ -151,8 +151,11 @@ $queued = $module-&gt;enqueueInternalApiRequest(
 <li><code>{order_reference}</code>: مرجع سفارش در پرستاشاپ.</li>
 <li><code>{invoice_number}</code>: شماره فاکتور حسابفا.</li>
 <li><code>{transaction_number}</code>: شماره تراکنش درگاه یا پرداخت.</li>
+<li><code>{customer_charge_percent}</code>: درصد مبلغ افزوده‌شده به پرداخت مشتری.</li>
+<li><code>{fee_percent}</code>: درصد کارمزد درگاه پرداخت.</li>
+<li><code>{income_percent}</code>: درصد سود خالص سند نسبت به مبلغ پایه فاکتور.</li>
 </ul>
-<pre><code>پرداخت سفارش {order_reference} - فاکتور {invoice_number} - تراکنش {transaction_number}</code></pre>
+<pre><code>پرداخت سفارش {order_reference} - فاکتور {invoice_number} - تراکنش {transaction_number} - نرخ افزوده مشتری {customer_charge_percent}% - کارمزد درگاه {fee_percent}% - سود خالص {income_percent}%</code></pre>
 <p>در پرداخت‌های خودکار، مقدار <code>{order_reference}</code> از مرجع همان سفارش خوانده می‌شود. در پرداخت دستی، این مقدار از فیلد اختیاری «مرجع سفارش» در فرم پرداخت دستی گرفته می‌شود و در صورت خالی بودن، با مقدار خالی جایگزین خواهد شد.</p>
 
 
