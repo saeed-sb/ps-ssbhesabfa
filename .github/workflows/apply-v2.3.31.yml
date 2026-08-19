@@ -1,0 +1,445 @@
+name: Apply reviewed v2.3.31 changes
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/apply-v2.3.31.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: 5c473cac31da0ae002cf0beb8b2c991226c48bd4
+
+    steps:
+      - name: Check out trigger commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$BASE_SHA"
+          cat > /tmp/ssbhesabfa-v2.3.31.patch <<'PATCH'
+          diff --git a/CHANGELOG.md b/CHANGELOG.md
+          index 62d3c56..8f0e43b 100644
+          --- a/CHANGELOG.md
+          +++ b/CHANGELOG.md
+          @@ -1,3 +1,11 @@
+          +## 2.3.31
+          +
+          +- Added `{customer_charge_percent}`, `{fee_percent}`, and `{income_percent}` placeholders to automatic and manual fee-income document descriptions.
+          +- Exposed the configured customer-charge and gateway-fee rates plus the calculated net income rate in the payment fee breakdown.
+          +- Updated default fee-income templates and safely migrates unchanged English or Persian templates to include all three rates.
+          +- Expanded back-office help and internal documentation for the new accounting-description placeholders.
+          +- Added a standalone configuration-only upgrade handler; mappings, queues, logs, invoices, and accounting records remain unchanged.
+          +
+           ## 2.3.30
+           
+           - Fixed `psy_paymenthelper` payment resolution so the currently active gateway method takes precedence over historical short-title configuration keys.
+          diff --git a/Readme.md b/Readme.md
+          index 6ff3714..634fcf1 100644
+          --- a/Readme.md
+          +++ b/Readme.md
+          @@ -2,7 +2,7 @@
+           
+           `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
+           
+          -- **Current version:** `2.3.30`
+          +- **Current version:** `2.3.31`
+           - **PrestaShop compatibility:** `1.7.0.0` and newer
+           - **Author:** Saeed Sattar Beglou
+           
+          @@ -146,6 +146,9 @@ Payment and accounting-document descriptions support these placeholders:
+           | `{order_reference}` | PrestaShop order reference |
+           | `{invoice_number}` | Hesabfa invoice number |
+           | `{transaction_number}` | Payment or gateway transaction number |
+          +| `{customer_charge_percent}` | Customer extra-charge percentage configured for the payment method |
+          +| `{fee_percent}` | Gateway fee percentage configured for the payment method |
+          +| `{income_percent}` | Net fee-income percentage relative to the invoice base amount |
+           
+           ## Webhook synchronization
+           
+          diff --git a/classes/services/HesabfaPaymentFeeService.php b/classes/services/HesabfaPaymentFeeService.php
+          index 9aa1f73..848cbe9 100644
+          --- a/classes/services/HesabfaPaymentFeeService.php
+          +++ b/classes/services/HesabfaPaymentFeeService.php
+          @@ -34,22 +34,39 @@ class HesabfaPaymentFeeService
+               public static function getBreakdown($configName,$paidAmount)
+               {
+                   $paidAmount=round((float)$paidAmount);
+          -        $result=array('invoice_payment_amount'=>$paidAmount,'transaction_fee'=>0,'income_amount'=>0,'income_account_path'=>'','income_contact_code'=>'');
+          +        $result=array(
+          +            'invoice_payment_amount'=>$paidAmount,
+          +            'transaction_fee'=>0,
+          +            'income_amount'=>0,
+          +            'income_account_path'=>'',
+          +            'income_contact_code'=>'',
+          +            'fee_payer'=>'merchant',
+          +            'fee_percent'=>0,
+          +            'customer_charge_percent'=>0,
+          +            'income_percent'=>0,
+          +        );
+                   if (!$configName || $paidAmount<=0) return $result;
+                   $payer=(string)Configuration::get($configName.'_FEE_PAYER');
+                   if (!$payer) $payer='merchant';
+          +        $result['fee_payer']=$payer;
+          +        $result['fee_percent']=(float)Configuration::get($configName.'_FEE_PERCENT');
+          +        $result['customer_charge_percent']=(float)Configuration::get($configName.'_CUSTOMER_CHARGE_PERCENT');
+                   if ($payer==='merchant') {
+                       $result['transaction_fee']=round(self::getTransactionFee($configName,$paidAmount));
+                       return $result;
+                   }
+                   if ($payer==='customer') {
+          -            $charge=(float)Configuration::get($configName.'_CUSTOMER_CHARGE_PERCENT');
+          -            $feePercent=(float)Configuration::get($configName.'_FEE_PERCENT');
+          +            $charge=$result['customer_charge_percent'];
+          +            $feePercent=$result['fee_percent'];
+                       $base=round($charge>0 ? $paidAmount/(1+($charge/100)) : $paidAmount);
+                       $gatewayFee=$feePercent>0 ? round($paidAmount*($feePercent/100)) : 0;
+                       $income=($paidAmount-$gatewayFee)-$base;
+          +            $roundedIncome=$income>0?round($income):0;
+                       $result['invoice_payment_amount']=$base;
+          -            $result['income_amount']=$income>0?round($income):0;
+          +            $result['income_amount']=$roundedIncome;
+          +            $result['income_percent']=($base>0 && $roundedIncome>0)
+          +                ? round(($roundedIncome/$base)*100,6)
+          +                : 0;
+                       $result['income_account_path']=trim((string)Configuration::get($configName.'_INCOME_ACCOUNT_PATH'));
+                       $result['income_contact_code']=trim((string)Configuration::get($configName.'_FEE_INCOME_CONTACT_CODE'));
+                   }
+          diff --git a/classes/traits/HesabfaAdminUiTrait.php b/classes/traits/HesabfaAdminUiTrait.php
+          index 39c4a07..9ef2a91 100644
+          --- a/classes/traits/HesabfaAdminUiTrait.php
+          +++ b/classes/traits/HesabfaAdminUiTrait.php
+          @@ -863,7 +863,7 @@ trait HesabfaAdminUiTrait
+               {
+                   return array(
+                       'form' => array(
+          -                'description' => $this->l('These templates are used in Hesabfa payment descriptions and accounting documents. Available placeholders: {order_id}, {order_reference}, {invoice_number}, {transaction_number}.'),
+          +                'description' => $this->l('These templates are used in Hesabfa payment descriptions and accounting documents. Available placeholders: {order_id}, {order_reference}, {invoice_number}, {transaction_number}, {customer_charge_percent}, {fee_percent}, {income_percent}.'),
+                           'input' => array(
+                               array(
+                                   'col' => 6,
+          diff --git a/classes/traits/HesabfaPaymentTrait.php b/classes/traits/HesabfaPaymentTrait.php
+          index 974eb74..b98ab31 100644
+          --- a/classes/traits/HesabfaPaymentTrait.php
+          +++ b/classes/traits/HesabfaPaymentTrait.php
+          @@ -638,6 +638,9 @@ trait HesabfaPaymentTrait
+                           'order_reference' => (string) $order->reference,
+                           'invoice_number' => (int) $number,
+                           'transaction_number' => $payment->transaction_id,
+          +                'customer_charge_percent' => $feeBreakdown['customer_charge_percent'],
+          +                'fee_percent' => $feeBreakdown['fee_percent'],
+          +                'income_percent' => $feeBreakdown['income_percent'],
+                       ));
+           
+                       $incomeOperationKey = $this->buildOperationKey('payment_fee_income_document', array($id_order, $number, $paymentId, $payment->transaction_id));
+          @@ -852,6 +855,9 @@ trait HesabfaPaymentTrait
+                           'order_reference' => $orderReference,
+                           'invoice_number' => (int) $invoiceNumber,
+                           'transaction_number' => $transactionNumber,
+          +                'customer_charge_percent' => $feeBreakdown['customer_charge_percent'],
+          +                'fee_percent' => $feeBreakdown['fee_percent'],
+          +                'income_percent' => $feeBreakdown['income_percent'],
+                       ));
+                       $manualIncomeOperationKey = $this->buildOperationKey('manual_payment_fee_income_document', array($invoiceNumber, $paymentConfigName, $transactionNumber));
+                       if (!$this->getCompletedOperation($manualIncomeOperationKey)) {
+          diff --git a/config.xml b/config.xml
+          index 7c967f2..ce3e0b5 100644
+          --- a/config.xml
+          +++ b/config.xml
+          @@ -2,7 +2,7 @@
+           <module>
+               <name>ssbhesabfa</name>
+               <displayName><![CDATA[Hesabfa Online Accounting]]></displayName>
+          -    <version>2.3.30</version>
+          +    <version>2.3.31</version>
+               <description><![CDATA[Connect Hesabfa Online Accounting to Prestashop]]></description>
+               <author><![CDATA[Saeed Sattar Beglou]]></author>
+               <tab><![CDATA[billing_invoicing]]></tab>
+          diff --git a/config_fa.xml b/config_fa.xml
+          index 4d3cc74..4a7650f 100644
+          --- a/config_fa.xml
+          +++ b/config_fa.xml
+          @@ -2,7 +2,7 @@
+           <module>
+               <name>ssbhesabfa</name>
+               <displayName><![CDATA[نرم&zwnj;افزار حسابداری ابری حسابفا]]></displayName>
+          -    <version>2.3.30</version>
+          +    <version>2.3.31</version>
+               <description><![CDATA[اتصال نرم&zwnj;افزار حسابداری ابری حسابفا به پرستاشاپ]]></description>
+               <author><![CDATA[Saeed Sattar Beglou]]></author>
+               <tab><![CDATA[billing_invoicing]]></tab>
+          diff --git a/docs/internal-api-guide.html b/docs/internal-api-guide.html
+          index 9f71c0b..d010e07 100644
+          --- a/docs/internal-api-guide.html
+          +++ b/docs/internal-api-guide.html
+          @@ -151,8 +151,11 @@ $queued = $module-&gt;enqueueInternalApiRequest(
+           <li><code>{order_reference}</code>: مرجع سفارش در پرستاشاپ.</li>
+           <li><code>{invoice_number}</code>: شماره فاکتور حسابفا.</li>
+           <li><code>{transaction_number}</code>: شماره تراکنش درگاه یا پرداخت.</li>
+          +<li><code>{customer_charge_percent}</code>: درصد مبلغ افزوده‌شده به پرداخت مشتری.</li>
+          +<li><code>{fee_percent}</code>: درصد کارمزد درگاه پرداخت.</li>
+          +<li><code>{income_percent}</code>: درصد سود خالص سند نسبت به مبلغ پایه فاکتور.</li>
+           </ul>
+          -<pre><code>پرداخت سفارش {order_reference} - فاکتور {invoice_number} - تراکنش {transaction_number}</code></pre>
+          +<pre><code>پرداخت سفارش {order_reference} - فاکتور {invoice_number} - تراکنش {transaction_number} - نرخ افزوده مشتری {customer_charge_percent}% - کارمزد درگاه {fee_percent}% - سود خالص {income_percent}%</code></pre>
+           <p>در پرداخت‌های خودکار، مقدار <code>{order_reference}</code> از مرجع همان سفارش خوانده می‌شود. در پرداخت دستی، این مقدار از فیلد اختیاری «مرجع سفارش» در فرم پرداخت دستی گرفته می‌شود و در صورت خالی بودن، با مقدار خالی جایگزین خواهد شد.</p>
+           
+           
+          diff --git a/ssbhesabfa.php b/ssbhesabfa.php
+          index a7645c3..6799e4c 100644
+          --- a/ssbhesabfa.php
+          +++ b/ssbhesabfa.php
+          @@ -170,15 +170,15 @@ class Ssbhesabfa extends Module
+                   'SSBHESABFA_INVOICE_REFERENCE_TYPE' => 1,
+                   'SSBHESABFA_INVOICE_PROJECT' => '1',
+                   'SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment - invoice {invoice_number}',
+          -        'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Online payment fee income - order {order_id} - transaction {transaction_number}',
+          -        'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number}',
+          +        'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Online payment fee income - order {order_id} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
+          +        'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
+               );
+           
+               public function __construct()
+               {
+                   $this->name = 'ssbhesabfa';
+                   $this->tab = 'billing_invoicing';
+          -        $this->version = '2.3.30';
+          +        $this->version = '2.3.31';
+                   $this->author = 'Saeed Sattar Beglou';
+                   $this->need_instance = 0;
+           
+          diff --git a/upgrade/upgrade-2.3.31.php b/upgrade/upgrade-2.3.31.php
+          new file mode 100644
+          index 0000000..56c9c9c
+          --- /dev/null
+          +++ b/upgrade/upgrade-2.3.31.php
+          @@ -0,0 +1,35 @@
+          +<?php
+          +
+          +if (!defined('_PS_VERSION_')) {
+          +    exit;
+          +}
+          +
+          +function upgrade_module_2_3_31($module)
+          +{
+          +    if (!Validate::isLoadedObject($module)) {
+          +        return false;
+          +    }
+          +
+          +    $templates = array(
+          +        'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => array(
+          +            'Online payment fee income - order {order_id} - transaction {transaction_number}' => 'Online payment fee income - order {order_id} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
+          +            'درآمد کارمزد پرداخت آنلاین - فاکتور {invoice_number} - مرجع سفارش: {order_reference}' => 'درآمد کارمزد پرداخت آنلاین - فاکتور {invoice_number} - مرجع سفارش: {order_reference} - نرخ افزوده مشتری: {customer_charge_percent}% - نرخ کارمزد درگاه: {fee_percent}% - نرخ سود خالص: {income_percent}%',
+          +        ),
+          +        'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => array(
+          +            'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number}' => 'Manual gateway payment fee income - invoice {invoice_number} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - net income {income_percent}%',
+          +            'درآمد کارمزد پرداخت آفلاین - فاکتور {invoice_number} - مرجع سفارش: {order_reference}' => 'درآمد کارمزد پرداخت آفلاین - فاکتور {invoice_number} - مرجع سفارش: {order_reference} - نرخ افزوده مشتری: {customer_charge_percent}% - نرخ کارمزد درگاه: {fee_percent}% - نرخ سود خالص: {income_percent}%',
+          +        ),
+          +    );
+          +
+          +    foreach ($templates as $configurationName => $replacements) {
+          +        $currentValue = (string) Configuration::get($configurationName);
+          +        if (!isset($replacements[$currentValue])) {
+          +            continue;
+          +        }
+          +        if (!Configuration::updateValue($configurationName, $replacements[$currentValue])) {
+          +            return false;
+          +        }
+          +    }
+          +
+          +    return true;
+          +}
+          PATCH
+          test "$(sha256sum /tmp/ssbhesabfa-v2.3.31.patch | awk '{print $1}')" = "414e292354b3426e6bd98537b4f2b54e03a77e8909b5fb8f92867690ca84b68f"
+          git apply --check /tmp/ssbhesabfa-v2.3.31.patch
+          git apply /tmp/ssbhesabfa-v2.3.31.patch
+          rm .github/workflows/apply-v2.3.31.yml
+          git diff --check
+
+      - name: Set up PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: none
+
+      - name: Run compatibility and accounting regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+          cat > /tmp/ssbhesabfa-v2.3.31-regression.php <<'PHP'
+          <?php
+
+          define('_PS_VERSION_', '8.1.7');
+
+          class Configuration
+          {
+              public static $values = array();
+
+              public static function get($key)
+              {
+                  return array_key_exists($key, self::$values) ? self::$values[$key] : false;
+              }
+
+              public static function updateValue($key, $value)
+              {
+                  self::$values[$key] = $value;
+                  return true;
+              }
+          }
+
+          class Validate
+          {
+              public static function isLoadedObject($object)
+              {
+                  return is_object($object);
+              }
+          }
+
+          class HesabfaPrestashopRepository
+          {
+              public static function getOrderModuleName($idOrder)
+              {
+                  return $idOrder === 29864 ? 'psy_paymenthelper' : '';
+              }
+          }
+
+          require getenv('GITHUB_WORKSPACE') . '/classes/services/HesabfaPaymentFeeService.php';
+          require getenv('GITHUB_WORKSPACE') . '/classes/traits/HesabfaPaymentTrait.php';
+          require getenv('GITHUB_WORKSPACE') . '/upgrade/upgrade-2.3.31.php';
+
+          class PaymentResolverHarness
+          {
+              use HesabfaPaymentTrait;
+
+              private $methods;
+
+              public function __construct(array $methods)
+              {
+                  $this->methods = $methods;
+              }
+
+              public function getPaymentMethodsName()
+              {
+                  return $this->methods;
+              }
+          }
+
+          $legacyKey = 'SSBHESABFA_PAYMENT_METHOD_' . md5('psy_paymenthelper|تکنوپی');
+          $activeKey = 'SSBHESABFA_PAYMENT_METHOD_' . md5('psy_paymenthelper|درگاه پرداخت تکنوپی');
+          Configuration::$values = array(
+              $legacyKey => '0032',
+              $legacyKey . '_CUSTOMER_CHARGE_PERCENT' => '6.5',
+              $activeKey => '0032',
+              $activeKey . '_FEE_PAYER' => 'customer',
+              $activeKey . '_FEE_TYPE' => 'percent',
+              $activeKey . '_FEE_PERCENT' => '5.5',
+              $activeKey . '_CUSTOMER_CHARGE_PERCENT' => '7.5',
+              $activeKey . '_INCOME_ACCOUNT_PATH' => 'Accounts Receivable',
+              $activeKey . '_FEE_INCOME_CONTACT_CODE' => '061945',
+          );
+
+          $resolver = new PaymentResolverHarness(array(array(
+              'name' => 'درگاه پرداخت تکنوپی',
+              'module' => 'psy_paymenthelper',
+              'id' => $activeKey,
+          )));
+          $resolved = $resolver->getPaymentConfigByOrderPayment(29864, 'تکنوپی');
+          if (!is_array($resolved) || $resolved['configuration_name'] !== $activeKey) {
+              fwrite(STDERR, "Active Payment Helper configuration precedence failed.\n");
+              exit(1);
+          }
+
+          $breakdown = HesabfaPaymentFeeService::getBreakdown($activeKey, 2353175000);
+          $expected = array(
+              'invoice_payment_amount' => 2189000000,
+              'income_amount' => 34750375,
+              'fee_percent' => 5.5,
+              'customer_charge_percent' => 7.5,
+              'income_percent' => 1.5875,
+          );
+          foreach ($expected as $key => $value) {
+              if (!isset($breakdown[$key]) || (float) $breakdown[$key] !== (float) $value) {
+                  fwrite(STDERR, $key . " mismatch.\n");
+                  exit(1);
+              }
+          }
+
+          Configuration::$values = array(
+              'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'درآمد کارمزد پرداخت آنلاین - فاکتور {invoice_number} - مرجع سفارش: {order_reference}',
+              'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => 'Custom manual template',
+          );
+          if (!upgrade_module_2_3_31(new stdClass())) {
+              fwrite(STDERR, "Template upgrade returned false.\n");
+              exit(1);
+          }
+          $onlineTemplate = Configuration::$values['SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'];
+          foreach (array('{customer_charge_percent}', '{fee_percent}', '{income_percent}') as $placeholder) {
+              if (strpos($onlineTemplate, $placeholder) === false) {
+                  fwrite(STDERR, "Missing upgraded placeholder: " . $placeholder . "\n");
+                  exit(1);
+              }
+          }
+          if (Configuration::$values['SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'] !== 'Custom manual template') {
+              fwrite(STDERR, "Custom template was overwritten.\n");
+              exit(1);
+          }
+
+          echo "Resolver, Technopay rates, and safe template migration passed.\n";
+          PHP
+          php /tmp/ssbhesabfa-v2.3.31-regression.php
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.31';" ssbhesabfa.php
+          grep -Fq '<version>2.3.31</version>' config.xml
+          grep -Fq '<version>2.3.31</version>' config_fa.xml
+          grep -Fq '**Current version:** `2.3.31`' Readme.md
+          grep -Fq '## 2.3.31' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.31.php
+          grep -Fq 'function upgrade_module_2_3_31' upgrade/upgrade-2.3.31.php
+          test "$(find . -path './.git' -prune -o -type f -name '*.php' -print | wc -l)" -eq 82
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+          git diff --check
+
+      - name: Commit tested changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: include payment rates in fee income descriptions'
+          git push origin HEAD:master
