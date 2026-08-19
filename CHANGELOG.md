@@ -1,3 +1,10 @@
+## 2.3.30
+
+- Fixed `psy_paymenthelper` payment resolution so the currently active gateway method takes precedence over historical short-title configuration keys.
+- Prevented stale customer-charge percentages from shadowing updated gateway settings and leaving a residual customer or invoice balance.
+- Kept direct legacy configuration as a fallback only when no active Payment Helper method matches the order payment title.
+- Added a standalone no-schema upgrade handler; existing settings, mappings, queues, logs, and accounting data remain unchanged.
+
 ## 2.3.29
 - Declared the module as compatible with the official PrestaShop MCP Server.
 - Added seven schema-validated MCP tools for secret-free status and mapping inspection, bounded queue and issue reads, controlled synchronization queueing, and explicit single-job execution.

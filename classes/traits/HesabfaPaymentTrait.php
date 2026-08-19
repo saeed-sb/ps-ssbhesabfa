@@ -1036,13 +1036,13 @@ trait HesabfaPaymentTrait
          * psy_paymenthelper may save a short payment title on the order
          * (for example "تارا") while exposing a longer display title in
          * the module settings (for example "درگاه پرداخت تارا").
-         * Keep the existing configuration keys intact and resolve the
-         * matching configured method by a normalized lookup name.
+         *
+         * Resolve the currently active method before accepting the direct
+         * short-title key. A historical key can still contain a bank code
+         * and obsolete fee settings, so treating it as authoritative would
+         * silently shadow the active gateway configuration.
          */
-        if (
-            $moduleName === 'psy_paymenthelper'
-            && ($bankCode === false || $bankCode === null || $bankCode === '')
-        ) {
+        if ($moduleName === 'psy_paymenthelper') {
             $lookupName = $this->normalizePaymentLookupName($paymentName, $moduleName);
 
             foreach ($this->getPaymentMethodsName() as $configuredMethod) {
@@ -1063,17 +1063,8 @@ trait HesabfaPaymentTrait
                     continue;
                 }
 
-                $configuredBankCode = Configuration::get($configuredMethod['id']);
-                if (
-                    $configuredBankCode === false
-                    || $configuredBankCode === null
-                    || $configuredBankCode === ''
-                ) {
-                    continue;
-                }
-
                 $configurationName = (string) $configuredMethod['id'];
-                $bankCode = $configuredBankCode;
+                $bankCode = Configuration::get($configurationName);
                 $paymentName = isset($configuredMethod['name'])
                     ? (string) $configuredMethod['name']
                     : $paymentName;
