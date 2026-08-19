@@ -1,0 +1,301 @@
+name: Apply reviewed v2.3.30 fix
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/apply-v2.3.30-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    env:
+      CODE_BASE_SHA: 848a78dcc27c172e1c7a061afa6d6597186448d9
+
+    steps:
+      - name: Check out trigger commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify unchanged source and apply reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          unexpected="$(git diff --name-only "$CODE_BASE_SHA" HEAD | grep -v '^\.github/workflows/' || true)"
+          test -z "$unexpected"
+          test -f .github/workflows/release-v2.3.30.yml
+          test -f .github/workflows/apply-v2.3.30-fix.yml
+
+          cat > /tmp/ssbhesabfa-v2.3.30.patch <<'PATCH'
+          diff --git a/CHANGELOG.md b/CHANGELOG.md
+          index b9b2ec9..62d3c56 100644
+          --- a/CHANGELOG.md
+          +++ b/CHANGELOG.md
+          @@ -1,3 +1,10 @@
+          +## 2.3.30
+          +
+          +- Fixed `psy_paymenthelper` payment resolution so the currently active gateway method takes precedence over historical short-title configuration keys.
+          +- Prevented stale customer-charge percentages from shadowing updated gateway settings and leaving a residual customer or invoice balance.
+          +- Kept direct legacy configuration as a fallback only when no active Payment Helper method matches the order payment title.
+          +- Added a standalone no-schema upgrade handler; existing settings, mappings, queues, logs, and accounting data remain unchanged.
+          +
+           ## 2.3.29
+           - Declared the module as compatible with the official PrestaShop MCP Server.
+           - Added seven schema-validated MCP tools for secret-free status and mapping inspection, bounded queue and issue reads, controlled synchronization queueing, and explicit single-job execution.
+          diff --git a/Readme.md b/Readme.md
+          index 185960b..6ff3714 100644
+          --- a/Readme.md
+          +++ b/Readme.md
+          @@ -2,7 +2,7 @@
+           
+           `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
+           
+          -- **Current version:** `2.3.29`
+          +- **Current version:** `2.3.30`
+           - **PrestaShop compatibility:** `1.7.0.0` and newer
+           - **Author:** Saeed Sattar Beglou
+           
+          diff --git a/classes/traits/HesabfaPaymentTrait.php b/classes/traits/HesabfaPaymentTrait.php
+          index 4ba8f46..974eb74 100644
+          --- a/classes/traits/HesabfaPaymentTrait.php
+          +++ b/classes/traits/HesabfaPaymentTrait.php
+          @@ -1036,13 +1036,13 @@ trait HesabfaPaymentTrait
+                    * psy_paymenthelper may save a short payment title on the order
+                    * (for example "تارا") while exposing a longer display title in
+                    * the module settings (for example "درگاه پرداخت تارا").
+          -         * Keep the existing configuration keys intact and resolve the
+          -         * matching configured method by a normalized lookup name.
+          +         *
+          +         * Resolve the currently active method before accepting the direct
+          +         * short-title key. A historical key can still contain a bank code
+          +         * and obsolete fee settings, so treating it as authoritative would
+          +         * silently shadow the active gateway configuration.
+                    */
+          -        if (
+          -            $moduleName === 'psy_paymenthelper'
+          -            && ($bankCode === false || $bankCode === null || $bankCode === '')
+          -        ) {
+          +        if ($moduleName === 'psy_paymenthelper') {
+                       $lookupName = $this->normalizePaymentLookupName($paymentName, $moduleName);
+           
+                       foreach ($this->getPaymentMethodsName() as $configuredMethod) {
+          @@ -1063,17 +1063,8 @@ trait HesabfaPaymentTrait
+                               continue;
+                           }
+           
+          -                $configuredBankCode = Configuration::get($configuredMethod['id']);
+          -                if (
+          -                    $configuredBankCode === false
+          -                    || $configuredBankCode === null
+          -                    || $configuredBankCode === ''
+          -                ) {
+          -                    continue;
+          -                }
+          -
+                           $configurationName = (string) $configuredMethod['id'];
+          -                $bankCode = $configuredBankCode;
+          +                $bankCode = Configuration::get($configurationName);
+                           $paymentName = isset($configuredMethod['name'])
+                               ? (string) $configuredMethod['name']
+                               : $paymentName;
+          diff --git a/config.xml b/config.xml
+          index bfe433f..7c967f2 100644
+          --- a/config.xml
+          +++ b/config.xml
+          @@ -2,7 +2,7 @@
+           <module>
+               <name>ssbhesabfa</name>
+               <displayName><![CDATA[Hesabfa Online Accounting]]></displayName>
+          -    <version>2.3.29</version>
+          +    <version>2.3.30</version>
+               <description><![CDATA[Connect Hesabfa Online Accounting to Prestashop]]></description>
+               <author><![CDATA[Saeed Sattar Beglou]]></author>
+               <tab><![CDATA[billing_invoicing]]></tab>
+          diff --git a/config_fa.xml b/config_fa.xml
+          index 995d226..4d3cc74 100644
+          --- a/config_fa.xml
+          +++ b/config_fa.xml
+          @@ -2,7 +2,7 @@
+           <module>
+               <name>ssbhesabfa</name>
+               <displayName><![CDATA[نرم&zwnj;افزار حسابداری ابری حسابفا]]></displayName>
+          -    <version>2.3.29</version>
+          +    <version>2.3.30</version>
+               <description><![CDATA[اتصال نرم&zwnj;افزار حسابداری ابری حسابفا به پرستاشاپ]]></description>
+               <author><![CDATA[Saeed Sattar Beglou]]></author>
+               <tab><![CDATA[billing_invoicing]]></tab>
+          diff --git a/ssbhesabfa.php b/ssbhesabfa.php
+          index 304b399..a7645c3 100644
+          --- a/ssbhesabfa.php
+          +++ b/ssbhesabfa.php
+          @@ -178,7 +178,7 @@ class Ssbhesabfa extends Module
+               {
+                   $this->name = 'ssbhesabfa';
+                   $this->tab = 'billing_invoicing';
+          -        $this->version = '2.3.29';
+          +        $this->version = '2.3.30';
+                   $this->author = 'Saeed Sattar Beglou';
+                   $this->need_instance = 0;
+           
+          diff --git a/upgrade/upgrade-2.3.30.php b/upgrade/upgrade-2.3.30.php
+          new file mode 100644
+          index 0000000..5eed8ac
+          --- /dev/null
+          +++ b/upgrade/upgrade-2.3.30.php
+          @@ -0,0 +1,10 @@
+          +<?php
+          +
+          +if (!defined('_PS_VERSION_')) {
+          +    exit;
+          +}
+          +
+          +function upgrade_module_2_3_30($module)
+          +{
+          +    return Validate::isLoadedObject($module);
+          +}
+          PATCH
+
+          test "$(sha256sum /tmp/ssbhesabfa-v2.3.30.patch | awk '{print $1}')" = "bf9fed4e537a499d30c419634ed36cd7ebfeb6c327c06e3d6fa3723c5cca968a"
+          git apply --check /tmp/ssbhesabfa-v2.3.30.patch
+          git apply /tmp/ssbhesabfa-v2.3.30.patch
+          rm .github/workflows/release-v2.3.30.yml
+          rm .github/workflows/apply-v2.3.30-fix.yml
+          git diff --check
+
+      - name: Set up PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: none
+
+      - name: Run legacy lint and resolver regression test
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+          cat > /tmp/payment-config-resolver-regression.php <<'PHP'
+          <?php
+
+          class Configuration
+          {
+              public static $values = array();
+
+              public static function get($key)
+              {
+                  return array_key_exists($key, self::$values) ? self::$values[$key] : false;
+              }
+          }
+
+          class HesabfaPrestashopRepository
+          {
+              public static function getOrderModuleName($idOrder)
+              {
+                  return $idOrder === 29864 ? 'psy_paymenthelper' : '';
+              }
+          }
+
+          require getenv('GITHUB_WORKSPACE') . '/classes/traits/HesabfaPaymentTrait.php';
+
+          class PaymentResolverHarness
+          {
+              use HesabfaPaymentTrait;
+
+              private $methods;
+
+              public function __construct(array $methods)
+              {
+                  $this->methods = $methods;
+              }
+
+              public function getPaymentMethodsName()
+              {
+                  return $this->methods;
+              }
+          }
+
+          $legacyKey = 'SSBHESABFA_PAYMENT_METHOD_' . md5('psy_paymenthelper|تکنوپی');
+          $activeKey = 'SSBHESABFA_PAYMENT_METHOD_' . md5('psy_paymenthelper|درگاه پرداخت تکنوپی');
+          Configuration::$values = array(
+              $legacyKey => '0032',
+              $legacyKey . '_CUSTOMER_CHARGE_PERCENT' => '6.5',
+              $activeKey => '0032',
+              $activeKey . '_CUSTOMER_CHARGE_PERCENT' => '7.5',
+          );
+
+          $resolver = new PaymentResolverHarness(array(
+              array(
+                  'name' => 'درگاه پرداخت تکنوپی',
+                  'module' => 'psy_paymenthelper',
+                  'id' => $activeKey,
+              ),
+          ));
+          $result = $resolver->getPaymentConfigByOrderPayment(29864, 'تکنوپی');
+          if (!is_array($result) || $result['configuration_name'] !== $activeKey) {
+              fwrite(STDERR, "Active Payment Helper configuration did not override the legacy short-title key.\n");
+              exit(1);
+          }
+          if (Configuration::get($result['configuration_name'] . '_CUSTOMER_CHARGE_PERCENT') !== '7.5') {
+              fwrite(STDERR, "Resolved customer charge percentage is not the active 7.5 percent value.\n");
+              exit(1);
+          }
+
+          $fallback = new PaymentResolverHarness(array());
+          $fallbackResult = $fallback->getPaymentConfigByOrderPayment(29864, 'تکنوپی');
+          if (!is_array($fallbackResult) || $fallbackResult['configuration_name'] !== $legacyKey) {
+              fwrite(STDERR, "Direct legacy configuration fallback was not preserved.\n");
+              exit(1);
+          }
+
+          echo "Payment Helper configuration precedence regression test passed.\n";
+          PHP
+          php /tmp/payment-config-resolver-regression.php
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate complete source
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.30';" ssbhesabfa.php
+          grep -Fq '<version>2.3.30</version>' config.xml
+          grep -Fq '<version>2.3.30</version>' config_fa.xml
+          grep -Fq '**Current version:** `2.3.30`' Readme.md
+          grep -Fq '## 2.3.30' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.30.php
+          grep -Fq 'function upgrade_module_2_3_30' upgrade/upgrade-2.3.30.php
+          test "$(find . -path './.git' -prune -o -type f -name '*.php' -print | wc -l)" -eq 81
+          find . -path './.git' -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+          git diff --check
+
+      - name: Commit and push tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: prefer active payment helper configuration'
+          git push origin HEAD:master
