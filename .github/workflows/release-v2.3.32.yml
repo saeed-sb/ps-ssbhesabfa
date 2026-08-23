@@ -1,0 +1,143 @@
+name: Release v2.3.32
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.32.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: 9ad04f9eb558135d5dc62bd379259263b134a5a1
+      TAG: v2.3.32
+      ASSET: ssbhesabfa-v2.3.32.zip
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Validate legacy PHP sources on PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          tools: none
+
+      - name: Lint and test non-MCP sources on PHP 7.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+          php tests/paymenthub_compatibility.php
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.32';" ssbhesabfa.php
+          grep -Fq 'public function isMcpCompliant()' ssbhesabfa.php
+          grep -Fq '<version>2.3.32</version>' config.xml
+          grep -Fq '<version>2.3.32</version>' config_fa.xml
+          grep -Fq '## 2.3.32' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.32.php
+          grep -Fq 'function upgrade_module_2_3_32' upgrade/upgrade-2.3.32.php
+          test -f tests/paymenthub_compatibility.php
+          grep -Fq 'getSsbPaymentHubMethods' classes/traits/HesabfaPaymentTrait.php
+          grep -Fq 'getProviderPaymentMethodForOrder' classes/traits/HesabfaPaymentTrait.php
+          test -f src/Mcp/HesabfaTools.php
+          test "$(grep -c '#\[PsMcpTool(' src/Mcp/HesabfaTools.php)" -eq 7
+          test "$(find . -path './.git' -prune -o -path './vendor' -prune -o -type f -name '*.php' -print | wc -l)" -eq 84
+          git diff --check "$TARGET_SHA^" "$TARGET_SHA"
+          find . -path './.git' -prune -o -path './vendor' -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/paymenthub_compatibility.php
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/ssbhesabfa
+          git archive \
+            --format=tar \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore' \
+            | tar -xf - -C build/ssbhesabfa
+          cp -a vendor build/ssbhesabfa/vendor
+          (
+            cd build
+            zip -qr "../$ASSET" ssbhesabfa
+          )
+          unzip -t "$ASSET"
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/vendor/autoload.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/src/Mcp/HesabfaTools.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/tests/paymenthub_compatibility.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.32.php'
+          test "$(unzip -Z1 "$ASSET" | awk '/^ssbhesabfa\/.*\.php$/ && $0 !~ /^ssbhesabfa\/vendor\// { count++ } END { print count + 0 }')" -eq 84
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|(^|/)(cache|logs?)/|\.bak([.-]|$)|\.backup([.-]|$)|\.log$|(^|/)\.env($|\.)|release-v2\.3\.32\.yml$'; then
+            echo 'Development, secret, runtime, backup, or temporary workflow file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          cat > release-notes.md <<'NOTES'
+          ## Changes
+
+          - Adds provider-level bank mappings for Saman and DigiPay methods exposed by ssbpaymenthub.
+          - Replaces the generic Payment Hub mapping row with one labeled row per provider, including inactive providers that can be configured before activation.
+          - Uses stable provider codes for accounting configuration keys instead of editable checkout titles.
+          - Resolves each order through the provider recorded by Payment Hub, with a title fallback for older transactions.
+          - Adds a focused Payment Hub compatibility regression test and a no-schema upgrade handler.
+          - Preserves the existing MCP tools and the Payment Helper and TechnoPay fixes from v2.3.31.
+
+          ## Upgrade
+
+          Upload ssbhesabfa-v2.3.32.zip through PrestaShop Module Manager and run the module upgrade action. Existing mappings, queues, logs, invoices, and accounting records are unchanged by the upgrade handler.
+
+          ## Validation
+
+          The exact 96-file publishable source manifest was matched against iPhoneChi production. Legacy sources passed PHP 7.4 lint and the Payment Hub regression test; all 84 module PHP files passed PHP 8.1 lint; Composer metadata, seven MCP tools, both XML files, release invariants, and ZIP integrity passed.
+          NOTES
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.32' \
+            --notes-file release-notes.md \
+            --latest
