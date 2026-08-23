@@ -119,7 +119,111 @@ trait HesabfaPaymentTrait
             }
         }
 
+        /*
+         * ssbpaymenthub owns multiple provider-level methods while PrestaShop
+         * records the parent module name on the order. Replace its generic
+         * module row with the provider catalog exposed by the hub.
+         */
+        $paymentHubMethods = $this->getSsbPaymentHubMethods();
+        if (!empty($paymentHubMethods)) {
+            $payment_array = array_values(array_filter(
+                $payment_array,
+                static function ($method) {
+                    return empty($method['module'])
+                        || (string) $method['module'] !== 'ssbpaymenthub';
+                }
+            ));
+
+            foreach ($paymentHubMethods as $paymentHubMethod) {
+                $payment_array[] = $paymentHubMethod;
+            }
+        }
+
         return $payment_array;
+    }
+
+    private function getSsbPaymentHubMethods()
+    {
+        try {
+            $paymentHubModule = Module::getInstanceByName('ssbpaymenthub');
+            if (
+                !Validate::isLoadedObject($paymentHubModule)
+                || !method_exists($paymentHubModule, 'getProviderPaymentMethods')
+            ) {
+                return array();
+            }
+
+            $methods = $paymentHubModule->getProviderPaymentMethods(false);
+            if (!is_array($methods)) {
+                return array();
+            }
+
+            $moduleName = trim((string) $paymentHubModule->name);
+            if ($moduleName !== 'ssbpaymenthub') {
+                return array();
+            }
+            $moduleDisplayName = $this->normalizePaymentName(
+                isset($paymentHubModule->displayName) ? $paymentHubModule->displayName : '',
+                $moduleName
+            );
+            if ($moduleDisplayName === '') {
+                $moduleDisplayName = $moduleName;
+            }
+
+            $result = array();
+            $seenCodes = array();
+
+            foreach ($methods as $method) {
+                if (!is_array($method)) {
+                    continue;
+                }
+
+                $providerCode = isset($method['code'])
+                    ? strtolower(trim((string) $method['code']))
+                    : '';
+                $providerName = $this->normalizePaymentName(
+                    isset($method['name']) ? $method['name'] : '',
+                    $moduleName
+                );
+
+                if (
+                    !preg_match('/^[a-z0-9_-]{1,32}$/D', $providerCode)
+                    || $providerName === ''
+                    || isset($seenCodes[$providerCode])
+                ) {
+                    continue;
+                }
+
+                $seenCodes[$providerCode] = true;
+                $result[] = array(
+                    'name' => $providerName . ' (' . $moduleDisplayName . ')',
+                    'provider_name' => $providerName,
+                    'module' => $moduleName,
+                    'gateway' => $providerCode,
+                    'active' => !empty($method['active']),
+                    'id' => $this->getProviderPaymentConfigName($moduleName, $providerCode),
+                );
+            }
+
+            return $result;
+        } catch (Throwable $e) {
+            return array();
+        }
+    }
+
+    private function getProviderPaymentConfigName($moduleName, $providerCode)
+    {
+        $moduleName = trim((string) $moduleName);
+        $providerCode = strtolower(trim((string) $providerCode));
+
+        if (
+            $moduleName === ''
+            || !preg_match('/^[a-z0-9_-]{1,32}$/D', $providerCode)
+        ) {
+            return '';
+        }
+
+        return $this->getPaymentConfigName($moduleName, '@provider:' . $providerCode);
     }
 
     private function getPaymentConfigName($moduleName, $paymentName)
@@ -1026,6 +1130,23 @@ trait HesabfaPaymentTrait
             return false;
         }
 
+        if ($moduleName === 'ssbpaymenthub') {
+            $providerMethod = $this->resolveSsbPaymentHubMethod($id_order, $paymentMethod);
+            if (is_array($providerMethod) && !empty($providerMethod['id'])) {
+                $configurationName = (string) $providerMethod['id'];
+
+                return array(
+                    'configuration_name' => $configurationName,
+                    'bank_code' => Configuration::get($configurationName),
+                    'module' => $moduleName,
+                    'payment' => isset($providerMethod['provider_name'])
+                        ? (string) $providerMethod['provider_name']
+                        : (string) $providerMethod['name'],
+                    'gateway' => (string) $providerMethod['gateway'],
+                );
+            }
+        }
+
         $paymentName = $this->normalizePaymentName(
             $paymentMethod,
             $moduleName
@@ -1084,6 +1205,54 @@ trait HesabfaPaymentTrait
             'module' => $moduleName,
             'payment' => $paymentName,
         );
+    }
+
+    private function resolveSsbPaymentHubMethod($idOrder, $paymentMethod)
+    {
+        $paymentHubMethods = $this->getSsbPaymentHubMethods();
+        if (empty($paymentHubMethods)) {
+            return null;
+        }
+
+        try {
+            $paymentHubModule = Module::getInstanceByName('ssbpaymenthub');
+            if (
+                Validate::isLoadedObject($paymentHubModule)
+                && method_exists($paymentHubModule, 'getProviderPaymentMethodForOrder')
+            ) {
+                $resolved = $paymentHubModule->getProviderPaymentMethodForOrder((int) $idOrder);
+                $resolvedCode = is_array($resolved) && isset($resolved['code'])
+                    ? strtolower(trim((string) $resolved['code']))
+                    : '';
+
+                foreach ($paymentHubMethods as $method) {
+                    if ($resolvedCode !== '' && (string) $method['gateway'] === $resolvedCode) {
+                        return $method;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            // Fall back to the order payment title for older hub versions.
+        }
+
+        $lookupName = $this->normalizePaymentLookupName($paymentMethod, 'ssbpaymenthub');
+        if ($lookupName === '') {
+            return null;
+        }
+
+        foreach ($paymentHubMethods as $method) {
+            $configuredLookupName = $this->normalizePaymentLookupName(
+                isset($method['provider_name'])
+                    ? $method['provider_name']
+                    : (isset($method['name']) ? $method['name'] : ''),
+                'ssbpaymenthub'
+            );
+            if ($configuredLookupName === $lookupName) {
+                return $method;
+            }
+        }
+
+        return null;
     }
 
     private function normalizePaymentLookupName($paymentName, $moduleName = null)

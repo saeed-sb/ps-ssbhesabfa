@@ -1,3 +1,11 @@
+## 2.3.32
+
+- Added provider-level bank mapping for Saman and DigiPay methods exposed by `ssbpaymenthub`.
+- Replaced the generic Payment Hub row with one clearly labeled row per provider, including inactive providers that may be configured ahead of activation.
+- Made accounting mapping keys depend on the stable provider code instead of the editable checkout title.
+- Resolved each order from the provider recorded by Payment Hub, with a title fallback for older transactions.
+- Added a standalone no-schema upgrade handler; existing mappings, queues, logs, invoices, and accounting records remain unchanged.
+
 ## 2.3.31
 
 - Added `{customer_charge_percent}`, `{fee_percent}`, and `{income_percent}` placeholders to automatic and manual fee-income document descriptions.
