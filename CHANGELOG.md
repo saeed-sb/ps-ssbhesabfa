@@ -1,3 +1,12 @@
+## 2.3.33
+
+- Fixed PHP 8 log-level normalization so textual `DEBUG`, `INFO`, `WARNING`, and `ERROR` values are no longer misclassified as `CRITICAL`.
+- Added a database processing lock so webhook and cron workers cannot process the ordered journal concurrently.
+- Deferred transient Hesabfa API and network failures without flooding `WEBHOOK_CHANGE_FAILED` logs, while preserving detailed error codes.
+- Increased the default webhook cron batch to 80 with a configurable cap of 100.
+- Collapsed superseded product-price changes in bulk while preserving checkpoint order and processing the latest value.
+- Added a focused log-level regression test and a standalone no-schema upgrade handler.
+
 ## 2.3.32
 
 - Added provider-level bank mapping for Saman and DigiPay methods exposed by `ssbpaymenthub`.

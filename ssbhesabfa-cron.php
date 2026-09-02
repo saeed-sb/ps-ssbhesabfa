@@ -32,8 +32,8 @@ try {
         }
     }
     $webhook = array();
-    $webhookLimit = (int) Tools::getValue("webhook_limit", 20);
-    $webhookLimit = max(0, min(50, $webhookLimit));
+    $webhookLimit = (int) Tools::getValue("webhook_limit", 80);
+    $webhookLimit = max(0, min(100, $webhookLimit));
     if ($webhookLimit > 0 && Configuration::get("SSBHESABFA_SYNC_ENABLED")) {
         require_once dirname(__FILE__) . "/classes/HesabfaWebhook.php";
         $webhookHandler = new HesabfaWebhook(false);

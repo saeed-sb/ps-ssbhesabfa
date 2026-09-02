@@ -10,17 +10,34 @@ class HesabfaLogService
 
     public static function getLogLevelFromSeverity($severity)
     {
-        $severity = is_string($severity) ? strtoupper($severity) : (int) $severity;
-        if ($severity === 'CRITICAL' || $severity === 4 || $severity >= 4) {
+        if (is_numeric($severity)) {
+            $severity = (int) $severity;
+            if ($severity >= 4) {
+                return 'CRITICAL';
+            }
+            if ($severity === 3) {
+                return 'ERROR';
+            }
+            if ($severity === 2) {
+                return 'WARNING';
+            }
+            if ($severity === 0) {
+                return 'DEBUG';
+            }
+            return 'INFO';
+        }
+
+        $severity = strtoupper(trim((string) $severity));
+        if ($severity === 'CRITICAL') {
             return 'CRITICAL';
         }
-        if ($severity === 'ERROR' || $severity === 3) {
+        if ($severity === 'ERROR') {
             return 'ERROR';
         }
-        if ($severity === 'WARNING' || $severity === 'WARN' || $severity === 2) {
+        if ($severity === 'WARNING' || $severity === 'WARN') {
             return 'WARNING';
         }
-        if ($severity === 'DEBUG' || $severity === 0) {
+        if ($severity === 'DEBUG') {
             return 'DEBUG';
         }
         return 'INFO';
