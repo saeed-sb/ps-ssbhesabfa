@@ -211,7 +211,9 @@ class HesabfaJobRepository
         if (!empty($filters['id'])) {
             $query->where('`id_ssb_hesabfa_job`=' . (int) $filters['id']);
         }
-        if (!empty($filters['status'])) {
+        if (isset($filters['status']) && $filters['status'] === 'active') {
+            $query->where('`status` IN ("pending","running","retry_wait","needs_attention","duplicate_check")');
+        } elseif (!empty($filters['status'])) {
             $query->where('`status`="' . pSQL((string) $filters['status']) . '"');
         }
         if (!empty($filters['job_type'])) {

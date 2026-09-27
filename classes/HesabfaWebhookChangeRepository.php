@@ -31,6 +31,27 @@ class HesabfaWebhookChangeRepository
             .'ON DUPLICATE KEY UPDATE `payload`=VALUES(`payload`),`date_upd`=VALUES(`date_upd`)';
         return Db::getInstance()->execute($sql);
     }
+    /** Called only while the exclusive processing lock is held. */
+    public static function recoverStaleRunning()
+    {
+        return Db::getInstance()->execute(
+            'UPDATE `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_change`'
+            . ' SET `status`="pending", `last_error`="Recovered interrupted webhook processing.", `date_upd`=NOW()'
+            . ' WHERE `status`="running" AND `date_upd`<DATE_SUB(NOW(), INTERVAL 15 MINUTE)'
+        );
+    }
+
+    public static function advanceCheckpoint($changeId)
+    {
+        // Read fresh under the processing lock; recovery must never rewind the cursor.
+        $current = (int) Db::getInstance()->getValue(
+            'SELECT MAX(CAST(`value` AS UNSIGNED)) FROM `' . _DB_PREFIX_ . 'configuration`'
+            . ' WHERE `name`="SSBHESABFA_LAST_LOG_CHECK_ID"',
+            false
+        );
+        return Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', max($current, (int) $changeId));
+    }
+
     public static function getPending($limit=100)
     {
         $q=new DbQuery(); $q->select('*'); $q->from('ssb_hesabfa_webhook_change'); $q->where('`status` IN ("pending","failed")'); $q->orderBy('`change_id` ASC'); $q->limit(max(1,min(500,(int)$limit))); $r=Db::getInstance()->executeS($q); return is_array($r)?$r:array();

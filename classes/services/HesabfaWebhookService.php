@@ -156,6 +156,9 @@ class HesabfaWebhookService
         }
 
         try {
+            if (!HesabfaWebhookChangeRepository::recoverStaleRunning()) {
+                throw new Exception('Interrupted webhook changes could not be recovered.');
+            }
             $workCount = 0;
             $scanLimit = min(500, max((int) $limit, (int) $limit * 5));
             $pendingRows = HesabfaWebhookChangeRepository::getPending($scanLimit);
@@ -186,7 +189,7 @@ class HesabfaWebhookService
                         if (!HesabfaWebhookChangeRepository::markDone($id)) {
                             throw new Exception('Superseded webhook change could not be marked as completed.');
                         }
-                        if (!Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $id)) {
+                        if (!HesabfaWebhookChangeRepository::advanceCheckpoint($id)) {
                             throw new Exception('Webhook checkpoint could not be saved.');
                         }
                         $result['processed_count']++;
@@ -201,7 +204,7 @@ class HesabfaWebhookService
                     if (!HesabfaWebhookChangeRepository::markDone($id)) {
                         throw new Exception('Webhook change could not be marked as completed.');
                     }
-                    if (!Configuration::updateValue('SSBHESABFA_LAST_LOG_CHECK_ID', $id)) {
+                    if (!HesabfaWebhookChangeRepository::advanceCheckpoint($id)) {
                         throw new Exception('Webhook checkpoint could not be saved.');
                     }
                     $result['processed_count']++;
@@ -229,7 +232,7 @@ class HesabfaWebhookService
                         );
                     }
                     break;
-                } catch (Exception $e) {
+                } catch (Throwable $e) {
                     HesabfaWebhookChangeRepository::markFailed($id, $e->getMessage());
                     $result = $this->failResult($result, $e->getMessage(), $id);
                     Ssbhesabfa::addLegacyLog(
@@ -317,7 +320,18 @@ class HesabfaWebhookService
         if ($type==='Product' && $action===53) { $id=Ssbhesabfa::getObjectIdByCode('product',$change->Extra); if ($id) { $m=new HesabfaModel($id); if (Validate::isLoadedObject($m)) $m->delete(); } return true; }
         if ($type==='Contact' && $action===33) { $id=Ssbhesabfa::getObjectIdByCode('customer',$change->Extra); if ($id) { $m=new HesabfaModel($id); if (Validate::isLoadedObject($m)) $m->delete(); } return true; }
         if ($type==='Invoice') {
-            $r=$api->invoiceGetById(array($change->ObjectId)); if (!$r->Success) $this->throwApiResponseException($r, 'Hesabfa invoice could not be fetched.'); foreach ((array)$r->Result as $o) if (!$this->handler->setInvoiceChanges($o)) throw new Exception('Invoice change could not be applied.');
+            // A deletion event has no invoice to fetch; refresh its affected items below.
+            if ($action !== 123) {
+                $r = $api->invoiceGetById(array($change->ObjectId));
+                if (!$r->Success) {
+                    $this->throwApiResponseException($r, 'Hesabfa invoice could not be fetched.');
+                }
+                foreach ((array) $r->Result as $invoice) {
+                    if (!$this->handler->setInvoiceChanges($invoice)) {
+                        throw new Exception('Invoice change could not be applied.');
+                    }
+                }
+            }
             if (!empty($change->Extra)) {
                 $itemCodes = array_values(array_unique(array_filter(
                     array_map('trim', explode(',', (string) $change->Extra)),

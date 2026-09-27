@@ -415,7 +415,7 @@ trait HesabfaInternalApiTrait
 
         $filters = array(
             'id' => trim((string) Tools::getValue('ssb_api_id', '')),
-            'status' => trim((string) Tools::getValue('ssb_api_status', '')),
+            'status' => trim((string) Tools::getValue('ssb_api_status', 'active')),
             'requester' => trim((string) Tools::getValue('ssb_api_requester', '')),
             'api_method' => trim((string) Tools::getValue('ssb_api_method', '')),
             'object_type' => trim((string) Tools::getValue('ssb_api_object_type', '')),
@@ -441,7 +441,7 @@ trait HesabfaInternalApiTrait
         $html .= '<div class="row">';
         $html .= '<div class="col-lg-1 col-md-2"><label>' . $this->l('ID') . '</label><input type="text" name="ssb_api_id" class="form-control" value="' . htmlspecialchars($filters['id'], ENT_QUOTES, 'UTF-8') . '" /></div>';
         $html .= '<div class="col-lg-2 col-md-3"><label>' . $this->l('Status') . '</label><select name="ssb_api_status" class="form-control"><option value="">' . $this->l('All') . '</option>';
-        foreach (array('pending', 'running', 'retry_wait', 'needs_attention', 'duplicate_check', 'done', 'dead') as $status) {
+        foreach (array('active', 'pending', 'running', 'retry_wait', 'needs_attention', 'duplicate_check', 'done', 'dead') as $status) {
             $html .= '<option value="' . htmlspecialchars($status, ENT_QUOTES, 'UTF-8') . '"' . ($filters['status'] === $status ? ' selected="selected"' : '') . '>' . htmlspecialchars(HesabfaAdminQueueRenderer::getStatusLabel($this, $status), ENT_QUOTES, 'UTF-8') . '</option>';
         }
         $html .= '</select></div>';

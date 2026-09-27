@@ -9,7 +9,7 @@ class HesabfaAdminQueueRenderer
     {
         $filters = array(
             'id' => trim((string) Tools::getValue('ssb_job_id', '')),
-            'status' => trim((string) Tools::getValue('ssb_job_status', '')),
+            'status' => trim((string) Tools::getValue('ssb_job_status', 'active')),
             'job_type' => trim((string) Tools::getValue('ssb_job_type', '')),
             'object_type' => trim((string) Tools::getValue('ssb_job_object_type', '')),
             'object_id' => trim((string) Tools::getValue('ssb_job_object_id', '')),
@@ -90,7 +90,7 @@ class HesabfaAdminQueueRenderer
         $html .= '<div class="row">';
         $html .= '<div class="col-lg-1 col-md-2"><label>' . $module->l('ID') . '</label><input type="text" name="ssb_job_id" class="form-control" value="' . htmlspecialchars($filters['id'], ENT_QUOTES, 'UTF-8') . '" /></div>';
         $html .= '<div class="col-lg-2 col-md-3"><label>' . $module->l('Status') . '</label><select name="ssb_job_status" class="form-control"><option value="">' . $module->l('All') . '</option>';
-        foreach (array('pending', 'running', 'retry_wait', 'needs_attention', 'duplicate_check', 'done', 'dead') as $status) {
+        foreach (array('active', 'pending', 'running', 'retry_wait', 'needs_attention', 'duplicate_check', 'done', 'dead') as $status) {
             $html .= '<option value="' . htmlspecialchars($status, ENT_QUOTES, 'UTF-8') . '"' . ($filters['status'] === $status ? ' selected="selected"' : '') . '>' . htmlspecialchars(self::getStatusLabel($module, $status), ENT_QUOTES, 'UTF-8') . '</option>';
         }
         $html .= '</select></div>';
@@ -110,6 +110,7 @@ class HesabfaAdminQueueRenderer
     public static function getStatusLabel($module, $status)
     {
         $labels = array(
+            'active' => $module->l('Active requests'),
             'pending' => $module->l('Pending'),
             'running' => $module->l('Running'),
             'retry_wait' => $module->l('Waiting for retry'),

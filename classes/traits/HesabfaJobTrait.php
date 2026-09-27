@@ -83,6 +83,11 @@ trait HesabfaJobTrait
 
     protected function queueCustomerAddressSync($idCustomer, $idAddress, $sourceHook = '')
     {
+        // Supplier, manufacturer and warehouse addresses are not customer addresses.
+        if ((int) $idCustomer <= 0 || (int) $idAddress <= 0) {
+            return false;
+        }
+
         return HesabfaJobRepository::enqueue('sync_customer_address',array('id_customer'=>(int)$idCustomer,'id_address'=>(int)$idAddress,'source_hook'=>(string)$sourceHook),'Customer',(int)$idCustomer);
     }
 

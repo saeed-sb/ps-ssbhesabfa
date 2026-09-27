@@ -157,7 +157,13 @@ class HesabfaQueueService
 
         $idCustomer = isset($payload['id_customer']) ? (int) $payload['id_customer'] : 0;
         if ($idCustomer <= 0) {
-            return false;
+            HesabfaJobRepository::markOutcome(
+                (int) $job['id_ssb_hesabfa_job'],
+                'dead',
+                'Address job has no customer. Non-customer addresses must not be synchronized as customers.',
+                'INVALID_CUSTOMER_ADDRESS'
+            );
+            return true;
         }
 
         $contactCode = $this->module->getContactCodeByCustomerId($idCustomer);

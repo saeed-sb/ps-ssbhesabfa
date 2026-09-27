@@ -574,3 +574,5 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_29bdcad1ee4b18281f8284f0973e7dd8'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_75f3ed863ad900056b0ea9266676084e'] = 'صف نیازمند بررسی است';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6b419e6bc3edeeb7fa5b26fa0153e6e0'] = 'بررسی صف درخواست‌ها';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a6b1c9647b60f1e9173bf1d6c1f0bcf1'] = 'بررسی صف API داخلی';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_0450ad379a8e2cdd1f257607c88c6374'] = 'درخواست‌های فعال';
