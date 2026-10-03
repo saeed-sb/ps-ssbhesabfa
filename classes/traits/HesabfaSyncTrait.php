@@ -921,6 +921,10 @@ trait HesabfaSyncTrait
     }
     public function ajaxExportBatch($type, $reset = false)
     {
+        if (!$this->canAdminAction('Sync', 'edit') || !HesabfaSecurity::validAdminPost('AdminSsbHesabfaSync') || !HesabfaSecurity::isOperational()) {
+            http_response_code(403);
+            return array('success' => false, 'message' => $this->l('Access denied.'));
+        }
         return (new HesabfaExportBatchService($this))->runAjax((string)$type,(bool)$reset);
     }
 

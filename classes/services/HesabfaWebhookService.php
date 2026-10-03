@@ -64,6 +64,7 @@ class HesabfaWebhookService
 
     public function run()
     {
+        if (!HesabfaSecurity::isOperational()) { return array("success"=>false, "last_error"=>"Module unavailable or multi-shop unsupported."); }
         $last = (int) Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID');
         $result = $this->createResult($last);
 
@@ -143,6 +144,7 @@ class HesabfaWebhookService
 
     public function processPendingOnly($limit = 200)
     {
+        if (!HesabfaSecurity::isOperational()) { return array("success"=>false, "last_error"=>"Module unavailable or multi-shop unsupported."); }
         $result = $this->createResult((int) Configuration::get('SSBHESABFA_LAST_LOG_CHECK_ID'));
         $result['api_success'] = true;
 

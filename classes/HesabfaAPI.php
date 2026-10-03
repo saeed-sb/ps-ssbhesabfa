@@ -66,10 +66,13 @@ class HesabfaApi
     }
     public function apiRequest($method, $data = array())
     {
+        if (!HesabfaSecurity::isOperational()) {
+            return HesabfaApiResponse::normalize((object) array('Success'=>false, 'ErrorCode'=>'MODULE_UNAVAILABLE', 'ErrorMessage'=>'Module disabled or multi-shop installation unsupported.'), $method);
+        }
         if ($method === null || $method === '') {
             return HesabfaApiResponse::normalize((object) array('Success'=>false,'ErrorCode'=>'INVALID_METHOD','ErrorMessage'=>'Hesabfa API method is empty.'),$method);
         }
-        if (Configuration::get('SSBHESABFA_ENABLE_REQUEST_UNIQUE_ID') && HesabfaRequestUniqueId::isWriteMethod($method) && !isset($data['requestUniqueId'])) {
+        if ((Configuration::get('SSBHESABFA_ENABLE_REQUEST_UNIQUE_ID') || HesabfaRequestUniqueId::hasContext()) && HesabfaRequestUniqueId::isWriteMethod($method) && !isset($data['requestUniqueId'])) {
             $data['requestUniqueId']=HesabfaRequestUniqueId::generate($method,$data);
         }
         if (empty($this->loginToken)) {

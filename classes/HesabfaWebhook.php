@@ -96,6 +96,7 @@ class HesabfaWebhook
 
     public function setInvoiceChanges($invoice)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!is_object($invoice)) {
             return false;
         }
@@ -139,6 +140,7 @@ class HesabfaWebhook
 
     public function setContactChanges($contact)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!is_object($contact)) {
             return false;
         }
@@ -183,6 +185,7 @@ class HesabfaWebhook
 
     public static function setItemChanges($item, $allowCodeRemap = false, $ignoreUnlinkedItem = false)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!is_object($item)) {
             return false;
         }

@@ -82,6 +82,8 @@ $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_operation` 
     `attempts` int(10) UNSIGNED NOT NULL DEFAULT 0,
     `external_reference` varchar(128) DEFAULT NULL,
     `message` text DEFAULT NULL,
+    `request_unique_ids` mediumtext DEFAULT NULL,
+    `request_unique_ids_created_at` datetime DEFAULT NULL,
     `date_add` datetime NOT NULL,
     `date_upd` datetime NOT NULL,
     PRIMARY KEY (`id_ssb_hesabfa_operation`),

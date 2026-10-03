@@ -62,6 +62,10 @@ class HesabfaInternalApiRequestRepository
         if (!empty($row['request_payload_hash']) && hash_equals((string) $row['request_payload_hash'], $hash)) {
             return false;
         }
+        if (!empty($row['request_unique_ids'])) {
+            self::markOutcome($id, HesabfaRetryPolicy::STATUS_DUPLICATE_CHECK, 'Attempted internal API payload changed; external reconciliation required.', 'REQUEST_PAYLOAD_CHANGED', array());
+            return false;
+        }
         Db::getInstance()->update('ssb_hesabfa_api_request', array(
             'request_payload_hash' => pSQL($hash),
             'request_unique_ids' => null,
@@ -77,7 +81,7 @@ class HesabfaInternalApiRequestRepository
         $query->select('*');
         $query->from('ssb_hesabfa_api_request');
         $query->where('`id_ssb_hesabfa_api_request`=' . (int) $id);
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         return is_array($row) ? $row : null;
     }
 
@@ -97,7 +101,7 @@ class HesabfaInternalApiRequestRepository
         self::applyListFilters($query, $filters);
         $query->orderBy('`id_ssb_hesabfa_api_request` DESC');
         $query->limit($limit, $offset);
-        $rows = Db::getInstance()->executeS($query);
+        $rows = Db::getInstance()->executeS($query, true, false);
         return is_array($rows) ? $rows : array();
     }
 
@@ -156,7 +160,7 @@ class HesabfaInternalApiRequestRepository
         $query->select("SUM(CASE WHEN `status` = 'dead' THEN 1 ELSE 0 END) AS dead");
         $query->from('ssb_hesabfa_api_request');
 
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         if (!is_array($row)) {
             $row = array();
         }
@@ -180,7 +184,7 @@ class HesabfaInternalApiRequestRepository
         $query->where('`next_run_at` IS NULL OR `next_run_at`<=NOW()');
         $query->orderBy('`next_run_at` ASC,`id_ssb_hesabfa_api_request` ASC');
         $query->limit(max(1, min(100, (int) $limit)));
-        $rows = Db::getInstance()->executeS($query);
+        $rows = Db::getInstance()->executeS($query, true, false);
         return is_array($rows) ? $rows : array();
     }
 
@@ -188,7 +192,7 @@ class HesabfaInternalApiRequestRepository
     {
         return Db::getInstance()->execute(
             'UPDATE `' . _DB_PREFIX_ . 'ssb_hesabfa_api_request` SET `status`="running",`attempts`=`attempts`+1,`locked_at`=NOW(),`date_upd`=NOW() WHERE `id_ssb_hesabfa_api_request`=' . (int) $id . ' AND `status` IN ("pending","retry_wait") AND `attempts`<' . HesabfaJobRepository::getMaxAttempts()
-        );
+        ) && (int) Db::getInstance()->Affected_Rows() === 1;
     }
 
     public static function markWaitingForConnection($id, $message = 'Hesabfa API is not connected.', $delay = 600)
@@ -252,7 +256,22 @@ class HesabfaInternalApiRequestRepository
         ), '`id_ssb_hesabfa_api_request`=' . (int) $id);
     }
 
+    private static function mutateIdleRow($id, $method)
+    {
+        $row = self::getById($id);
+        if (!$row) { return false; }
+        $scope = 'internal-request:' . (int)$id;
+        if (!HesabfaLock::acquire($scope)) { return false; }
+        try { return self::$method($id); }
+        finally { HesabfaLock::release($scope); }
+    }
+
     public static function markDeadManually($id)
+    {
+        return self::mutateIdleRow($id, 'markDeadManuallyLocked');
+    }
+
+    private static function markDeadManuallyLocked($id)
     {
         $row = self::getById($id);
         if (!$row || !in_array((string) $row['status'], array('pending', 'retry_wait', 'needs_attention', 'duplicate_check'), true)) {
@@ -271,6 +290,11 @@ class HesabfaInternalApiRequestRepository
     }
 
     public static function requeueAsNew($id)
+    {
+        return self::mutateIdleRow($id, 'requeueAsNewLocked');
+    }
+
+    private static function requeueAsNewLocked($id)
     {
         $row = self::getById($id);
         if (!$row || !in_array((string) $row['status'], array('dead', 'needs_attention', 'duplicate_check'), true)) {
@@ -294,7 +318,7 @@ class HesabfaInternalApiRequestRepository
             'locked_at' => null,
             'finished_at' => null,
             'date_upd' => date('Y-m-d H:i:s'),
-        ), '`id_ssb_hesabfa_api_request`=' . (int) $id);
+        ), '`id_ssb_hesabfa_api_request`=' . (int) $id . ' AND `status` IN ("dead","needs_attention","duplicate_check")');
     }
 
     public static function requeue($id)
@@ -304,8 +328,16 @@ class HesabfaInternalApiRequestRepository
 
     public static function recoverStaleRunning()
     {
-        return Db::getInstance()->execute(
-            'UPDATE `' . _DB_PREFIX_ . 'ssb_hesabfa_api_request` SET `status`="retry_wait",`last_error`="Recovered stale running request.",`last_error_code`="STALE_RUNNING",`next_run_at`=DATE_ADD(NOW(),INTERVAL 10 MINUTE),`locked_at`=NULL,`date_upd`=NOW() WHERE `status`="running" AND ((`locked_at` IS NULL AND `date_upd`<DATE_SUB(NOW(),INTERVAL 15 MINUTE)) OR `locked_at`<DATE_SUB(NOW(),INTERVAL 15 MINUTE))'
-        );
+        $stale = '`status`="running" AND COALESCE(`locked_at`,`date_upd`)<DATE_SUB(NOW(),INTERVAL '.HesabfaJobRepository::STALE_RUNNING_MINUTES.' MINUTE)';
+        $rows = Db::getInstance()->executeS('SELECT * FROM `'._DB_PREFIX_.'ssb_hesabfa_api_request` WHERE '.$stale, true, false);
+        foreach ((array)$rows as $row) {
+            $scope = 'internal-request:' . (int)$row['id_ssb_hesabfa_api_request'];
+            if (!HesabfaLock::acquire($scope)) { continue; }
+            try {
+                Db::getInstance()->execute('UPDATE `'._DB_PREFIX_.'ssb_hesabfa_api_request` SET `status`="retry_wait",`last_error_code`="STALE_RUNNING",`next_run_at`=DATE_ADD(NOW(),INTERVAL 10 MINUTE),`locked_at`=NULL,`date_upd`=NOW() WHERE `id_ssb_hesabfa_api_request`='.(int)$row['id_ssb_hesabfa_api_request'].' AND '.$stale);
+            } finally { HesabfaLock::release($scope); }
+        }
+        return true;
     }
+
 }

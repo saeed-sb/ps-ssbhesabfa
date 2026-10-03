@@ -249,6 +249,13 @@ trait HesabfaPaymentTrait
 
     public function setOrder($id_order, $orderType = 0, $reference = null, $serials = null)
     {
+        if (!HesabfaSecurity::isOperational() || !HesabfaLock::acquire('financial-order:' . (int)$id_order)) { return false; }
+        try { return $this->setOrderUnlocked($id_order, $orderType, $reference, $serials); }
+        finally { HesabfaOperationRepository::releaseOwned(); HesabfaLock::release('financial-order:' . (int)$id_order); }
+    }
+
+    private function setOrderUnlocked($id_order, $orderType = 0, $reference = null, $serials = null)
+    {
         if (!isset($id_order)) {
             return false;
         }
@@ -517,7 +524,7 @@ trait HesabfaPaymentTrait
             return false;
         }
 
-        $this->startOperation($invoiceOperationKey, 'invoice_save', $operationObjectType, $id_order);
+        if (!$this->startOperation($invoiceOperationKey, 'invoice_save', $operationObjectType, $id_order)) { return false; }
         $hesabfa = new HesabfaApi();
         $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSave($data), 'invoiceSave', $operationObjectType, $id_order);
         if ($this->isHesabfaSuccess($response)) {
@@ -596,6 +603,13 @@ trait HesabfaPaymentTrait
     }
 
     public function setOrderPayment($id_order)
+    {
+        if (!HesabfaSecurity::isOperational() || !HesabfaLock::acquire('financial-order:' . (int)$id_order)) { return false; }
+        try { return $this->setOrderPaymentUnlocked($id_order); }
+        finally { HesabfaOperationRepository::releaseOwned(); HesabfaLock::release('financial-order:' . (int)$id_order); }
+    }
+
+    private function setOrderPaymentUnlocked($id_order)
     {
         if (!isset($id_order) || !(int) $id_order) {
             return false;
@@ -700,7 +714,7 @@ trait HesabfaPaymentTrait
             if ($this->getCompletedOperation($paymentOperationKey)) {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice payment operation.', 'INFO', null, 'Order', $id_order);
             } else {
-                $this->startOperation($paymentOperationKey, 'invoice_payment', 'Order', $id_order);
+                if (!$this->startOperation($paymentOperationKey, 'invoice_payment', 'Order', $id_order)) { return false; }
                 $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSavePayment(
                     $number,
                     array('bankCode' => $bank_code),
@@ -751,7 +765,7 @@ trait HesabfaPaymentTrait
                 if ($this->getCompletedOperation($incomeOperationKey)) {
                     self::addModuleLog('Skipped duplicate Hesabfa payment fee income document operation.', 'INFO', null, 'Order', $id_order);
                 } else {
-                    $this->startOperation($incomeOperationKey, 'payment_fee_income_document', 'Order', $id_order);
+                    if (!$this->startOperation($incomeOperationKey, 'payment_fee_income_document', 'Order', $id_order)) { return false; }
                     $incomeResponse = $this->normalizeHesabfaResponse($this->savePaymentFeeIncomeDocument(
                         $bank_code,
                         $feeBreakdown['income_account_path'],
@@ -859,6 +873,7 @@ trait HesabfaPaymentTrait
         try {
             return $this->processManualGatewayPaymentUnlocked();
         } finally {
+            HesabfaOperationRepository::releaseOwned();
             $db->getValue("SELECT RELEASE_LOCK('" . $lockName . "')", false);
         }
     }
@@ -952,7 +967,7 @@ trait HesabfaPaymentTrait
             }
         }
         if (!$paymentAlreadyRegistered) {
-            $this->startOperation($manualPaymentOperationKey, 'manual_invoice_payment', 'Invoice', $invoiceNumber);
+            if (!$this->startOperation($manualPaymentOperationKey, 'manual_invoice_payment', 'Invoice', $invoiceNumber)) { return array('success'=>false, 'message'=>$this->l('Financial operation is busy or requires reconciliation.')); }
             $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSavePayment(
                 $invoiceNumber,
                 array('bankCode' => $bankCode),
@@ -1009,7 +1024,7 @@ trait HesabfaPaymentTrait
                 }
             }
             if (!$incomeAlreadyRegistered) {
-                $this->startOperation($manualIncomeOperationKey, 'manual_payment_fee_income_document', 'Invoice', $invoiceNumber);
+                if (!$this->startOperation($manualIncomeOperationKey, 'manual_payment_fee_income_document', 'Invoice', $invoiceNumber)) { return array('success'=>false, 'message'=>$this->l('Financial operation is busy or requires reconciliation.')); }
                 $incomeResponse = $this->normalizeHesabfaResponse($this->savePaymentFeeIncomeDocument(
                     $bankCode,
                     $feeBreakdown['income_account_path'],

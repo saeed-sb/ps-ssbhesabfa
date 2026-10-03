@@ -2,6 +2,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit; }
 define('_PS_VERSION_', '8.1.7');
 function check($ok, $message) { if (!$ok) { throw new Exception($message); } }
+class HesabfaSecurity { public static function isOperational() { return true; } }
 class Configuration {
     public static $cursor=1000;
     public static function get($key) { return self::$cursor; }

@@ -151,6 +151,10 @@ trait HesabfaJobTrait
             return null;
         }
 
+        if (!$this->canAdminAction('Sync', 'edit') || !HesabfaSecurity::employeeCan($this->context, 'AdminOrders', 'edit') || !isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
+            return array('type' => 'error', 'message' => $this->l('Access denied.'));
+        }
+
         $submittedOrderId = (int) Tools::getValue('ssbhesabfa_id_order');
         if ($submittedOrderId !== (int) $idOrder) {
             return array('type' => 'error', 'message' => $this->l('Invalid order request.'));
@@ -179,6 +183,7 @@ trait HesabfaJobTrait
 
     protected function renderAdminOrderHesabfaBox($params)
     {
+        if (!$this->canAdminAction('Sync', 'view')) { return ''; }
         $idOrder = $this->getAdminOrderIdFromHookParams($params);
         if (!$idOrder) {
             return '';

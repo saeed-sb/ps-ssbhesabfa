@@ -581,3 +581,15 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_562fea33d22fffcc50225fedaa82446c'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a679ae8fb89a043f7c911adc6cc64c11'] = 'بررسی پرداخت قبلی در حسابفا ممکن نشد. پس از برقراری اتصال، رسید موجود را بررسی و دوباره تلاش کنید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_00620702ac9f596233c273ffae52e1b2'] = 'این تراکنش با مبلغ یا مشخصات دیگری در حسابفا موجود است؛ ثبت تکراری انجام نشد. پیش از اصلاح، رسید موجود و سند درآمد را بررسی کنید.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ac9561ccd22065f80089c837942c3f1f'] = 'پرداخت دستی دیگری برای این فاکتور در حال پردازش است. کمی صبر کنید و دوباره تلاش کنید.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_652122103181aa2752efaecab300edf0'] = 'اجازهٔ دسترسی به این عملیات را ندارید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_2511545d6d9f00e55f3b51d79b0d1ea9'] = 'حسابفا فقط یک فروشگاه در هر نصب پرستاشاپ را پشتیبانی می‌کند. چند فروشگاه باید نصب‌های جداگانه داشته باشند.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_29a5ff65b9dc9c9e44bb29f0b1fff12f'] = 'عملیات مالی در حال اجراست یا پیش از تکرار نیاز به تطبیق با حسابفا دارد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_285c6229ce39ebfbf58b3d1c84c384bd'] = 'هدر احراز هویت کرون';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_393ee6be42c0ca7f6acc97f756a9c3ab'] = 'توکن کرون را در هدر X-SSB-Hesabfa-Token ارسال کنید. توکن داخل نشانی دیگر پذیرفته نمی‌شود.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d363cd55d8525903cfa57ce18f41eba5'] = 'درخواست API داخلی در حال اجراست یا در دسترس نیست.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d19bc66979c16a20c43ea1977b26d5db'] = 'حذف رمز عبور ذخیره‌شده';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_9fb000a2a10ebef2e2f00823db8d7d6a'] = 'حذف کلید API ذخیره‌شده';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fa3454a35aa1424e0335f4f98de52308'] = 'حذف توکن ورود ذخیره‌شده';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ae3579d0ec5bd34223e2670ce5dccaa0'] = 'فقط وقتی مقدار را خالی بگذارید حذف می‌شود. مقدار جدید بر گزینهٔ حذف اولویت دارد.';

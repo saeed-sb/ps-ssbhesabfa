@@ -4,6 +4,7 @@ trait HesabfaInternalApiTrait
 {
     public function callInternalApi($method, array $arguments = array(), array $options = array())
     {
+        if (!HesabfaSecurity::isOperational()) { return array('success'=>false,'error_code'=>'MODULE_UNAVAILABLE','error'=>'Module disabled or multi-shop unsupported.'); }
         $method = trim((string) $method);
         $requester = isset($options['requester']) ? (string) $options['requester'] : 'external_module';
         $objectType = isset($options['object_type']) ? (string) $options['object_type'] : null;
@@ -71,6 +72,7 @@ trait HesabfaInternalApiTrait
 
     public function enqueueInternalApiRequest($method, array $arguments = array(), $requester = null, $objectType = null, $objectId = null)
     {
+        if (!HesabfaSecurity::isOperational()) { return array('success'=>false,'error_code'=>'MODULE_UNAVAILABLE','error'=>'Module disabled or multi-shop unsupported.'); }
         if (!Configuration::get('SSBHESABFA_INTERNAL_API_USE_QUEUE')) {
             return $this->callInternalApi((string) $method, $arguments, array(
                 'requester' => $requester ?: 'external_module',
@@ -295,13 +297,23 @@ trait HesabfaInternalApiTrait
 
     protected function processSingleInternalApiRequest($idRequest)
     {
+        $scope = 'internal-request:' . (int)$idRequest;
+        if (!HesabfaSecurity::isOperational() || !HesabfaLock::acquire($scope)) {
+            return array('success'=>false, 'message'=>$this->l('Internal API request is busy or unavailable.'));
+        }
+        try { return $this->processOwnedInternalApiRequest($idRequest); }
+        finally { HesabfaLock::release($scope); }
+    }
+
+    protected function processOwnedInternalApiRequest($idRequest)
+    {
         $request = HesabfaInternalApiRequestRepository::getById((int) $idRequest);
         if (!$request) {
             return array('success' => false, 'message' => $this->l('Internal API request was not found.'));
         }
 
 
-        if (in_array((string) $request['status'], array('done', 'dead', 'needs_attention', 'duplicate_check'), true)) {
+        if (in_array((string) $request['status'], array('running', 'done', 'dead', 'needs_attention', 'duplicate_check'), true)) {
             return array('success' => false, 'message' => $this->l('This internal API request requires a new operation before it can run again.'));
         }
 
@@ -311,6 +323,8 @@ trait HesabfaInternalApiTrait
         }
 
         $payloadChanged = HesabfaInternalApiRequestRepository::syncPayloadHash((int) $idRequest, $payload);
+        $checked = HesabfaInternalApiRequestRepository::getById((int)$idRequest);
+        if (!$checked || !in_array($checked['status'], array('pending','retry_wait'), true)) { return array('success'=>false,'message'=>$this->l('Request requires reconciliation.')); }
         if ($payloadChanged) {
             $request['request_unique_ids'] = null;
             $request['request_unique_ids_created_at'] = null;
@@ -388,6 +402,7 @@ trait HesabfaInternalApiTrait
 
     public function processPendingInternalApiRequests($limit = 20)
     {
+        if (!HesabfaSecurity::isOperational()) { return 0; }
         $requests = HesabfaInternalApiRequestRepository::getPending($limit);
         $processed = 0;
         foreach ($requests as $request) {

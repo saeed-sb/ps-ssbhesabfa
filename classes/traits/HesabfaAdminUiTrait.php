@@ -438,12 +438,7 @@ trait HesabfaAdminUiTrait
 
     protected function getQueueCronUrl()
     {
-        $token = (string) Configuration::get('SSBHESABFA_QUEUE_CRON_TOKEN');
-        if ($token === '') {
-            $token = bin2hex(openssl_random_pseudo_bytes(16));
-            Configuration::updateValue('SSBHESABFA_QUEUE_CRON_TOKEN', $token);
-        }
-        return Tools::getShopDomainSsl(true, true) . __PS_BASE_URI__ . 'modules/' . $this->name . '/ssbhesabfa-cron.php?token=' . rawurlencode($token);
+        return Tools::getShopDomainSsl(true, true) . __PS_BASE_URI__ . 'modules/' . $this->name . '/ssbhesabfa-cron.php';
     }
 
     protected function formatQueueContext($objectType, $objectId)
@@ -527,7 +522,7 @@ trait HesabfaAdminUiTrait
 
     protected function getConfigForm()
     {
-        return array(
+        $form = array(
             'form' => array(
                 'input' => array(
                     array(
@@ -547,14 +542,14 @@ trait HesabfaAdminUiTrait
                     ),
                     array(
                         'col' => 6,
-                        'type' => 'text',
+                        'type' => 'password',
                         'desc' => $this->l('Find API key in Setting->Financial Settings->API Menu'),
                         'name' => 'SSBHESABFA_ACCOUNT_API',
                         'label' => $this->l('API Key'),
                     ),
                     array(
                         'col' => 6,
-                        'type' => 'text',
+                        'type' => 'password',
                         'desc' => $this->l('Find Login Token in Setting->Financial Settings->API Menu'),
                         'name' => 'SSBHESABFA_ACCOUNT_TOKEN',
                         'label' => $this->l('Login Token'),
@@ -645,6 +640,19 @@ trait HesabfaAdminUiTrait
                 ),
             ),
         );
+        $inputs = array();
+        $secretLabels = array('SSBHESABFA_ACCOUNT_PASSWORD'=>'Clear stored password', 'SSBHESABFA_ACCOUNT_API'=>'Clear stored API key', 'SSBHESABFA_ACCOUNT_TOKEN'=>'Clear stored login token');
+        foreach ($form['form']['input'] as $input) {
+            $inputs[] = $input;
+            if (isset($secretLabels[$input['name']])) {
+                $clearName = $input['name'] . '_CLEAR';
+                $inputs[] = array('type'=>'switch', 'label'=>$this->l($secretLabels[$input['name']]), 'name'=>$clearName, 'is_bool'=>true,
+                    'desc'=>$this->l('Only when its value is left blank. A replacement value takes precedence.'),
+                    'values'=>array(array('id'=>$clearName.'_on','value'=>1,'label'=>$this->l('Yes')), array('id'=>$clearName.'_off','value'=>0,'label'=>$this->l('No'))));
+            }
+        }
+        $form['form']['input'] = $inputs;
+        return $form;
     }
 
     protected function getBankForm()
@@ -1230,9 +1238,12 @@ trait HesabfaAdminUiTrait
             case 'Config':
                 $keys =  array(
                     'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-                    'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
-                    'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-                    'SSBHESABFA_ACCOUNT_TOKEN' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
+                    'SSBHESABFA_ACCOUNT_PASSWORD' => '',
+                    'SSBHESABFA_ACCOUNT_PASSWORD_CLEAR' => 0,
+                    'SSBHESABFA_ACCOUNT_API' => '',
+                    'SSBHESABFA_ACCOUNT_API_CLEAR' => 0,
+                    'SSBHESABFA_ACCOUNT_TOKEN' => '',
+                    'SSBHESABFA_ACCOUNT_TOKEN_CLEAR' => 0,
                     'SSBHESABFA_DELETE_DATA_ON_UNINSTALL' => (int) Configuration::get('SSBHESABFA_DELETE_DATA_ON_UNINSTALL'),
                     'SSBHESABFA_SYNC_ENABLED' => (int) Configuration::get('SSBHESABFA_SYNC_ENABLED'),
                     'SSBHESABFA_ASYNC_ORDER_SYNC' => (int) Configuration::get('SSBHESABFA_ASYNC_ORDER_SYNC'),
@@ -1303,9 +1314,12 @@ trait HesabfaAdminUiTrait
             default:
                 $keys =  array(
                     'SSBHESABFA_ACCOUNT_USERNAME' => Configuration::get('SSBHESABFA_ACCOUNT_USERNAME'),
-                    'SSBHESABFA_ACCOUNT_PASSWORD' => Configuration::get('SSBHESABFA_ACCOUNT_PASSWORD'),
-                    'SSBHESABFA_ACCOUNT_API' => Configuration::get('SSBHESABFA_ACCOUNT_API'),
-                    'SSBHESABFA_ACCOUNT_TOKEN' => Configuration::get('SSBHESABFA_ACCOUNT_TOKEN'),
+                    'SSBHESABFA_ACCOUNT_PASSWORD' => '',
+                    'SSBHESABFA_ACCOUNT_PASSWORD_CLEAR' => 0,
+                    'SSBHESABFA_ACCOUNT_API' => '',
+                    'SSBHESABFA_ACCOUNT_API_CLEAR' => 0,
+                    'SSBHESABFA_ACCOUNT_TOKEN' => '',
+                    'SSBHESABFA_ACCOUNT_TOKEN_CLEAR' => 0,
                     'SSBHESABFA_DELETE_DATA_ON_UNINSTALL' => (int) Configuration::get('SSBHESABFA_DELETE_DATA_ON_UNINSTALL'),
                     'SSBHESABFA_SYNC_ENABLED' => (int) Configuration::get('SSBHESABFA_SYNC_ENABLED'),
                     'SSBHESABFA_ASYNC_ORDER_SYNC' => (int) Configuration::get('SSBHESABFA_ASYNC_ORDER_SYNC'),
@@ -1354,10 +1368,12 @@ trait HesabfaAdminUiTrait
         $success = true;
 
         foreach (array_keys($form_values) as $key) {
+            if (in_array($key, array('SSBHESABFA_ACCOUNT_PASSWORD_CLEAR','SSBHESABFA_ACCOUNT_API_CLEAR','SSBHESABFA_ACCOUNT_TOKEN_CLEAR'), true)) { continue; }
             $value = Tools::getValue($key);
 
             // Don't replace password with null if password not entered
-            $control1 = $key == 'SSBHESABFA_ACCOUNT_PASSWORD' && $value == null;
+            $control1 = in_array($key, array('SSBHESABFA_ACCOUNT_PASSWORD', 'SSBHESABFA_ACCOUNT_API', 'SSBHESABFA_ACCOUNT_TOKEN'), true) && ($value === null || $value === '' || !is_string($value));
+            if ($control1 && in_array(Tools::getValue($key . '_CLEAR'), array('1',1), true)) { $value = ''; $control1 = false; }
 
             // Don't add bank map if bank is not defined in Hesabfa
             // Only the bank field, not fee-related fields.

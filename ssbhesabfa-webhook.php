@@ -28,42 +28,26 @@ include(dirname(__FILE__) . '/../../config/config.inc.php');
 include(dirname(__FILE__) . '/../../init.php');
 
 
-/* Check security token */
-if (!Tools::isPHPCLI()) {
-    if (!Module::isInstalled('ssbhesabfa')) {
-        die('Module not installed');
-    }
-
-    $expectedToken = (string) Configuration::get('SSBHESABFA_WEBHOOK_TOKEN');
-    $providedToken = (string) Tools::getValue('token');
-    if ($expectedToken === '' || $providedToken === '' || !hash_equals($expectedToken, $providedToken)) {
-        if (class_exists('Ssbhesabfa')) { Ssbhesabfa::addLegacyLog('Bad webhook token', 2, null, 'Webhook', null, true); }
-        die('Bad token');
-    }
+require_once __DIR__ . '/classes/HesabfaSecurity.php';
+// Never persist unauthenticated traffic, including debug bodies, to module logs.
+if (!Module::isInstalled('ssbhesabfa') || !HesabfaSecurity::isOperational()) {
+    http_response_code(503); exit('Module unavailable.');
 }
-
+if (!HesabfaSecurity::matchesSecret(Configuration::get('SSBHESABFA_WEBHOOK_TOKEN'), Tools::getValue('token'))) {
+    http_response_code(403); exit('Invalid token.');
+}
+if (!isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405); header('Allow: POST'); exit('POST required.');
+}
+$stream = fopen('php://input', 'rb');
+$body = HesabfaSecurity::readWebhookBody($stream, isset($_SERVER['CONTENT_LENGTH']) ? $_SERVER['CONTENT_LENGTH'] : null);
+if (is_resource($stream)) { fclose($stream); }
+if ($body === false) { http_response_code(413); exit('Request too large.'); }
+if (!HesabfaSecurity::validWebhookBody($body, Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD'))) {
+    http_response_code(403); exit('Invalid request.');
+}
 $ssbHesabfa = Module::getInstanceByName('ssbhesabfa');
-
-/* Check if the module is enabled */
-if ($ssbHesabfa->active) {
-    $post = Tools::file_get_contents('php://input');
-    $result = json_decode($post);
-
-    if (Configuration::get('SSBHESABFA_DEBUG_MODE')) {
-        Ssbhesabfa::addLegacyLog('Webhook request received: ' . serialize($result), 1, null, 'Webhook', null, true);
-    }
-
-    if (!is_object($result)) {
-        Ssbhesabfa::addLegacyLog('Invalid webhook request: missing or invalid token.', 2, null, 'Webhook', null, true);
-        die('Invalid request.');
-    }
-
-    if ($result->Password != Configuration::get('SSBHESABFA_WEBHOOK_PASSWORD')) {
-        Ssbhesabfa::addLegacyLog('Invalid webhook request: password mismatch.', 2, null, 'Webhook', null, true);
-        die('Invalid password.');
-    }
-
-    Ssbhesabfa::addLegacyLog('Webhook request received from Hesabfa.', 1, null, 'Webhook', null, true);
-    include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaWebhook.php');
-    new HesabfaWebhook();
-}
+if (!$ssbHesabfa || !$ssbHesabfa->active) { http_response_code(503); exit('Module unavailable.'); }
+Ssbhesabfa::addLegacyLog('Authenticated webhook notification received.', 1, null, 'Webhook', null, true);
+require_once __DIR__ . '/classes/HesabfaWebhook.php';
+new HesabfaWebhook();

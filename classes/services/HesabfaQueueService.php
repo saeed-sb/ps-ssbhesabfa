@@ -14,6 +14,7 @@ class HesabfaQueueService
 
     public function processPending($limit = 20)
     {
+        if (!HesabfaSecurity::isOperational()) { return 0; }
         $processed = 0;
         foreach (HesabfaJobRepository::getPending($limit) as $job) {
             if ($this->processRow($job)) {
@@ -47,6 +48,19 @@ class HesabfaQueueService
 
     public function processRow(array $job)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
+        $scope = HesabfaJobRepository::lockScope($job['job_type'], $job['object_type'], $job['object_id']);
+        if (!HesabfaLock::acquire($scope)) { return false; }
+        try {
+            $fresh = HesabfaJobRepository::getById((int)$job['id_ssb_hesabfa_job']);
+            if (!$fresh || !in_array($fresh['status'], array('pending','retry_wait'), true)
+                || HesabfaJobRepository::hasEarlierUnfinished($fresh)) { return false; }
+            return $this->processOwnedRow($fresh);
+        } finally { HesabfaLock::release($scope); }
+    }
+
+    protected function processOwnedRow(array $job)
+    {
         $id = (int) $job['id_ssb_hesabfa_job'];
         $payload = json_decode($job['payload'], true);
         if (!is_array($payload)) {
@@ -54,6 +68,8 @@ class HesabfaQueueService
         }
 
         $payloadChanged = HesabfaJobRepository::syncPayloadHash($id, $payload);
+        $checked = HesabfaJobRepository::getById($id);
+        if (!$checked || !in_array($checked['status'], array('pending','retry_wait'), true)) { return false; }
         if ($payloadChanged) {
             $job['request_unique_ids'] = null;
             $job['request_unique_ids_created_at'] = null;

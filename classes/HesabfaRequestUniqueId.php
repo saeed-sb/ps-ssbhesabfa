@@ -8,6 +8,7 @@
  */
 class HesabfaRequestUniqueId
 {
+    private static $stack = array();
     private static $contextId = null;
     private static $requestIds = array();
     private static $methodCounters = array();
@@ -15,6 +16,7 @@ class HesabfaRequestUniqueId
 
     public static function beginContext($contextId, array $requestIds = array(), $persistCallback = null)
     {
+        self::$stack[] = array(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback);
         self::$contextId = $contextId;
         self::$requestIds = $requestIds;
         self::$methodCounters = array();
@@ -23,11 +25,14 @@ class HesabfaRequestUniqueId
 
     public static function endContext()
     {
-        self::$contextId = null;
-        self::$requestIds = array();
-        self::$methodCounters = array();
-        self::$persistCallback = null;
+        if (self::$stack) {
+            list(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback) = array_pop(self::$stack);
+        } else {
+            self::$contextId = null; self::$requestIds = array(); self::$methodCounters = array(); self::$persistCallback = null;
+        }
     }
+
+    public static function hasContext() { return self::$contextId !== null; }
 
     public static function generate($method, $payload = array())
     {
@@ -61,7 +66,10 @@ class HesabfaRequestUniqueId
         self::$requestIds[$slot] = $requestUniqueId;
 
         if (self::$persistCallback !== null) {
-            call_user_func(self::$persistCallback, self::$contextId, self::$requestIds);
+            if (call_user_func(self::$persistCallback, self::$contextId, self::$requestIds) !== true) {
+                unset(self::$requestIds[$slot]);
+                throw new RuntimeException('Request ID persistence failed; no API write was sent.');
+            }
         }
 
         return $requestUniqueId;

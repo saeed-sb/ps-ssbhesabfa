@@ -8,7 +8,7 @@ class HesabfaWebhookChangeRepository
     {
         $rows = Db::getInstance()->executeS(
             'SELECT GET_LOCK("' . self::PROCESSING_LOCK_NAME . '", 0) AS acquired'
-        );
+        , true, false);
 
         return is_array($rows)
             && isset($rows[0]['acquired'])
@@ -18,7 +18,7 @@ class HesabfaWebhookChangeRepository
     public static function releaseProcessingLock()
     {
         Db::getInstance()->executeS(
-            'SELECT RELEASE_LOCK("' . self::PROCESSING_LOCK_NAME . '") AS released'
+            'SELECT RELEASE_LOCK("' . self::PROCESSING_LOCK_NAME . '") AS released', true, false
         );
     }
 

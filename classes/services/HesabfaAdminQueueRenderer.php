@@ -30,7 +30,10 @@ class HesabfaAdminQueueRenderer
         $clearUrl = $actionUrl;
 
         $html = '<div class="ssb-card ssb-card-main"><div class="ssb-card-header"><div><h3><i class="icon-tasks"></i> ' . $module->l('Hesabfa request queue') . '</h3><p>' . $module->l('Queued requests are classified as retryable, manual attention, duplicate check, done, or dead.') . '</p></div><div class="ssb-card-actions"><form method="post" action="' . $postActionUrl . '"><button type="submit" name="submitSsbhesabfaRunPendingJobs" class="btn btn-primary"><i class="icon-play"></i> ' . $module->l('Run pending jobs') . '</button></form></div></div><div class="ssb-card-body">';
-        $html .= '<div class="alert alert-info"><strong>' . $module->l('Cron URL:') . '</strong> <code>' . htmlspecialchars($cronUrl, ENT_QUOTES, 'UTF-8') . '</code></div>';
+        $html .= '<div class="alert alert-info"><strong>' . $module->l('Cron URL:') . '</strong> <code>' . htmlspecialchars($cronUrl, ENT_QUOTES, 'UTF-8') . '</code><p>' . $module->l('Send the cron token in the X-SSB-Hesabfa-Token header. Query tokens are no longer accepted.') . '</p></div>';
+        if ($module->canAdminAction('Queue', 'edit')) {
+            $html .= '<details><summary>' . $module->l('Cron authentication header') . '</summary><code>X-SSB-Hesabfa-Token: ' . htmlspecialchars((string) Configuration::get('SSBHESABFA_QUEUE_CRON_TOKEN'), ENT_QUOTES, 'UTF-8') . '</code></details>';
+        }
         $html .= self::renderJobFilterForm($module, $actionUrl, $filters, $filterHidden, $clearUrl);
         $html .= '<div class="table-responsive"><table class="table"><thead><tr><th>' . $module->l('ID') . '</th><th>' . $module->l('Date / Time') . '</th><th>' . $module->l('Type') . '</th><th>' . $module->l('Status') . '</th><th>' . $module->l('Context') . '</th><th>' . $module->l('Attempts') . '</th><th>' . $module->l('Next run') . '</th><th>' . $module->l('Error code') . '</th><th>' . $module->l('Request UUID') . '</th><th>' . $module->l('Payload hash') . '</th><th>' . $module->l('Last error') . '</th><th>' . $module->l('Actions') . '</th></tr></thead><tbody>';
         if (!$jobs) {

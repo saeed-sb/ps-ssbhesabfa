@@ -56,7 +56,7 @@ class HesabfaMappingRepository
         $query->where('`id_ps` = ' . (int) $idPs);
         $query->where('`id_ps_attribute` = ' . (int) $idPsAttribute);
 
-        return (int) Db::getInstance()->getValue($query);
+        return (int) Db::getInstance()->getValue($query, false);
     }
 
     public static function getObjectRowIdByCode($type, $idHesabfa)
@@ -74,7 +74,7 @@ class HesabfaMappingRepository
         $query->where('`obj_type` = "' . pSQL($type) . '"');
         $query->where('`id_hesabfa` = ' . (int) $idHesabfa);
 
-        return (int) Db::getInstance()->getValue($query);
+        return (int) Db::getInstance()->getValue($query, false);
     }
 
     public static function getHesabfaCode($type, $idPs, $idPsAttribute = 0)
@@ -94,7 +94,7 @@ class HesabfaMappingRepository
         $query->where('`id_ps` = ' . (int) $idPs);
         $query->where('`id_ps_attribute` = ' . (int) $idPsAttribute);
 
-        $value = Db::getInstance()->getValue($query);
+        $value = Db::getInstance()->getValue($query, false);
         return ($value === false || $value === null || $value === '') ? null : (int) $value;
     }
 
@@ -139,7 +139,7 @@ class HesabfaMappingRepository
         $query->where('`id_ps` = ' . (int) $idPs);
         $query->where('`id_ps_attribute` = ' . (int) $idPsAttribute);
 
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         return is_array($row) ? $row : null;
     }
 
@@ -156,7 +156,7 @@ class HesabfaMappingRepository
         $query->where('`obj_type` = "product"');
         $query->where('`id_hesabfa` = ' . (int) $hesabfaCode);
 
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         return is_array($row) ? $row : null;
     }
 
@@ -173,7 +173,7 @@ class HesabfaMappingRepository
         $query->from('ssb_hesabfa');
         $query->where('`id_ssb_hesabfa` = ' . (int) $idMapping);
 
-        $mapping = Db::getInstance()->getRow($query);
+        $mapping = Db::getInstance()->getRow($query, false);
         if (!is_array($mapping) || empty($mapping)) {
             return false;
         }

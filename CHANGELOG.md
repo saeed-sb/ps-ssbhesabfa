@@ -1,3 +1,13 @@
+## 2.3.35
+
+- Enforced fail-closed section and action permissions before admin rendering or mutations, including AJAX exports and order registration; removed stored API credentials from forms and preserved blank secret fields on save.
+- Required the cron token in an HTTP header instead of a URL query. Disabled modules and installations with multiple shops are rejected before processing.
+- Required a nonempty, strictly typed webhook password with timing-safe comparison, POST requests, and a 64 KiB body limit. Unauthenticated requests never create module DB logs.
+- Restricted debug logs to response metadata, redacted credentials in ordinary messages and historical log views, and removed raw webhook/request/response logging.
+- Serialized direct financial writes, persisted request UUIDs before sending, reused them on ambiguous retries, and held expired/legacy writes for reconciliation instead of replaying them.
+- Made queue claims depend on affected rows, reloaded rows under object locks, preserved attempted/running jobs during merge, and prevented stale recovery from reclaiming live workers.
+- Added repeatable operation-schema migration, HTTP boundary checks, ACL/secret tests, and real MySQL cross-process regression tests on PHP 7.4 and 8.1. See the security upgrade guide for scheduler migration and credential rotation.
+
 ## 2.3.34
 
 - Verified completed manual invoice payments and fee-income documents directly in Hesabfa before accepting a retry.

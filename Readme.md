@@ -2,11 +2,12 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.34`
+- **Current version:** `2.3.35`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
+- **Deployment:** one PrestaShop shop per installation; MySQL 5.7.5+ or MariaDB 10.0.2+
 - **Author:** Saeed Sattar Beglou
 
-[Latest release](https://github.com/saeed-sb/ps-ssbhesabfa/releases/latest) · [Changelog](CHANGELOG.md) · [Internal API guide](docs/internal-api-guide.html)
+[Latest release](https://github.com/saeed-sb/ps-ssbhesabfa/releases/latest) · [Changelog](CHANGELOG.md) · [Security upgrade guide](docs/security-2.3.35.md) · [Internal API guide](docs/internal-api-guide.html)
 
 ## Table of contents
 
@@ -332,17 +333,24 @@ Recommended setup order:
 
 ## Cron setup
 
-The Request Queue page displays a signed cron URL containing the generated queue token. Use that exact URL and keep it private.
+The Request Queue page displays a cron URL without credentials. The endpoint requires the generated token in the `X-SSB-Hesabfa-Token` HTTP header. Employees with Queue **edit** permission can expand the authentication header on that page. URL query tokens are rejected in 2.3.35.
+
+Keep the header in a private curl configuration file readable only by the scheduler user (`chmod 600 /private/path/hesabfa-cron.curl`):
+
+```text
+url = "https://YOUR_STORE/modules/ssbhesabfa/ssbhesabfa-cron.php"
+header = "X-SSB-Hesabfa-Token: COPY_TOKEN_FROM_QUEUE_PAGE"
+```
 
 Example cron entry:
 
 ```cron
-* * * * * curl -fsS 'COPY_THE_SIGNED_CRON_URL_FROM_THE_MODULE' >/dev/null
+* * * * * curl -fsS --config /private/path/hesabfa-cron.curl >/dev/null
 ```
 
 The endpoint processes the main queue, the Internal API queue when enabled, and pending Hesabfa webhook-journal changes when automatic synchronization is enabled. Its optional `limit` parameter controls the main and Internal API queues and is restricted to a value between 1 and 50; the default is 20.
 
-Webhook backlog processing has a separate optional `webhook_limit` parameter. It defaults to 20, is capped at 50, and can be set to 0 to skip webhook processing for a specific cron request. The JSON response reports the processed and remaining webhook counts, failed total, latest checkpoint, and last error.
+Webhook backlog processing has a separate optional `webhook_limit` parameter. It defaults to 80, is capped at 100, and can be set to 0 to skip webhook processing for a specific cron request. The JSON response reports the processed and remaining webhook counts, failed total, latest checkpoint, and last error.
 
 Choose a schedule suitable for the store's traffic. Running once per minute is typical for active queues.
 
@@ -360,7 +368,7 @@ Release-by-release technical changes are maintained in [CHANGELOG.md](CHANGELOG.
 
 ## Security notes
 
-- Never publish the signed webhook or cron URL.
+- Never publish the webhook URL, webhook password, API credentials, or cron authentication header.
 - Use HTTPS for the store and cron requests.
 - Do not copy Hesabfa credentials into other modules; use the Internal API bridge.
 - Do not log raw API credentials, login tokens, or unmasked financial payloads.

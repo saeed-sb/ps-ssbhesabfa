@@ -10,6 +10,29 @@ class HesabfaJobRepository
 
     public static function enqueue($jobType, array $payload, $objectType = null, $objectId = null)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
+        $scope = self::lockScope($jobType, $objectType, $objectId);
+        if (!HesabfaLock::acquire($scope)) {
+            // Preserve a new change arriving while a worker owns this object.
+            // It will wait behind the earlier job, without changing its UUIDs.
+            return self::insertJob($jobType, $payload, $objectType, $objectId);
+        }
+        try { return self::enqueueLocked($jobType, $payload, $objectType, $objectId); }
+        finally { HesabfaLock::release($scope); }
+    }
+
+    public static function lockScope($type, $objectType, $objectId)
+    {
+        return 'job-object:' . $type . ':' . (string)$objectType . ':' . (string)$objectId;
+    }
+
+    public static function hasEarlierUnfinished(array $row)
+    {
+        return (bool) Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.'ssb_hesabfa_job` WHERE `job_type`="'.pSQL($row['job_type']).'" AND `object_type`="'.pSQL($row['object_type']).'" AND `object_id`="'.pSQL($row['object_id']).'" AND `id_ssb_hesabfa_job`<'.(int)$row['id_ssb_hesabfa_job'].' AND `status` IN ("pending","running","retry_wait","needs_attention","duplicate_check")', false);
+    }
+
+    protected static function enqueueLocked($jobType, array $payload, $objectType = null, $objectId = null)
+    {
         if (!$jobType) {
             return false;
         }
@@ -36,7 +59,7 @@ class HesabfaJobRepository
                     'locked_at' => null,
                     'finished_at' => null,
                     'date_upd' => date('Y-m-d H:i:s'),
-                ), '`id_ssb_hesabfa_job`=' . (int) $existing['id_ssb_hesabfa_job'])
+                ), '`id_ssb_hesabfa_job`=' . (int) $existing['id_ssb_hesabfa_job'] . ' AND `status`="pending" AND `attempts`=0 AND `request_unique_ids` IS NULL')
                     ? (int) $existing['id_ssb_hesabfa_job']
                     : false;
             }
@@ -53,9 +76,9 @@ class HesabfaJobRepository
         $query->where('`job_type`="' . pSQL($type) . '"');
         $query->where('`object_type`="' . pSQL((string) $objectType) . '"');
         $query->where('`object_id`="' . pSQL((string) $objectId) . '"');
-        $query->where('`status` IN ("pending","retry_wait")');
+        $query->where('`status`="pending" AND `attempts`=0 AND `request_unique_ids` IS NULL');
         $query->orderBy('`id_ssb_hesabfa_job` DESC');
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         return is_array($row) ? $row : null;
     }
 
@@ -93,7 +116,7 @@ class HesabfaJobRepository
         $query->select("SUM(CASE WHEN `status` = 'dead' THEN 1 ELSE 0 END) AS dead");
         $query->from('ssb_hesabfa_job');
 
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         if (!is_array($row)) {
             $row = array();
         }
@@ -118,7 +141,7 @@ class HesabfaJobRepository
         $query->where('`next_run_at` IS NULL OR `next_run_at`<=NOW()');
         $query->orderBy('`next_run_at` ASC,`id_ssb_hesabfa_job` ASC');
         $query->limit($limit);
-        $rows = Db::getInstance()->executeS($query);
+        $rows = Db::getInstance()->executeS($query, true, false);
         return is_array($rows) ? $rows : array();
     }
 
@@ -148,6 +171,10 @@ class HesabfaJobRepository
         if (!empty($row['request_payload_hash']) && hash_equals((string) $row['request_payload_hash'], $hash)) {
             return false;
         }
+        if (!empty($row['request_unique_ids'])) {
+            self::markDuplicateCheck($id, 'Attempted queue payload changed; external reconciliation required.', 'REQUEST_PAYLOAD_CHANGED');
+            return false;
+        }
         Db::getInstance()->update('ssb_hesabfa_job', array(
             'request_payload_hash' => pSQL($hash),
             'request_unique_ids' => null,
@@ -172,9 +199,16 @@ class HesabfaJobRepository
 
     public static function recoverStaleRunningJobs()
     {
-        return Db::getInstance()->execute(
-            'UPDATE `' . _DB_PREFIX_ . 'ssb_hesabfa_job` SET `status`="retry_wait",`last_error`="Recovered stale running job.",`last_error_code`="STALE_RUNNING",`next_run_at`=DATE_ADD(NOW(),INTERVAL 10 MINUTE),`locked_at`=NULL,`date_upd`=NOW() WHERE `status`="running" AND ((`locked_at` IS NULL AND `date_upd`<DATE_SUB(NOW(),INTERVAL ' . self::STALE_RUNNING_MINUTES . ' MINUTE)) OR `locked_at`<DATE_SUB(NOW(),INTERVAL ' . self::STALE_RUNNING_MINUTES . ' MINUTE))'
-        );
+        $stale = '`status`="running" AND COALESCE(`locked_at`,`date_upd`)<DATE_SUB(NOW(),INTERVAL '.self::STALE_RUNNING_MINUTES.' MINUTE)';
+        $rows = Db::getInstance()->executeS('SELECT * FROM `'._DB_PREFIX_.'ssb_hesabfa_job` WHERE '.$stale, true, false);
+        foreach ((array)$rows as $row) {
+            $scope = self::lockScope($row['job_type'], $row['object_type'], $row['object_id']);
+            if (!HesabfaLock::acquire($scope)) { continue; }
+            try {
+                Db::getInstance()->execute('UPDATE `'._DB_PREFIX_.'ssb_hesabfa_job` SET `status`="retry_wait",`last_error`="Recovered interrupted job.",`last_error_code`="STALE_RUNNING",`next_run_at`=DATE_ADD(NOW(),INTERVAL 10 MINUTE),`locked_at`=NULL,`date_upd`=NOW() WHERE `id_ssb_hesabfa_job`='.(int)$row['id_ssb_hesabfa_job'].' AND '.$stale);
+            } finally { HesabfaLock::release($scope); }
+        }
+        return true;
     }
 
     public static function getList($filters = array(), $limit = 50, $offset = 0)
@@ -193,7 +227,7 @@ class HesabfaJobRepository
         self::applyListFilters($query, $filters);
         $query->orderBy('`id_ssb_hesabfa_job` DESC');
         $query->limit($limit, $offset);
-        $rows = Db::getInstance()->executeS($query);
+        $rows = Db::getInstance()->executeS($query, true, false);
         return is_array($rows) ? $rows : array();
     }
 
@@ -246,7 +280,7 @@ class HesabfaJobRepository
         $query->select('*');
         $query->from('ssb_hesabfa_job');
         $query->where('`id_ssb_hesabfa_job`=' . (int) $id);
-        $row = Db::getInstance()->getRow($query);
+        $row = Db::getInstance()->getRow($query, false);
         return is_array($row) ? $row : null;
     }
 
@@ -254,7 +288,7 @@ class HesabfaJobRepository
     {
         return Db::getInstance()->execute(
             'UPDATE `' . _DB_PREFIX_ . 'ssb_hesabfa_job` SET `status`="running",`attempts`=`attempts`+1,`locked_at`=NOW(),`date_upd`=NOW() WHERE `id_ssb_hesabfa_job`=' . (int) $id . ' AND `status` IN ("pending","retry_wait") AND `attempts`<' . self::getMaxAttempts()
-        );
+        ) && (int) Db::getInstance()->Affected_Rows() === 1;
     }
 
     public static function markDeferred($id, $message, $errorCode, $delay = 600)
@@ -338,7 +372,22 @@ class HesabfaJobRepository
         return self::markOutcome($id, HesabfaRetryPolicy::STATUS_DUPLICATE_CHECK, $error, $errorCode);
     }
 
+    private static function mutateIdleRow($id, $method)
+    {
+        $row = self::getById($id);
+        if (!$row) { return false; }
+        $scope = self::lockScope($row['job_type'], $row['object_type'], $row['object_id']);
+        if (!HesabfaLock::acquire($scope)) { return false; }
+        try { return self::$method($id); }
+        finally { HesabfaLock::release($scope); }
+    }
+
     public static function markDeadManually($id)
+    {
+        return self::mutateIdleRow($id, 'markDeadManuallyLocked');
+    }
+
+    private static function markDeadManuallyLocked($id)
     {
         $row = self::getById($id);
         if (!$row || !in_array((string) $row['status'], array('pending', 'retry_wait', 'needs_attention', 'duplicate_check'), true)) {
@@ -357,6 +406,11 @@ class HesabfaJobRepository
     }
 
     public static function requeueAsNew($id)
+    {
+        return self::mutateIdleRow($id, 'requeueAsNewLocked');
+    }
+
+    private static function requeueAsNewLocked($id)
     {
         $row = self::getById($id);
         if (!$row || !in_array((string) $row['status'], array('dead', 'needs_attention', 'duplicate_check'), true)) {
@@ -379,7 +433,7 @@ class HesabfaJobRepository
             'locked_at' => null,
             'finished_at' => null,
             'date_upd' => date('Y-m-d H:i:s'),
-        ), '`id_ssb_hesabfa_job`=' . (int) $id);
+        ), '`id_ssb_hesabfa_job`=' . (int) $id . ' AND `status` IN ("dead","needs_attention","duplicate_check")');
     }
 
     public static function requeue($id, $resetAttempts = true)
@@ -387,13 +441,18 @@ class HesabfaJobRepository
         if ($resetAttempts) {
             return self::requeueAsNew($id);
         }
+        return self::mutateIdleRow($id, 'requeueRetryLocked');
+    }
+
+    private static function requeueRetryLocked($id)
+    {
         return Db::getInstance()->update('ssb_hesabfa_job', array(
             'status' => 'retry_wait',
             'next_run_at' => date('Y-m-d H:i:s'),
             'locked_at' => null,
             'finished_at' => null,
             'date_upd' => date('Y-m-d H:i:s'),
-        ), '`id_ssb_hesabfa_job`=' . (int) $id);
+        ), '`id_ssb_hesabfa_job`=' . (int) $id . ' AND `status` IN ("pending","retry_wait")');
     }
 
     public static function resetToPending($id)

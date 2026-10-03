@@ -311,6 +311,7 @@ class HesabfaTools
 
     private function getModule(): Ssbhesabfa
     {
+        if (!\HesabfaSecurity::isOperational()) { throw new \RuntimeException('Hesabfa module disabled or multi-shop unsupported.'); }
         $module = Module::getInstanceByName('ssbhesabfa');
         if (!$module instanceof Ssbhesabfa || !$module->active) {
             throw new \RuntimeException('The ssbhesabfa module is not installed and active.');

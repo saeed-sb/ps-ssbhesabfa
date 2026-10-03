@@ -11,6 +11,7 @@ class Db {
         self::$held = true; return 1;
     }
 }
+class HesabfaOperationRepository { public static function releaseOwned() {} }
 class Tools { public static $values; public static function getValue($k, $d = false) { return isset(self::$values[$k]) ? self::$values[$k] : $d; } }
 class Configuration { public static $values; public static function get($k) { return isset(self::$values[$k]) ? self::$values[$k] : false; } }
 class Validate { public static function isDateFormat($v) { return (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $v); } }
@@ -42,7 +43,7 @@ require dirname(__DIR__) . '/classes/traits/HesabfaPaymentTrait.php';
 class ManualPaymentSubject {
     use HesabfaPaymentTrait;
     const HESABFA_DEFAULT_BANK_ACCOUNT_PATH = 'Assets:Bank';
-    public $operations = array(), $logs = array();
+    public $operations = array(), $logs = array(), $claim = true;
     public function submit() { return $this->processManualGatewayPayment(); }
     public function checkReceipt($operation) { return $this->verifyManualPaymentReceipt(new HesabfaApi(), 42, 33, 'fixture-tara-transaction', $this->getPaymentFeeBreakdown('TEST', 200000000), $operation); }
     public function l($v) { return $v; }
@@ -53,7 +54,7 @@ class ManualPaymentSubject {
     public function renderTemplateText($s, $v) { return $s; }
     public function buildOperationKey($type, $parts) { return $type; }
     public function getCompletedOperation($k) { return isset($this->operations[$k]) && $this->operations[$k]['status'] === 'success' ? $this->operations[$k] : false; }
-    public function startOperation($k, $type, $objectType, $id) { $this->operations[$k] = array('status' => 'pending'); }
+    public function startOperation($k, $type, $objectType, $id) { if (!$this->claim) { return false; } $this->operations[$k] = array('status' => 'pending'); return true; }
     public function finishOperation($k, $status, $message, $ref = null) { $this->operations[$k] = array('status' => $status, 'external_reference' => $ref); }
     public function addFollowUpIssue($type, $message, $objectType, $id, $key, $severity) { $this->logs[] = $message; }
     public static function addModuleLog($message, $level, $code, $type, $id) {}
@@ -105,4 +106,6 @@ $s = freshSubject(); Db::$busy = true; $r = $s->submit();
 check(!$r['success'] && count(HesabfaApi::$writes) === 0 && strpos($r['message'], 'being processed') !== false, 'Simultaneous form submission does not create another payment');
 $s = freshSubject(); HesabfaApi::$unavailable = true; $s->submit();
 check(!Db::$held, 'Invoice lock is released after a failed verification');
+$s = freshSubject(); $s->claim = false; $r = $s->submit();
+check(!$r['success'] && count(HesabfaApi::$writes) === 0, 'Failed operation claim prevents manual financial write');
 echo "All manual payment reconciliation checks passed.\n";

@@ -120,7 +120,13 @@ trait HesabfaCoreSupportTrait
 
     protected function startOperation($operationKey, $operationType, $objectType = null, $objectId = null)
     {
-        return HesabfaOperationRepository::start($operationKey, $operationType, $objectType, $objectId);
+        if (HesabfaOperationRepository::start($operationKey, $operationType, $objectType, $objectId)) { return true; }
+        $row = HesabfaOperationRepository::getByKey($operationKey);
+        $reconcile = $row && $row['status'] === 'needs_attention';
+        $message = $reconcile ? 'Financial operation requires external reconciliation before retry.' : 'Financial operation could not be claimed; retry after the current owner finishes.';
+        HesabfaApiResponse::normalize((object)array('Success'=>false, 'ErrorCode'=>$reconcile?'FINANCIAL_RECONCILIATION_REQUIRED':'FINANCIAL_OPERATION_BUSY', 'ErrorMessage'=>$message));
+        if ($reconcile) { $this->addFollowUpIssue('financial_reconciliation_required', $message, $objectType, $objectId, $operationKey, 'ERROR'); }
+        return false;
     }
 
     protected function finishOperation($operationKey, $status, $message = null, $externalReference = null)
@@ -187,39 +193,75 @@ trait HesabfaCoreSupportTrait
         return $notices;
     }
 
+    private $ssbAdminSection = null;
+
     public function renderAdminControllerContent($section)
     {
-        if (Configuration::get('SSBHESABFA_LIVE_MODE') != 1 && $section !== 'Settings' && $section !== 'InternalApi' && $section !== 'Queue') {
-            $section = 'Settings';
+        $map = $this->getAdminControllerMap();
+        if (!is_string($section) || !isset($map[$section])) {
+            return $this->displayError($this->l('Access denied.'));
         }
-
-        $_GET['ssb_admin_section'] = $section;
-        $_GET['form_tab'] = $section;
-        return $this->getContent();
+        // Bind this dispatch to the controller, never to a POST section selector.
+        $this->ssbAdminSection = $section;
+        try { return $this->getContent(); }
+        finally { $this->ssbAdminSection = null; }
     }
 
-    protected function employeeCanAccessAdminController($controller)
+    protected function employeeCanAccessAdminController($controller, $action = 'view')
     {
-        $idTab = (int) Tab::getIdFromClassName($controller);
-        if (!$idTab || !isset($this->context->employee) || !Validate::isLoadedObject($this->context->employee)) {
-            return true;
-        }
+        return HesabfaSecurity::employeeCan($this->context, $controller, $action);
+    }
 
-        try {
-            if (class_exists('Profile')) {
-                $access = Profile::getProfileAccess((int) $this->context->employee->id_profile, $idTab);
-                if (is_array($access) && array_key_exists('view', $access)) {
-                    return (bool) $access['view'];
-                }
-            }
-            if (method_exists($this->context->employee, 'can')) {
-                return (bool) $this->context->employee->can('view', $controller);
-            }
-        } catch (Exception $e) {
-            return true;
-        }
+    public function canAdminAction($section, $action = 'edit')
+    {
+        $map = $this->getAdminControllerMap();
+        return isset($map[$section])
+            && $this->employeeCanAccessAdminController($map[$section], 'view')
+            && $this->employeeCanAccessAdminController($map[$section], $action);
+    }
 
-        return false;
+    protected function authorizeAdminRequest()
+    {
+        $section = $this->getActiveAdminSection();
+        $map = $this->getAdminControllerMap();
+        if (!isset($map[$section]) || !$this->canAdminAction($section, 'view')) { return false; }
+        $actions = array(
+            'ModuleConfig' => array('Settings', 'edit'),
+            'ModuleBank' => array('Payments', 'edit'),
+            'ModuleAccountingText' => array('Settings', 'edit'),
+            'ModuleItem' => array('Settings', 'edit'),
+            'ModuleContact' => array('Settings', 'edit'),
+            'ModuleInvoice' => array('Settings', 'edit'),
+            'ModuleManualGatewayPayment' => array('ManualPayment', 'add'),
+            'ExportProducts' => array('Sync', 'edit'),
+            'SetOpeningQuantity' => array('Sync', 'edit'),
+            'ExportCustomers' => array('Sync', 'edit'),
+            'ExportInvoices' => array('Sync', 'edit'),
+            'SyncChanges' => array('Sync', 'edit'),
+            'RepairItemCodes' => array('Sync', 'edit'),
+            'ApplyItemCodeMismatch' => array('Sync', 'edit'),
+            'DismissItemCodeMismatch' => array('Sync', 'edit'),
+            'SyncProducts' => array('Sync', 'edit'),
+            'RequeueJob' => array('Queue', 'edit'),
+            'MarkJobDead' => array('Queue', 'delete'),
+            'RunJob' => array('Queue', 'edit'),
+            'RunPendingJobs' => array('Queue', 'edit'),
+            'RequeueInternalApiRequest' => array('Queue', 'edit'),
+            'MarkInternalApiRequestDead' => array('Queue', 'delete'),
+            'RunInternalApiRequest' => array('Queue', 'edit'),
+            'RunPendingInternalApiRequests' => array('Queue', 'edit'),
+            'ClearModuleLogs' => array('Logs', 'delete'),
+            'ResolveIssue' => array('Logs', 'edit'),
+            'RetryIssue' => array('Logs', 'edit'),
+        );
+        foreach ($actions as $submit => $required) {
+            if (!Tools::isSubmit('submitSsbhesabfa' . $submit)) { continue; }
+            if (!$this->canAdminAction($required[0], $required[1])) { return false; }
+            $controller = isset($this->context->controller->controller_name)
+                ? $this->context->controller->controller_name : $map[$section];
+            if (!HesabfaSecurity::validAdminPost($controller)) { return false; }
+        }
+        return true;
     }
 
     protected function getAdminControllerMap()
@@ -376,7 +418,9 @@ trait HesabfaCoreSupportTrait
 
     protected function getActiveAdminSection()
     {
+        if ($this->ssbAdminSection !== null) { return $this->ssbAdminSection; }
         $activeSection = Tools::getValue('ssb_admin_section', Tools::getValue('form_tab', 'Dashboard'));
+        if (!is_string($activeSection)) { return ''; }
         $legacyMap = array(
             'Home' => 'Dashboard',
             'Config' => 'Settings',
@@ -501,13 +545,14 @@ trait HesabfaCoreSupportTrait
 
     public function getContent()
     {
-        // $orders = array(29012);
-        
-        // foreach ($orders as $id_order) {
-        //     $this->setOrderPayment($id_order);
-        // }
-                    
-                    
+        if (!HesabfaSecurity::isSingleShop()) {
+            return $this->displayError($this->l('Hesabfa supports a single PrestaShop shop only. Multiple shops require separate installations.'));
+        }
+        if (!$this->authorizeAdminRequest()) {
+            http_response_code(403);
+            return $this->displayError($this->l('Access denied.'));
+        }
+
         if (!extension_loaded('curl')) {
             return $this->displayError($this->l('cURL is not enabled. You should enable it before using this module.'));
         }
@@ -800,7 +845,7 @@ trait HesabfaCoreSupportTrait
             //Show error when current date not in Fiscal year
             if (!$this->isDateInFiscalYear(date('Y-m-d H:i:s'))) {
                 $output .= $this->displayError($this->l('The fiscal year has passed or not arrived. Please check the fiscal year settings in Hesabfa'));
-                Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
+                if ($this->canAdminAction('Settings', 'edit')) { Configuration::updateValue('SSBHESABFA_LIVE_MODE', false); }
             }
 
             //Show error when Banks not mapped

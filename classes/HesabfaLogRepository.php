@@ -96,6 +96,16 @@ class HesabfaLogRepository
         $query->limit($limit, $offset);
 
         $rows = Db::getInstance()->executeS($query);
-        return is_array($rows) ? $rows : array();
+        if (!is_array($rows)) { return array(); }
+        // Historical debug rows may predate the safe logging format.
+        foreach ($rows as &$row) {
+            $row['message'] = HesabfaLogService::maskSensitiveData($row['message']);
+            foreach (array('debug_payload','debug_request','debug_response') as $field) {
+                if (!empty($row[$field])) { $row[$field] = HesabfaLogService::normalizeDebugValue($row[$field]); }
+            }
+            if (!empty($row['debug_endpoint'])) { $row['debug_endpoint'] = HesabfaLogService::safeEndpoint($row['debug_endpoint']); }
+        }
+        unset($row);
+        return $rows;
     }
 }

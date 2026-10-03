@@ -68,49 +68,67 @@ class HesabfaLogService
 
     public static function maskSensitiveData($value)
     {
-        $sensitiveKeys = array('apiKey', 'password', 'loginToken', 'token', 'authorization', 'Authorization', 'webhook_token', 'mobile', 'email');
+        if (is_object($value)) { $value = get_object_vars($value); }
         if (is_array($value)) {
+            $out = array();
             foreach ($value as $key => $item) {
-                if (in_array((string) $key, $sensitiveKeys, true)) {
-                    $value[$key] = '***';
-                } else {
-                    $value[$key] = self::maskSensitiveData($item);
-                }
+                $normalized = strtolower(preg_replace('/[^a-z0-9]/i', '', (string)$key));
+                $sensitive = preg_match('/password|token|apikey|authorization|secret|email|mobile|phone|address|firstname|lastname|nationalcode|economiccode/', $normalized);
+                $out[$key] = $sensitive ? '***' : self::maskSensitiveData($item);
             }
-            return $value;
+            return $out;
         }
-        if (is_object($value)) {
-            foreach (get_object_vars($value) as $key => $item) {
-                if (in_array((string) $key, $sensitiveKeys, true)) {
-                    $value->{$key} = '***';
-                } else {
-                    $value->{$key} = self::maskSensitiveData($item);
-                }
-            }
-            return $value;
+        if (!is_string($value)) { return $value; }
+        // Remove known secrets even from ordinary exception/log messages.
+        foreach (array('SSBHESABFA_ACCOUNT_API','SSBHESABFA_ACCOUNT_TOKEN','SSBHESABFA_ACCOUNT_PASSWORD','SSBHESABFA_WEBHOOK_PASSWORD','SSBHESABFA_WEBHOOK_TOKEN','SSBHESABFA_QUEUE_CRON_TOKEN') as $key) {
+            $secret = Configuration::get($key);
+            if (is_string($secret) && $secret !== '') { $value = str_replace($secret, '***', $value); }
         }
-        if (is_string($value)) {
-            $value = preg_replace('/("?(apiKey|password|loginToken|token|authorization|webhook_token)"?\s*[:=]\s*")([^"&\s]+)(")/i', '$1***$4', $value);
-            $value = preg_replace('/((?:apiKey|password|loginToken|token|authorization|webhook_token)=)([^&\s]+)/i', '$1***', $value);
-        }
+        $value = preg_replace('/Bearer\s+[^\s,;]+/i', 'Bearer ***', $value);
+        $value = preg_replace('/((?:api[_-]?key|(?:hook)?password(?:hash)?|login[_-]?token|webhook[_-]?token|token|authorization|secret)[\"\']?\s*[:=]\s*)(?:\"[^\"]*\"|\'[^\']*\'|[^\s&,;]+)/i', '$1***', $value);
+        $value = preg_replace('/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i', '[email]', $value);
         return $value;
+    }
+
+    public static function debugMetadata($value, $depth = 0)
+    {
+        $budget = 100;
+        return self::collectDebugMetadata($value, $depth, $budget);
+    }
+
+    private static function collectDebugMetadata($value, $depth, &$budget)
+    {
+        if ($depth > 6) { return array(); }
+        if (is_string($value)) { $value = json_decode($value, true); }
+        if (is_object($value)) { $value = get_object_vars($value); }
+        if (!is_array($value)) { return array('content' => '[omitted]'); }
+        $out = array();
+        foreach ($value as $key => $item) {
+            if (--$budget < 0) { break; }
+            $normalized = strtolower((string)$key);
+            if (in_array($normalized, array('success','httpcode','http_code','retryafter','count','filteredcount','number','code','errorcode'), true)
+                && (is_bool($item) || is_numeric($item))) { $out[$key] = $item; }
+            elseif ($normalized === 'errorcode' && is_string($item) && preg_match('/^[A-Za-z0-9_:-]{1,64}$/', $item)) { $out[$key] = $item; }
+            elseif ((is_int($key) || in_array($normalized, array('result','list','response','raw','metadata'), true)) && (is_array($item) || is_object($item))) {
+                $metadata = self::collectDebugMetadata($item, $depth + 1, $budget);
+                if ($metadata) { $out[$key] = $metadata; }
+            }
+        }
+        return $out;
+    }
+
+    public static function safeEndpoint($value)
+    {
+        $parts = parse_url((string)$value);
+        return is_array($parts) && isset($parts['scheme'], $parts['host'])
+            ? $parts['scheme'] . '://' . $parts['host'] . (isset($parts['path']) ? self::maskSensitiveData($parts['path']) : '') : '[endpoint omitted]';
     }
 
     public static function normalizeDebugValue($value)
     {
-        if ($value === null || $value === '') {
-            return null;
-        }
-        $value = self::maskSensitiveData($value);
-        if (is_array($value) || is_object($value)) {
-            $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        } else {
-            $value = (string) $value;
-        }
-        if (Tools::strlen($value) > self::DEBUG_TEXT_LIMIT) {
-            $value = Tools::substr($value, 0, self::DEBUG_TEXT_LIMIT) . '... [truncated]';
-        }
-        return $value;
+        if ($value === null || $value === '') { return null; }
+        $json = json_encode(self::maskSensitiveData(self::debugMetadata($value)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return strlen((string)$json) > self::DEBUG_TEXT_LIMIT ? '{"content":"[metadata limit]"}' : $json;
     }
 
     public static function addModuleLog($message, $severity = 1, $errorCode = null, $objectType = null, $objectId = null, array $options = array())
@@ -121,7 +139,7 @@ class HesabfaLogService
 
         $level = self::getLogLevelFromSeverity($severity);
         $severity = self::getSeverityFromLogLevel($level);
-        $message = HesabfaTextHelper::normalizeLogMessage($message);
+        $message = self::maskSensitiveData(HesabfaTextHelper::normalizeLogMessage($message));
 
         $area = isset($options['area']) ? (string) $options['area'] : null;
         if ($area === null || $area === '') {
@@ -147,7 +165,7 @@ class HesabfaLogService
         if (self::isDebugModeEnabled()) {
             foreach (array('debug_endpoint', 'debug_payload', 'debug_request', 'debug_response') as $field) {
                 if (array_key_exists($field, $options)) {
-                    $data[$field] = pSQL((string) self::normalizeDebugValue($options[$field]), true);
+                    $data[$field] = pSQL((string) ($field === 'debug_endpoint' ? self::safeEndpoint($options[$field]) : self::normalizeDebugValue($options[$field])), true);
                 }
             }
             if (isset($options['debug_http_code']) && $options['debug_http_code'] !== '') {

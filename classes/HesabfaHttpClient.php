@@ -18,7 +18,7 @@ class HesabfaHttpClient
         $url = 'https://api.hesabfa.com/v1/' . ltrim((string) $method, '/');
         $payload = json_encode($data);
         $debug = (bool) Configuration::get('SSBHESABFA_DEBUG_MODE');
-        $debugData = $this->maskSensitiveData($data);
+        $debugData = HesabfaLogService::debugMetadata($data);
         if ($debug && class_exists('Ssbhesabfa')) {
             Ssbhesabfa::addLegacyLog('Hesabfa API request. Method: ' . $method, 'DEBUG', null, 'System', $method, true, array(
                 'area' => 'API', 'prestashop_code' => $method, 'debug_endpoint' => $url,
@@ -54,7 +54,7 @@ class HesabfaHttpClient
                 'debug_endpoint' => $url,
                 'debug_http_code' => $httpCode,
                 'debug_duration_ms' => $durationMs,
-                'debug_response' => $result,
+                'debug_response' => HesabfaLogService::debugMetadata($result),
             );
             $responseHesabfaCode = $this->extractHesabfaCodeFromResponse($result);
             if ($responseHesabfaCode !== null) {
@@ -119,15 +119,4 @@ class HesabfaHttpClient
         return null;
     }
 
-    private function maskSensitiveData($data)
-    {
-        $keys = array('apiKey','password','loginToken','token','passwordHash');
-        if (is_object($data)) $data = (array) $data;
-        if (!is_array($data)) return $data;
-        foreach ($data as $key=>$value) {
-            if (in_array($key, $keys, true)) $data[$key] = '***';
-            elseif (is_array($value) || is_object($value)) $data[$key] = $this->maskSensitiveData($value);
-        }
-        return $data;
-    }
 }

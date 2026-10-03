@@ -23,6 +23,7 @@ class HesabfaExportBatchService
     }
     public function runAjax($type,$reset=false)
     {
+        if (!HesabfaSecurity::isOperational()) { return array('success'=>false,'fatal'=>true,'done'=>true,'message'=>'Module unavailable or multi-shop unsupported.'); }
         if (!in_array($type,array('products','customers'),true)) return array('success'=>false,'fatal'=>true,'done'=>true,'message'=>$this->module->l('Invalid export type.'));
         if (!Configuration::get('SSBHESABFA_LIVE_MODE')) return array('success'=>false,'fatal'=>true,'done'=>true,'message'=>$this->module->l('The API Connection must be connected before export.'));
         $state=$this->getState($type);
@@ -35,6 +36,7 @@ class HesabfaExportBatchService
     }
     public function processProducts(array $state)
     {
+        if (!HesabfaSecurity::isOperational()) { throw new RuntimeException("Module unavailable or multi-shop unsupported."); }
         $last=(int)$state['last_id']; $total=HesabfaPrestashopRepository::countProducts();
         $rows=HesabfaPrestashopRepository::getProductIdsAfter($last,Ssbhesabfa::HESABFA_BATCH_SIZE);
         if (!$rows) return $this->completed('products',$state,$total);
@@ -71,6 +73,7 @@ class HesabfaExportBatchService
     }
     public function processCustomers(array $state)
     {
+        if (!HesabfaSecurity::isOperational()) { throw new RuntimeException("Module unavailable or multi-shop unsupported."); }
         $last=(int)$state['last_id']; $total=HesabfaPrestashopRepository::countCustomers();
         $rows=HesabfaPrestashopRepository::getCustomerIdsAfter($last,Ssbhesabfa::HESABFA_BATCH_SIZE);
         if (!$rows) return $this->completed('customers',$state,$total);

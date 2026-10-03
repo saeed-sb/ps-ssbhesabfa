@@ -33,6 +33,8 @@ if (is_file($ssbhesabfaAutoload)) {
     require_once $ssbhesabfaAutoload;
 }
 
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaSecurity.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaLock.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaDateHelper.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaTextHelper.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaLogService.php');
@@ -178,7 +180,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.34';
+        $this->version = '2.3.35';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -294,6 +296,7 @@ class Ssbhesabfa extends Module
 
     public function hookDisplayBackOfficeHeader()
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         $controller = Tools::getValue('controller');
         if (Tools::getValue('module_name') == $this->name || Tools::getValue('configure') == $this->name || strpos((string) $controller, 'AdminSsbHesabfa') === 0) {
             $this->context->controller->addJqueryUI('ui.datepicker');
@@ -304,6 +307,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectCustomerAddAfter($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !isset($params['object']) || !Validate::isLoadedObject($params['object'])) { return; }
         if (Configuration::get('SSBHESABFA_ASYNC_CUSTOMER_SYNC')) {
             if ($this->isHesabfaApiConfigured()) $this->queueCustomerSync((int) $params['object']->id, 'actionObjectCustomerAddAfter');
@@ -314,6 +318,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionCustomerAccountUpdate($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !isset($params['customer']) || !Validate::isLoadedObject($params['customer'])) { return; }
         if (Configuration::get('SSBHESABFA_ASYNC_CUSTOMER_SYNC')) {
             if ($this->isHesabfaApiConfigured()) $this->queueCustomerSync((int) $params['customer']->id, 'actionCustomerAccountUpdate');
@@ -324,6 +329,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectCustomerDeleteBefore($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !isset($params['object']) || !Validate::isLoadedObject($params['object'])) {
             return;
         }
@@ -348,6 +354,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectAddressAddAfter($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS') || !isset($params['object']) || !Validate::isLoadedObject($params['object'])) { return; }
         if (Configuration::get('SSBHESABFA_ASYNC_CUSTOMER_SYNC')) {
             if ($this->isHesabfaApiConfigured()) $this->queueCustomerAddressSync((int) $params['object']->id_customer, (int) $params['object']->id, 'actionObjectAddressAddAfter');
@@ -358,6 +365,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionObjectAddressUpdateAfter($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !Configuration::get('SSBHESABFA_CONTACT_ADDRESS_STATUS') || !isset($params['object']) || !Validate::isLoadedObject($params['object'])) { return; }
         if (Configuration::get('SSBHESABFA_ASYNC_CUSTOMER_SYNC')) {
             if ($this->isHesabfaApiConfigured()) $this->queueCustomerAddressSync((int) $params['object']->id_customer, (int) $params['object']->id, 'actionObjectAddressUpdateAfter');
@@ -368,6 +376,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionValidateOrder($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if ($this->isHesabfaSyncEnabled() && isset($params['order']) && Validate::isLoadedObject($params['order'])) {
             $this->safeSetOrderFromHook((int) $params['order']->id, 0, null, 'actionValidateOrder');
         }
@@ -375,6 +384,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionPaymentConfirmation($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if ($this->isHesabfaSyncEnabled() && isset($params['id_order'])) {
             $this->safeSetOrderPaymentFromHook((int) $params['id_order'], 'actionPaymentConfirmation');
         }
@@ -382,6 +392,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionOrderStatusPostUpdate($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if ($params['newOrderStatus']->id == Configuration::get('SSBHESABFA_INVOICE_RETURN_STATUS')) {
             $obj_id = $this->getObjectId('order', $params['id_order']);
             if ($obj_id > 0) {
@@ -393,21 +404,25 @@ class Ssbhesabfa extends Module
 
     public function hookDisplayAdminOrder($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         return '';
     }
 
     public function hookDisplayAdminOrderMain($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         return '';
     }
 
     public function hookDisplayAdminOrderSide($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         return $this->renderAdminOrderHesabfaBox($params);
     }
 
     public function hookDisplayAdminProductsExtra($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         $code = $this->getItemCodeByProductId($params['id_product'], 0);
         $this->context->smarty->assign(array(
             'hesabfa_item_code' => $code,
@@ -441,6 +456,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAdd($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!isset($params['product']) || !Validate::isLoadedObject($params['product'])) {
             return false;
         }
@@ -479,6 +495,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductUpdate($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         $idProduct = isset($params['product']) && Validate::isLoadedObject($params['product'])
             ? (int) $params['product']->id
             : (int) (isset($params['id_product']) ? $params['id_product'] : 0);
@@ -530,6 +547,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductDelete($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled() || !isset($params['product']) || !Validate::isLoadedObject($params['product'])) {
             return;
         }
@@ -569,6 +587,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeAdd($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         $idProduct = $this->getProductIdFromAttributeHookParams($params);
         if ($idProduct <= 0) {
             self::addLegacyLog('Combination add hook did not provide a resolvable product ID.', 2, 'PRODUCT_ATTRIBUTE_PRODUCT_NOT_FOUND', 'Product', null, true);
@@ -594,6 +613,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeUpdate($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         $idProduct = $this->getProductIdFromAttributeHookParams($params);
         if ($idProduct <= 0) {
             self::addLegacyLog('Combination update hook did not provide a resolvable product ID.', 2, 'PRODUCT_ATTRIBUTE_PRODUCT_NOT_FOUND', 'Product', null, true);
@@ -609,6 +629,7 @@ class Ssbhesabfa extends Module
 
     public function hookActionProductAttributeDelete($params)
     {
+        if (!HesabfaSecurity::isOperational()) { return false; }
         if (!$this->isHesabfaSyncEnabled()) {
             return;
         }
