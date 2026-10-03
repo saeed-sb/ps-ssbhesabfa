@@ -1,3 +1,12 @@
+## 2.3.34
+
+- Verified completed manual invoice payments and fee-income documents directly in Hesabfa before accepting a retry.
+- Restored deleted remote records only when the administrator resubmits the manual form; blocked conflicting amounts, bank accounts, document details, or unverifiable results.
+- Retained external receipt/document numbers, serialized manual submissions per invoice, and distinguished existing payments from newly created payments in messages and logs.
+- Added Persian messages and 13 manual-payment regression checks.
+- Included pending queue fixes: uncached worker locks, guarded empty repository writes, stale webhook recovery under the processing lock, and inventory refresh after deleted invoices.
+- Added a standalone no-schema upgrade handler; the upgrade itself does not replay financial operations.
+
 ## 2.3.33
 
 - Fixed PHP 8 log-level normalization so textual `DEBUG`, `INFO`, `WARNING`, and `ERROR` values are no longer misclassified as `CRITICAL`.
