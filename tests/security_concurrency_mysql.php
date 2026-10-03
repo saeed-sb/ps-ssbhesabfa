@@ -44,6 +44,7 @@ require dirname(__DIR__).'/classes/HesabfaOperationRepository.php';
 require dirname(__DIR__).'/classes/services/HesabfaQueueService.php';
 require dirname(__DIR__).'/classes/traits/HesabfaInternalApiTrait.php';
 require dirname(__DIR__).'/upgrade/upgrade-2.3.35.php';
+require dirname(__DIR__).'/upgrade/upgrade-2.3.36.php';
 class FixtureModule {
     public function l($v) { return $v; }
     public function isHesabfaSyncEnabled() { return true; }
@@ -105,6 +106,21 @@ check(!HesabfaOperationRepository::start('financial-key','invoice_payment','Orde
 joinWorker($worker);
 check(!HesabfaOperationRepository::start('financial-key','invoice_payment','Order',1),'Successful write replayed');
 check((int)$db->getValue('SELECT COUNT(*) FROM fixture_outbox',false)===1,'Duplicate financial outbound write');
+check(HesabfaOperationRepository::start('mapping-repair','invoice_save','Order',2),'Mapping fixture claim failed');
+$mappingId=HesabfaRequestUniqueId::generate('invoice/save',array('amount'=>50));
+HesabfaOperationRepository::finish('mapping-repair','success','remote invoice completed',7777);
+$mappingRow=HesabfaOperationRepository::getByKey('mapping-repair');
+HesabfaOperationRepository::finish('mapping-repair','failed','local mapping repair failed',7777);
+$retained=HesabfaOperationRepository::getByKey('mapping-repair');
+check($retained['status']==='success' && $retained['external_reference']==='7777' && $retained['request_unique_ids']===$mappingRow['request_unique_ids'],'Mapping repair made a completed invoice replayable');
+check(!HesabfaOperationRepository::start('mapping-repair','invoice_save','Order',2),'Completed invoice replayed after mapping failure');
+check(HesabfaOperationRepository::start('deleted-manual','manual_invoice_payment','Invoice',3),'Manual deletion fixture claim failed');
+$deletedId=HesabfaRequestUniqueId::generate('invoice/savepayment',array('amount'=>50));
+HesabfaOperationRepository::finish('deleted-manual','success','receipt completed','receipt:8888');
+check(HesabfaOperationRepository::finish('deleted-manual','failed','verified deleted receipt'),'Verified manual deletion reset failed');
+check(HesabfaOperationRepository::start('deleted-manual','manual_invoice_payment','Invoice',3),'Verified deleted manual receipt could not be restored');
+check(HesabfaRequestUniqueId::generate('invoice/savepayment',array('amount'=>50))!==$deletedId,'Verified deletion did not create a new logical UUID');
+HesabfaOperationRepository::finish('deleted-manual','success','restored','receipt:9999');
 check(HesabfaOperationRepository::start('retry-key','invoice_payment','Order',1),'Initial financial claim failed');
 $first=HesabfaRequestUniqueId::generate('invoice/savepayment',array('amount'=>100));
 HesabfaOperationRepository::finish('retry-key','failed','timeout');
@@ -162,4 +178,9 @@ $db->execute('INSERT INTO fixture_ssb_hesabfa_operation (operation_key,operation
 check(upgrade_module_2_3_35((object)array('id'=>1)),'Upgrade failed');
 check(HesabfaOperationRepository::getByKey('legacy')['status']==='needs_attention','Upgrade replayed ambiguous legacy operation');
 check(upgrade_module_2_3_35((object)array('id'=>1)),'Upgrade not repeatable');
+$db->execute('INSERT INTO fixture_ssb_hesabfa_operation (operation_key,operation_type,status,attempts,external_reference,date_add,date_upd) VALUES ("missing-id-reference","invoice_save","failed",1,"7777",NOW(),NOW())');
+check(!HesabfaOperationRepository::start('missing-id-reference','invoice_save','Order',20),'Reference without request IDs was replayed');
+$db->execute('INSERT INTO fixture_ssb_hesabfa_operation (operation_key,operation_type,status,attempts,date_add,date_upd) VALUES ("legacy36","invoice_payment","failed",1,NOW(),NOW())');
+check(upgrade_module_2_3_36((object)array('id'=>1)), '2.3.36 migration failed');
+check(HesabfaOperationRepository::getByKey('legacy36')['status']==='needs_attention', '2.3.35-to-2.3.36 migration did not quarantine ID-less write');
 echo "PASS: real MySQL cross-process financial/queue locks, atomic claims, stale snapshots, safe merges, persisted retries/expiry, persistence failure, legacy migration\n";

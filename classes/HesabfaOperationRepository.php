@@ -67,6 +67,11 @@ class HesabfaOperationRepository
         try {
             $row = self::getByKey($operationKey);
             if ($row && !in_array($row['status'], array('pending', 'failed'), true)) { return false; }
+            if ($row && strpos($row['operation_type'], 'manual_') !== 0
+                && !empty($row['external_reference']) && empty($row['request_unique_ids'])) {
+                Db::getInstance()->update('ssb_hesabfa_operation', array('status'=>'needs_attention', 'message'=>'Remote reference without request IDs requires reconciliation.'), '`operation_key`="'.pSQL($operationKey).'"');
+                return false;
+            }
             if ($row && !empty($row['request_unique_ids']) && HesabfaRetryPolicy::isRequestIdExpired($row['request_unique_ids_created_at'])) {
                 Db::getInstance()->update('ssb_hesabfa_operation', array('status'=>'needs_attention', 'message'=>'Request ID expired; external reconciliation required.'), '`operation_key`="'.pSQL($operationKey).'"');
                 return false;
@@ -123,7 +128,16 @@ class HesabfaOperationRepository
             if (!$owned) {
                 $row = self::getByKey($operationKey);
                 if (!$row || $row['status'] !== 'success' || $status !== 'failed') { return false; }
-                $data['request_unique_ids'] = null; $data['request_unique_ids_created_at'] = null;
+                if (strpos($row['operation_type'], 'manual_') === 0) {
+                    $data['request_unique_ids'] = null;
+                    $data['request_unique_ids_created_at'] = null;
+                } else {
+                    // A failed local mapping repair does not undo a completed
+                    // remote invoice. Keep its success/reference/IDs so another
+                    // attempt repairs the mapping instead of creating an invoice.
+                    $data['status'] = 'success';
+                    $data['external_reference'] = pSQL((string)$row['external_reference']);
+                }
             }
             return Db::getInstance()->update('ssb_hesabfa_operation', $data, '`operation_key`="'.pSQL($operationKey).'"');
         } finally {
@@ -157,4 +171,3 @@ class HesabfaOperationRepository
         ), '`operation_key` = "' . pSQL($operationKey) . '" AND `status` = "failed"');
     }
 }
-

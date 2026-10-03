@@ -1,3 +1,9 @@
+## 2.3.36
+
+- Preserved completed automatic invoice operations, references and request IDs when later local mapping repair fails, preventing a completed invoice from becoming replayable.
+- Restricted completed-operation ID resets to externally verified manual receipt/document deletion.
+- Added real-database regressions for failed mapping repair and verified manual restoration, plus an upgrade recheck for unfinished writes without request IDs. Includes all security hardening and deployment requirements from 2.3.35.
+
 ## 2.3.35
 
 - Enforced fail-closed section and action permissions before admin rendering or mutations, including AJAX exports and order registration; removed stored API credentials from forms and preserved blank secret fields on save.

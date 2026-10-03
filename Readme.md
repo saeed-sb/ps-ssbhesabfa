@@ -2,7 +2,7 @@
 
 `ssbhesabfa` connects a PrestaShop store to Hesabfa Online Accounting. It synchronizes store data, registers invoices and payments, processes Hesabfa webhooks, and provides reliable queues for operations that should not block checkout or back-office requests.
 
-- **Current version:** `2.3.35`
+- **Current version:** `2.3.36`
 - **PrestaShop compatibility:** `1.7.0.0` and newer
 - **Deployment:** one PrestaShop shop per installation; MySQL 5.7.5+ or MariaDB 10.0.2+
 - **Author:** Saeed Sattar Beglou

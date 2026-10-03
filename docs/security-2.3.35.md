@@ -1,6 +1,8 @@
-# Security upgrade to 2.3.35
+# Security upgrade to 2.3.36
 
 This release addresses the ten findings in the source review of commit `3d324265124220c741c4b3bfcf1ddd3adeaa353f`, checked against release 2.3.34. It does not register or replay payments during upgrade.
+
+Version 2.3.36 also preserves the successful state, external reference and request IDs of an automatic invoice when a later local mapping repair fails. Repeating that repair cannot create another invoice. Clearing a completed operation's IDs is restricted to the manual receipt/document restoration path after external deletion has been verified. This follow-up is covered by real-database regressions; the 2.3.36 upgrade handler rechecks the existing schema and quarantines unfinished ID-less writes, including when upgrading from 2.3.35, without adding further fields.
 
 ## Required deployment changes
 
