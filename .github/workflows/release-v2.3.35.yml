@@ -1,0 +1,172 @@
+name: Release v2.3.35
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/release-v2.3.35.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: fixture
+          MYSQL_DATABASE: codex_ssbh_security_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --password=fixture"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SSBH_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=codex_ssbh_security_ci
+      SSBH_TEST_MYSQL_USER: root
+      SSBH_TEST_MYSQL_PASSWORD: fixture
+      TARGET_SHA: 98e8cba880b8a9d0025cfb279bf6bdcab04fe4e9
+      TAG: v2.3.35
+      ASSET: ssbhesabfa-v2.3.35.zip
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Validate legacy PHP sources on PHP 7.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          coverage: none
+          extensions: pdo_mysql
+          tools: none
+
+      - name: Lint and test non-MCP sources on PHP 7.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v | grep -Fq 'PHP 7.4.'
+          find . \
+            -path './.git' -prune -o \
+            -path './src' -prune -o \
+            -path './vendor' -prune -o \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+          php tests/log_level_mapping.php
+          php tests/paymenthub_compatibility.php
+          php tests/manual_payment_reconciliation.php
+          php tests/queue_repository_guards.php
+          php tests/queue_webhook_recovery.php
+          php tests/security_boundaries.php
+          php tests/security_concurrency_mysql.php
+          python3 tests/security_http_endpoints.py
+
+      - name: Set up PHP 8.1 and Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+          extensions: pdo_mysql
+          tools: composer:v2
+
+      - name: Validate release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          php -v | grep -Fq 'PHP 8.1.'
+          grep -Fq "\$this->version = '2.3.35';" ssbhesabfa.php
+          grep -Fq '<version>2.3.35</version>' config.xml
+          grep -Fq '<version>2.3.35</version>' config_fa.xml
+          grep -Fq '## 2.3.35' CHANGELOG.md
+          test -f upgrade/upgrade-2.3.35.php
+          grep -Fq 'function upgrade_module_2_3_35' upgrade/upgrade-2.3.35.php
+          test -f tests/log_level_mapping.php
+          test "$(find . -path './.git' -prune -o -path './vendor' -prune -o -type f -name '*.php' -print | wc -l)" -eq 95
+          git diff --check "$TARGET_SHA^" "$TARGET_SHA"
+          find . -path './.git' -prune -o -path './vendor' -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          php tests/log_level_mapping.php
+          php tests/paymenthub_compatibility.php
+          php tests/manual_payment_reconciliation.php
+          php tests/queue_repository_guards.php
+          php tests/queue_webhook_recovery.php
+          php tests/security_boundaries.php
+          php tests/security_concurrency_mysql.php
+          python3 tests/security_http_endpoints.py
+          python3 -c "import json, xml.etree.ElementTree as ET; json.load(open('composer.json')); ET.parse('config.xml'); ET.parse('config_fa.xml')"
+          composer validate --no-check-publish
+          composer dump-autoload --no-dev --classmap-authoritative
+          php -r "require 'vendor/autoload.php'; exit(class_exists('SsbHesabfa\\Mcp\\HesabfaTools') ? 0 : 1);"
+
+      - name: Build installable module archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/ssbhesabfa
+          git archive \
+            --format=tar \
+            "$TARGET_SHA" \
+            -- . ':(exclude).gitattributes' ':(exclude).gitignore' \
+            | tar -xf - -C build/ssbhesabfa
+          cp -a vendor build/ssbhesabfa/vendor
+          (
+            cd build
+            zip -qr "../$ASSET" ssbhesabfa
+          )
+          unzip -t "$ASSET"
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/vendor/autoload.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/tests/log_level_mapping.php'
+          unzip -Z1 "$ASSET" | grep -Fqx 'ssbhesabfa/upgrade/upgrade-2.3.35.php'
+          test "$(unzip -Z1 "$ASSET" | awk '/^ssbhesabfa\/.*\.php$/ && $0 !~ /^ssbhesabfa\/vendor\// { count++ } END { print count + 0 }')" -eq 95
+          test "$(unzip -Z1 "$ASSET" | awk '/(^|\/)config(_fa)?\.xml$/ { count++ } END { print count + 0 }')" -eq 2
+          test "$(unzip -Z1 "$ASSET" | awk '!/^ssbhesabfa\// { count++ } END { print count + 0 }')" -eq 0
+          if unzip -Z1 "$ASSET" | grep -Eiq '(^|/)AGENTS\.md$|(^|/)\.git/|(^|/)(cache|logs?)/|\.bak([.-]|$)|\.backup([.-]|$)|\.log$|(^|/)\.env($|\.)|release-v2\.3\.[0-9]+\.yml$'; then
+            echo 'Development, secret, runtime, backup, or temporary workflow file found in release archive.' >&2
+            exit 1
+          fi
+          sha256sum "$ASSET"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+          cat > release-notes.md <<'NOTES'
+          ## Security fixes
+
+          - Enforces fail-closed section/action permissions, POST and CSRF checks, including AJAX exports and order registration. Stored API secrets are blank in forms; replacement and explicit clearing are supported.
+          - Uses header-only cron authentication and rejects disabled modules and unsupported multishop installations before workers run.
+          - Requires a strictly typed, timing-safe webhook password, POST and a 64 KiB request limit. Unauthenticated traffic never writes module DB logs.
+          - Limits debug output to safe metadata and redacts credentials from ordinary messages and historical log views.
+          - Serializes direct financial writes, persists request UUIDs before sending, reuses them on ambiguous retries and holds expired or legacy writes for reconciliation.
+          - Fixes queue ownership, stale snapshots, merge races and live-worker recovery. Preserves attempted/running UUIDs and waits for earlier unfinished work.
+
+          ## Upgrade requirements
+
+          Read [the security upgrade guide](https://github.com/saeed-sb/ps-ssbhesabfa/blob/v2.3.35/docs/security-2.3.35.md) before installation. Pause writers during upgrade, then run the module upgrade action. The operation table gains persisted-ID fields; legacy unfinished financial writes require external reconciliation. The upgrade sends no payments.
+
+          Update cron to send the existing token in the X-SSB-Hesabfa-Token header; URL query tokens are rejected. This module supports one shop per installation and requires MySQL 5.7.5+ or MariaDB 10.0.2+ for named locks. Review tab/action permissions and rotate credentials potentially exposed in older debug or URL logs. Historic database logs/backups are not automatically erased.
+
+          ## Validation
+
+          Seven PHP regression scripts and real HTTP endpoint checks passed on PHP 7.4 and PHP 8.1. Tests include independent PHP processes against MySQL, persistence failure, migration, expired IDs, forged/read-only admin requests and 1,000 invalid webhook requests with zero fixture DB writes. All 95 source PHP files passed PHP 8.1 lint; 94 legacy PHP files passed PHP 7.4 lint. Composer/autoload, XML versions and ZIP integrity were checked.
+          NOTES
+          printf '\nPackage SHA-256: `%s`\n' "$(sha256sum "$ASSET" | cut -d' ' -f1)" >> release-notes.md
+          gh release create "$TAG" "$ASSET" \
+            --target "$TARGET_SHA" \
+            --title 'SSB Hesabfa v2.3.35' \
+            --notes-file release-notes.md \
+            --latest
