@@ -576,3 +576,8 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_6b419e6bc3edeeb7fa5b26fa0153e6e0'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a6b1c9647b60f1e9173bf1d6c1f0bcf1'] = 'بررسی صف API داخلی';
 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_0450ad379a8e2cdd1f257607c88c6374'] = 'درخواست‌های فعال';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_562fea33d22fffcc50225fedaa82446c'] = 'این پرداخت در حسابفا موجود است؛ پرداخت جدیدی ثبت نشد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a679ae8fb89a043f7c911adc6cc64c11'] = 'بررسی پرداخت قبلی در حسابفا ممکن نشد. پس از برقراری اتصال، رسید موجود را بررسی و دوباره تلاش کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_00620702ac9f596233c273ffae52e1b2'] = 'این تراکنش با مبلغ یا مشخصات دیگری در حسابفا موجود است؛ ثبت تکراری انجام نشد. پیش از اصلاح، رسید موجود و سند درآمد را بررسی کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ac9561ccd22065f80089c837942c3f1f'] = 'پرداخت دستی دیگری برای این فاکتور در حال پردازش است. کمی صبر کنید و دوباره تلاش کنید.';

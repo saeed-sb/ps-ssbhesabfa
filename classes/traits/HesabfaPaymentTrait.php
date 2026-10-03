@@ -847,6 +847,24 @@ trait HesabfaPaymentTrait
 
     private function processManualGatewayPayment()
     {
+        $invoiceNumber = (int) Tools::getValue('SSBHESABFA_MANUAL_INVOICE_NUMBER');
+        if ($invoiceNumber <= 0) {
+            return $this->processManualGatewayPaymentUnlocked();
+        }
+        $lockName = 'ssbhesabfa_manual:' . sha1(_DB_NAME_ . ':' . $invoiceNumber);
+        $db = Db::getInstance();
+        if ((int) $db->getValue("SELECT GET_LOCK('" . $lockName . "', 0)", false) !== 1) {
+            return array('success' => false, 'message' => $this->l('Another manual payment for this invoice is being processed. Please wait and retry.'));
+        }
+        try {
+            return $this->processManualGatewayPaymentUnlocked();
+        } finally {
+            $db->getValue("SELECT RELEASE_LOCK('" . $lockName . "')", false);
+        }
+    }
+
+    private function processManualGatewayPaymentUnlocked()
+    {
         $paymentConfigName = trim((string) Tools::getValue('SSBHESABFA_MANUAL_PAYMENT_METHOD'));
         $invoiceNumber = (int) Tools::getValue('SSBHESABFA_MANUAL_INVOICE_NUMBER');
         $manualPaidAmount = $this->normalizeManualAmount(Tools::getValue('SSBHESABFA_MANUAL_GATEWAY_PAID_AMOUNT'));
@@ -920,7 +938,20 @@ trait HesabfaPaymentTrait
 
         $hesabfa = new HesabfaApi();
         $manualPaymentOperationKey = $this->buildOperationKey('manual_invoice_payment', array($invoiceNumber, $paymentConfigName, $transactionNumber));
-        if (!$this->getCompletedOperation($manualPaymentOperationKey)) {
+        $completedPayment = $this->getCompletedOperation($manualPaymentOperationKey);
+        $paymentAlreadyRegistered = false;
+        if ($completedPayment) {
+            $verification = $this->verifyManualPaymentReceipt($hesabfa, $invoiceNumber, $bankCode, $transactionNumber, $feeBreakdown, $completedPayment);
+            if ($verification['state'] === 'error' || $verification['state'] === 'conflict') {
+                return array('success' => false, 'message' => $verification['message']);
+            }
+            $paymentAlreadyRegistered = $verification['state'] === 'exists';
+            if (!$paymentAlreadyRegistered) {
+                $this->finishOperation($manualPaymentOperationKey, 'failed', 'Previously registered manual payment no longer exists in Hesabfa. A new submission may restore it.');
+                self::addModuleLog('Previous manual payment was not found in Hesabfa; restoring it from the submitted form.', 'WARNING', null, 'Invoice', $invoiceNumber);
+            }
+        }
+        if (!$paymentAlreadyRegistered) {
             $this->startOperation($manualPaymentOperationKey, 'manual_invoice_payment', 'Invoice', $invoiceNumber);
             $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSavePayment(
                 $invoiceNumber,
@@ -943,7 +974,8 @@ trait HesabfaPaymentTrait
                     'message' => $this->l('Failed to register Hesabfa invoice payment. Details: ') . $this->getHesabfaErrorMessage($response),
                 );
             }
-            $this->finishOperation($manualPaymentOperationKey, 'success', 'Manual Hesabfa invoice payment was registered successfully.', $invoiceNumber);
+            $receiptNumber = isset($response->Result->Number) ? (int) $response->Result->Number : 0;
+            $this->finishOperation($manualPaymentOperationKey, 'success', 'Manual Hesabfa invoice payment was registered successfully.', $receiptNumber > 0 ? 'receipt:' . $receiptNumber : $invoiceNumber);
         } else {
             self::addModuleLog('Skipped duplicate manual Hesabfa invoice payment operation.', 'INFO', null, 'Invoice', $invoiceNumber);
         }
@@ -964,7 +996,19 @@ trait HesabfaPaymentTrait
                 'income_percent' => $feeBreakdown['income_percent'],
             ));
             $manualIncomeOperationKey = $this->buildOperationKey('manual_payment_fee_income_document', array($invoiceNumber, $paymentConfigName, $transactionNumber));
-            if (!$this->getCompletedOperation($manualIncomeOperationKey)) {
+            $completedIncome = $this->getCompletedOperation($manualIncomeOperationKey);
+            $incomeAlreadyRegistered = false;
+            if ($completedIncome) {
+                $verification = $this->verifyManualIncomeDocument($hesabfa, $incomeDescription, $bankCode, $feeBreakdown, $completedIncome);
+                if ($verification['state'] === 'error' || $verification['state'] === 'conflict') {
+                    return array('success' => false, 'message' => $verification['message']);
+                }
+                $incomeAlreadyRegistered = $verification['state'] === 'exists';
+                if (!$incomeAlreadyRegistered) {
+                    $this->finishOperation($manualIncomeOperationKey, 'failed', 'Previously registered manual fee income document no longer exists in Hesabfa.');
+                }
+            }
+            if (!$incomeAlreadyRegistered) {
                 $this->startOperation($manualIncomeOperationKey, 'manual_payment_fee_income_document', 'Invoice', $invoiceNumber);
                 $incomeResponse = $this->normalizeHesabfaResponse($this->savePaymentFeeIncomeDocument(
                     $bankCode,
@@ -986,7 +1030,8 @@ trait HesabfaPaymentTrait
                         'message' => $this->l('Invoice payment registered, but income document failed. Details: ') . $this->getHesabfaErrorMessage($incomeResponse),
                     );
                 }
-                $this->finishOperation($manualIncomeOperationKey, 'success', 'Manual payment fee income document was registered successfully.', null);
+                $documentNumber = isset($incomeResponse->Result->Number) ? (int) $incomeResponse->Result->Number : 0;
+                $this->finishOperation($manualIncomeOperationKey, 'success', 'Manual payment fee income document was registered successfully.', $documentNumber > 0 ? $documentNumber : null);
             } else {
                 self::addModuleLog('Skipped duplicate manual payment fee income document operation.', 'INFO', null, 'Invoice', $invoiceNumber);
             }
@@ -1006,7 +1051,7 @@ trait HesabfaPaymentTrait
             );
         }
 
-        $logMessage = 'Manual gateway payment was registered successfully. Invoice: ' . $invoiceNumber
+        $logMessage = ($paymentAlreadyRegistered ? 'Existing manual gateway payment was verified in Hesabfa. Invoice: ' : 'Manual gateway payment was registered successfully. Invoice: ') . $invoiceNumber
             . '. Gateway paid amount in PrestaShop currency: ' . $manualPaidAmount
             . '. Gateway paid amount in Hesabfa currency: ' . $paidAmount
             . '. Invoice payment amount: ' . $feeBreakdown['invoice_payment_amount']
@@ -1016,8 +1061,117 @@ trait HesabfaPaymentTrait
 
         return array(
             'success' => true,
-            'message' => $this->l('Invoice payment registered successfully.') . $incomeDocumentMessage,
+            'message' => ($paymentAlreadyRegistered
+                ? $this->l('This invoice payment already exists in Hesabfa. No new invoice payment was created.')
+                : $this->l('Invoice payment registered successfully.')) . $incomeDocumentMessage,
         );
+    }
+
+    private function manualVerificationError($details = '')
+    {
+        return array('state' => 'error', 'message' => $this->l('Could not verify the previous manual payment in Hesabfa. Review the existing receipt before retrying after the connection is restored.') . ($details === '' ? '' : ' ' . $details));
+    }
+
+    private function manualVerificationConflict()
+    {
+        return array('state' => 'conflict', 'message' => $this->l('This transaction already exists in Hesabfa with different payment details. No duplicate was created. Review the existing receipt and income document before correcting it.'));
+    }
+
+    private function verifyManualPaymentReceipt($hesabfa, $invoiceNumber, $bankCode, $transactionNumber, array $breakdown, array $operation)
+    {
+        $storedReceipt = 0;
+        if (isset($operation['external_reference']) && strpos($operation['external_reference'], 'receipt:') === 0) {
+            $storedReceipt = (int) substr($operation['external_reference'], 8);
+        }
+        $found = null;
+        for ($skip = 0; $skip < 1000; $skip += 100) {
+            $response = $hesabfa->receiptGetReceipts(1, array(
+                'take' => 100, 'skip' => $skip,
+                'filters' => array(array('property' => 'Invoice.Number', 'operator' => '=', 'value' => (string) $invoiceNumber)),
+            ));
+            $data = json_decode(json_encode($response), true);
+            if (empty($data['Success']) || !isset($data['Result']['List']) || !isset($data['Result']['FilteredCount'])) {
+                return $this->manualVerificationError(isset($data['ErrorMessage']) ? $data['ErrorMessage'] : '');
+            }
+            foreach ($data['Result']['List'] as $receipt) {
+                if (!isset($receipt['Invoice']['Number']) || (int) $receipt['Invoice']['Number'] !== (int) $invoiceNumber || (int) $receipt['Invoice']['InvoiceType'] !== 0) {
+                    return $this->manualVerificationError();
+                }
+                $pinnedReceipt = $storedReceipt > 0 && (int) $receipt['Number'] === $storedReceipt;
+                $matchedReference = false;
+                foreach ($receipt['Transactions'] as $transaction) {
+                    if ((string) $transaction['Reference'] !== (string) $transactionNumber) {
+                        continue;
+                    }
+                    $matchedReference = true;
+                    if ($found !== null || !isset($transaction['Bank']['Code'])
+                        || (int) $transaction['Bank']['Code'] !== (int) $bankCode
+                        || abs((float) $transaction['Amount'] - $breakdown['invoice_payment_amount']) > 0.01
+                        || abs((float) $transaction['TransactionFee'] - $breakdown['transaction_fee']) > 0.01) {
+                        return $this->manualVerificationConflict();
+                    }
+                    $found = (int) $receipt['Number'];
+                }
+                if ($pinnedReceipt && !$matchedReference) {
+                    return $this->manualVerificationConflict();
+                }
+            }
+            if ($skip + count($data['Result']['List']) >= (int) $data['Result']['FilteredCount']) {
+                return array('state' => $found === null ? 'missing' : 'exists', 'number' => $found);
+            }
+            if (count($data['Result']['List']) === 0) {
+                return $this->manualVerificationError();
+            }
+        }
+        return $this->manualVerificationError();
+    }
+
+    private function verifyManualIncomeDocument($hesabfa, $description, $bankCode, array $breakdown, array $operation)
+    {
+        $filters = array(array('property' => 'Description', 'operator' => '=', 'value' => $description));
+        if (!empty($operation['external_reference'])) {
+            // New operations retain the exact document number, instead of a success flag alone.
+            $filters = array(array('property' => 'Number', 'operator' => '=', 'value' => (int) $operation['external_reference']));
+        }
+        $response = $hesabfa->documentGetDocuments(array('take' => 100, 'skip' => 0, 'filters' => $filters));
+        $data = json_decode(json_encode($response), true);
+        if (empty($data['Success']) || !isset($data['Result']['List']) || !isset($data['Result']['FilteredCount'])) {
+            return $this->manualVerificationError(isset($data['ErrorMessage']) ? $data['ErrorMessage'] : '');
+        }
+        if ((int) $data['Result']['FilteredCount'] === 0) {
+            return array('state' => 'missing');
+        }
+        if ((int) $data['Result']['FilteredCount'] !== 1 || count($data['Result']['List']) !== 1) {
+            return $this->manualVerificationConflict();
+        }
+        $number = (int) $data['Result']['List'][0]['Number'];
+        $response = $hesabfa->documentGet($number);
+        $data = json_decode(json_encode($response), true);
+        if (empty($data['Success']) || !isset($data['Result']['Transactions'])) {
+            return $this->manualVerificationError(isset($data['ErrorMessage']) ? $data['ErrorMessage'] : '');
+        }
+        $document = $data['Result'];
+        if (abs((float) $document['Debit'] - $breakdown['income_amount']) > 0.01
+            || abs((float) $document['Credit'] - $breakdown['income_amount']) > 0.01
+            || count($document['Transactions']) !== 2) {
+            return $this->manualVerificationConflict();
+        }
+        $bankMatched = false;
+        $incomeMatched = false;
+        foreach ($document['Transactions'] as $transaction) {
+            if (abs((float) $transaction['Amount'] - $breakdown['income_amount']) > 0.01) {
+                return $this->manualVerificationConflict();
+            }
+            if ((int) $transaction['Type'] === 0 && (int) $transaction['BankCode'] === (int) $bankCode) {
+                $bankMatched = true;
+            }
+            if ((int) $transaction['Type'] === 1
+                && preg_replace('/\s*:\s*/u', ':', trim($transaction['AccountPath'])) === preg_replace('/\s*:\s*/u', ':', trim($breakdown['income_account_path']))
+                && (string) $transaction['ContactCode'] === (string) $breakdown['income_contact_code']) {
+                $incomeMatched = true;
+            }
+        }
+        return $bankMatched && $incomeMatched ? array('state' => 'exists', 'number' => $number) : $this->manualVerificationConflict();
     }
 
     private function savePaymentFeeIncomeDocument($bankCode, $incomeAccountPath, $contactCode, $date, $amount, $description = null, $project = null)
