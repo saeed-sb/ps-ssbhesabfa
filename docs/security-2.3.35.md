@@ -46,3 +46,11 @@ Queue workers claim only rows they actually updated, reload state under locks, a
 The tests use mocked outbound writes and isolated databases. They do not send production payments. Existing payment, webhook recovery, log-level, payment-module, and repository regressions are also retained.
 
 The permission model follows [PrestaShop's tab/action roles](https://devdocs.prestashop-project.org/8/modules/concepts/controllers/admin-controllers/tabs/) and was checked against the installed PrestaShop 8.1.7 core. These regression checks verify the reported paths; they are not a claim that the complete integration has no other vulnerabilities.
+
+## Bootstrap fix in 2.3.37
+
+Versions 2.3.35 and 2.3.36 could define HesabfaSecurity twice when a webhook or authenticated cron entrypoint loaded the class before the module. Version 2.3.37 uses require_once for the shared class.
+
+The package fixes module loading; installing it does not modify an external server scheduler. Migrate every scheduled cron call to the X-SSB-Hesabfa-Token header as shown in the README, then verify an authenticated HTTP 200 response and an empty webhook error. A token left in the URL continues to return HTTP 403. Keep the header configuration outside the web root with mode 600.
+
+The 2.3.37 upgrade handler changes no database schema and sends no API requests.

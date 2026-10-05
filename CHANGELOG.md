@@ -1,3 +1,10 @@
+## 2.3.37
+
+- Fixed webhook and header-authenticated cron bootstrap failures when HesabfaSecurity was loaded before the module. The shared security class now loads with require_once.
+- Added isolated regressions for endpoint-first and module-first loading, with the real module source and unchanged header-only authentication checks.
+- Clarified scheduler migration requirements: send the existing cron token in X-SSB-Hesabfa-Token using a private curl config; query-token cron calls remain rejected.
+- Added a no-schema upgrade handler. Existing integration settings, mappings, queues and accounting operations are preserved.
+
 ## 2.3.36
 
 - Preserved completed automatic invoice operations, references and request IDs when later local mapping repair fails, preventing a completed invoice from becoming replayable.

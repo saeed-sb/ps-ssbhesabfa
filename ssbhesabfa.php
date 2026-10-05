@@ -33,7 +33,7 @@ if (is_file($ssbhesabfaAutoload)) {
     require_once $ssbhesabfaAutoload;
 }
 
-include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaSecurity.php');
+require_once(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaSecurity.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaLock.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaDateHelper.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaTextHelper.php');
@@ -180,7 +180,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.36';
+        $this->version = '2.3.37';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
