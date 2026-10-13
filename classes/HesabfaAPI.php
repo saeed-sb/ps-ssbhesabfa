@@ -186,6 +186,84 @@ class HesabfaApi
         return $this->apiRequest($method, $data);
     }
 
+    /**
+     * Fetch every requested item before callers apply invoice stock changes.
+     * GetItems defaults to ten rows, so both batch size and pagination are explicit.
+     */
+    public function itemGetItemsByCodes($codes)
+    {
+        $codes = array_values(array_unique(array_filter(
+            array_map('trim', array_map('strval', (array) $codes)),
+            'strlen'
+        )));
+        $items = array();
+
+        foreach (array_chunk($codes, 100) as $batch) {
+            $skip = 0;
+            $expectedCount = null;
+            $batchItems = array();
+            do {
+                $response = $this->itemGetItems(array(
+                    'Skip' => $skip,
+                    'Take' => count($batch),
+                    'Filters' => array(array(
+                        'Property' => 'Code',
+                        'Operator' => 'in',
+                        'Value' => $batch,
+                    )),
+                ));
+                if (!is_object($response) || empty($response->Success)) {
+                    return HesabfaApiResponse::normalize($response, 'item/getitems');
+                }
+                if (!isset($response->Result->List) || !is_array($response->Result->List)
+                    || !isset($response->Result->FilteredCount)
+                    || !is_numeric($response->Result->FilteredCount)) {
+                    return $this->incompleteItemListResponse();
+                }
+
+                $total = (int) $response->Result->FilteredCount;
+                $pageCount = count($response->Result->List);
+                if ($total < 0 || $total > count($batch)
+                    || ($expectedCount !== null && $total !== $expectedCount)
+                    || $skip + $pageCount > $total
+                    || ($pageCount === 0 && $skip < $total)) {
+                    return $this->incompleteItemListResponse();
+                }
+                $expectedCount = $total;
+
+                foreach ($response->Result->List as $item) {
+                    if (!is_object($item) || !isset($item->Code)
+                        || !in_array((string) $item->Code, $batch, true)
+                        || isset($batchItems['code:' . (string) $item->Code])) {
+                        return $this->incompleteItemListResponse();
+                    }
+                    $batchItems['code:' . (string) $item->Code] = $item;
+                }
+                $skip += $pageCount;
+            } while ($skip < $expectedCount);
+
+            foreach ($batchItems as $item) {
+                $items[] = $item;
+            }
+        }
+
+        return HesabfaApiResponse::normalize((object) array(
+            'Success' => true,
+            'ErrorCode' => 0,
+            'ErrorMessage' => '',
+            'Result' => (object) array('List' => $items, 'FilteredCount' => count($items)),
+        ), 'item/getitems');
+    }
+
+    private function incompleteItemListResponse()
+    {
+        return HesabfaApiResponse::normalize((object) array(
+            'Success' => false,
+            'ErrorCode' => 'INCOMPLETE_ITEM_LIST',
+            'ErrorMessage' => 'Hesabfa returned an incomplete or inconsistent item list. Invoice stock changes were not applied.',
+        ), 'item/getitems');
+    }
+
     public function itemSave($item)
     {
         $method = 'item/save';

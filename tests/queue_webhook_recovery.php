@@ -28,7 +28,7 @@ class HesabfaWebhookChangeRepository {
 class HesabfaApi {
     public static $invoiceFetch=0, $itemFetch=0;
     public function invoiceGetById($ids) { self::$invoiceFetch++; throw new Exception('Deleted invoice must not be fetched'); }
-    public function itemGetItems($query) { self::$itemFetch++; return (object)['Success'=>true,'Result'=>(object)['List'=>[(object)['Code'=>'123','Tag'=>'{"id_product":7}']]]]; }
+    public function itemGetItemsByCodes($codes) { self::$itemFetch++; return (object)['Success'=>true,'Result'=>(object)['List'=>[(object)['Code'=>'123','Tag'=>'{"id_product":7}']]]]; }
 }
 class Module { public static function isInstalled($name) { return false; } }
 class Ssbhesabfa { public static function addLegacyLog(...$args) {} }

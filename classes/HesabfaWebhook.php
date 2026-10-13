@@ -411,16 +411,8 @@ class HesabfaWebhook
     }
 
     public function getObjectsByCodeList($codeList) {
-        $queryInfo = array(
-            'Filters' => array(array(
-                'Property' => 'Code',
-                'Operator' => 'in',
-                'Value' => $codeList,
-            ))
-        );
-
         $hesabfaApi = new HesabfaApi();
-        $result = $hesabfaApi->itemGetItems($queryInfo);
+        $result = $hesabfaApi->itemGetItemsByCodes($codeList);
 
         if (is_object($result) && $result->Success) {
             return $result->Result->List;

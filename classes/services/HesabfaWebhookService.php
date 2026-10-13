@@ -339,14 +339,7 @@ class HesabfaWebhookService
                     array_map('trim', explode(',', (string) $change->Extra)),
                     'strlen'
                 )));
-                $queryInfo = array(
-                    'Filters' => array(array(
-                        'Property' => 'Code',
-                        'Operator' => 'in',
-                        'Value' => $itemCodes,
-                    )),
-                );
-                $itemResponse = $api->itemGetItems($queryInfo);
+                $itemResponse = $api->itemGetItemsByCodes($itemCodes);
 
                 if (!is_object($itemResponse) || empty($itemResponse->Success)) {
                     $errorMessage = is_object($itemResponse) && isset($itemResponse->ErrorMessage)

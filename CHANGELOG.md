@@ -1,3 +1,11 @@
+## 2.3.38
+
+- Fixed invoice-driven stock synchronization stopping after the first ten Hesabfa items. Both webhook lookup paths now fetch all requested item codes with explicit pagination and batches of at most 100 codes.
+- Validate every page before applying any invoice item changes. Failed, repeated, empty or inconsistent pages fail the change instead of applying a partial result or falsely marking valid items as missing.
+- Preserve leading-zero item codes, remove duplicate/blank codes, and retain warnings for genuinely missing items.
+- Added isolated regression coverage for 28-item and 205-item invoices, server-capped pages, later-batch failures, malformed results, missing items and empty input.
+- Added a no-schema upgrade handler. Upgrading does not replay completed changes, write accounting documents, or modify settings. Previously skipped stock updates require a targeted reconciliation; do not reset the global webhook checkpoint.
+
 ## 2.3.37
 
 - Fixed webhook and header-authenticated cron bootstrap failures when HesabfaSecurity was loaded before the module. The shared security class now loads with require_once.
