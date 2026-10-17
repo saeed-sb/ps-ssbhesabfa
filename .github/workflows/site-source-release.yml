@@ -16,7 +16,7 @@ concurrency:
 
 env:
   MODULE_NAME: ssbhesabfa
-  RELEASE_VERSION: 2.3.39
+  RELEASE_VERSION: 2.3.40
   EXPECTED_REPOSITORY: saeed-sb/ps-ssbhesabfa
 
 jobs:
@@ -76,6 +76,7 @@ jobs:
           name: site-source-${{ env.MODULE_NAME }}-${{ env.RELEASE_VERSION }}
           path: |
             dist/*.zip
+            dist/*.zip.sha256
             dist/SHA256SUMS.txt
             dist/validation.json
           if-no-files-found: error

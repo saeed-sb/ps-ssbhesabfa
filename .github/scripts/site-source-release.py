@@ -27,7 +27,7 @@ EXCLUDED_SUFFIXES = {
 EXCLUDED_NAMES = {'auth.json', '.npmrc', '.pypirc', '.DS_Store', 'secrets.json'}
 # Reviewed standalone, network-free tests only. Never guess installation scripts.
 LOCAL_TESTS = {
-    'ssbhesabfa': [['php', 'tests/freight_margin_upgrade.php'], ['php', 'tests/queue_repository_guards.php'], ['php', 'tests/log_level_mapping.php'], ['php', 'tests/invoice_item_pagination.php']],
+    'ssbhesabfa': [['php', 'tests/freight_margin_upgrade.php'], ['php', 'tests/queue_repository_guards.php'], ['php', 'tests/log_level_mapping.php'], ['php', 'tests/invoice_item_pagination.php'], ['php', 'tests/freight-replacement-sync.php']],
     'ssbeditproduct': [
         ['php', 'tests/HomeCategoryCheckboxStateTest.php'],
         ['php', 'tests/PriceFilterSanitizationTest.php'],
@@ -265,6 +265,8 @@ def build(root):
     checksums = output / 'SHA256SUMS.txt'
     checksums.write_text(digest(archive) + '  ' + archive.name + '\n' +
                          digest(validation) + '  ' + validation.name + '\n', encoding='ascii')
+    # The store's updater recognizes the exact ZIP.sha256 companion.
+    (output / (archive.name + '.sha256')).write_text(digest(archive) + '  ' + archive.name + '\n', encoding='ascii')
     print('Built ' + archive.name + ': ' + str(len(selected)) + ' files; SHA256 ' + digest(archive))
     return report
 
@@ -404,6 +406,7 @@ def publish(root):
     archive = directory / (info['module'] + '-' + info['version'] + '.zip')
     validation = directory / 'validation.json'
     checksums = directory / 'SHA256SUMS.txt'
+    package_checksum = directory / (archive.name + '.sha256')
     report = json.loads(validation.read_text(encoding='utf-8'))
     if (any(report.get(key) != value for key, value in info.items()) or report.get('passed') is not True
             or report.get('package_sha256') != digest(archive)
@@ -412,6 +415,8 @@ def publish(root):
     expected_checksums = digest(archive) + '  ' + archive.name + '\n' + digest(validation) + '  ' + validation.name + '\n'
     if checksums.read_text(encoding='ascii') != expected_checksums:
         fail('Checksum file does not match the exact release files')
+    if package_checksum.read_text(encoding='ascii') != digest(archive) + '  ' + archive.name + '\n':
+        fail('Package checksum companion differs from the exact ZIP')
     notes = root / 'docs' / ('RELEASE-' + info['version'] + '-en.md')
     text = notes.read_text(encoding='utf-8').strip()
     if not text:
@@ -425,7 +430,7 @@ def publish(root):
     print('Created new draft release ' + str(release['id']) + '; existing releases are untouched')
     uploaded = []
     verification = []
-    for path in (archive, checksums, validation):
+    for path in (archive, package_checksum, checksums, validation):
         asset = client.upload(release, path)
         uploaded.append(asset)
         verification.append(client.verify_asset(asset, path))

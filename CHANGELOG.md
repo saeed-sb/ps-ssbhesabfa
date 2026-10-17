@@ -1,3 +1,12 @@
+## 2.3.40 - 2026-10-18
+
+- Refresh owned freight adjustment documents after the current shipment tracking code, actual sender cost or carrier changes, while preserving customer invoice totals.
+- Reclassify the original carrier payable to the replacement carrier when person codes differ, including equal-cost and postpaid replacements.
+- Verify current native tracking, Tipax/Mahex booking state and AloPeyk/Snapp ride identity before new accounting writes; stale, cancelled or unresolved provider records require review.
+- Prevent resending an outdated pending request after shipping cost or tracking changes. Recover an already accepted request by readback before applying a later correction.
+- Preserve owned document identity, fiscal-year and manual-edit guards, durable request IDs and idempotent queue processing.
+- Add 43 isolated regression checks and a code-only upgrade. The upgrade does not change settings, enable accounting, replay jobs or contact external services.
+
 ## 2.3.39 - 2026-10-17
 
 - Capture live carrier-person mapping and durable freight-margin accounting with shop-scoped settings, recovery jobs and audits.

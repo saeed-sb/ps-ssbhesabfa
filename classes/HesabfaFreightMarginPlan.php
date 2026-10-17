@@ -50,10 +50,8 @@ class HesabfaFreightMarginPlan
         if (!array_key_exists('Freight', $invoice)) { throw new InvalidArgumentException('The invoice freight amount is missing.'); }
         $freight = self::roundedRial($invoice['Freight'], 0, true);
         $invoicePerson = HesabfaFreightPerson::normalizeCode(isset($invoice['FreightPersonCode']) ? $invoice['FreightPersonCode'] : '');
-        if (($freight > 0 && $invoicePerson === '')
-            || ($invoicePerson !== '' && ltrim($invoicePerson, '0') !== ltrim($person, '0'))) {
-            throw new InvalidArgumentException('Invoice freight was not assigned to this carrier person.');
-        }
+        if ($freight > 0 && $invoicePerson === '') { throw new InvalidArgumentException('Invoice freight was not assigned to a carrier person.'); }
+        $reclassify=$freight > 0 && ltrim($invoicePerson,'0')!==ltrim($person,'0');
         if (!array_key_exists('sender_cost_toman', $source) || !array_key_exists('cost_total_toman', $source)) {
             throw new InvalidArgumentException('The saved shipment cost is incomplete.');
         }
@@ -68,7 +66,7 @@ class HesabfaFreightMarginPlan
             throw new InvalidArgumentException('Invalid freight document date.');
         }
         $number = self::nonnegativeId($number, 'document number');
-        if ($margin === 0) { return $result; }
+        if ($margin === 0 && !$reclassify) { return $result; }
         $tracking = self::tracking(isset($source['tracking']) ? $source['tracking'] : '');
         $description = '[SSB-FREIGHT:' . $idShop . ':' . $idOrder . '] سفارش' . $idOrder
             . '/' . self::shortText($reference, 24) . '؛ فاکتور' . $invoiceNumber
@@ -79,14 +77,25 @@ class HesabfaFreightMarginPlan
         $room = 199 - self::apiTextLength($description . $extra);
         if ($room < 1) { throw new InvalidArgumentException('Freight description exceeds the API limit.'); }
         $description .= self::shortText($tracking ? $tracking[0] : 'ثبت نشده', $room) . $extra;
-        $amount = abs($margin);
-        $carrierRow = self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT, $margin > 0 ? 0 : 1, $amount, $description, $person);
-        $marginRow = self::transaction($margin > 0 ? $income : $expense, $margin > 0 ? 1 : 0, $amount, $description, '');
+        if ($reclassify) {
+            // The immutable invoice credited its original carrier. Clear that
+            // balance and establish only the current carrier's actual payable.
+            $transactions=array(self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT,0,$freight,$description,$invoicePerson));
+            if ($margin<0) { $transactions[]=self::transaction($expense,0,-$margin,$description,''); }
+            if ($cost>0) { $transactions[]=self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT,1,$cost,$description,$person); }
+            if ($margin>0) { $transactions[]=self::transaction($income,1,$margin,$description,''); }
+            $amount=max($freight,$cost);
+        } else {
+            $amount=abs($margin);
+            $carrierRow=self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT,$margin>0?0:1,$amount,$description,$person);
+            $marginRow=self::transaction($margin>0?$income:$expense,$margin>0?1:0,$amount,$description,'');
+            $transactions=$margin>0?array($carrierRow,$marginRow):array($marginRow,$carrierRow);
+        }
         $document = array('reference' => $idOrder,
             'date' => $date[1] . '-' . $date[2] . '-' . $date[3] . 'T00:00:00', 'description' => $description,
             'project' => self::text(isset($invoice['Project']) ? $invoice['Project'] : '', 512),
             'debit' => $amount, 'credit' => $amount, 'status' => 1,
-            'transactions' => $margin > 0 ? array($carrierRow, $marginRow) : array($marginRow, $carrierRow));
+            'transactions' => $transactions);
         if ($number > 0) { $document['number'] = $number; }
         $result['document'] = $document;
         return $result;

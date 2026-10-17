@@ -1,0 +1,9 @@
+# Hesabfa 2.3.40
+
+Freight accounting now follows replacement shipments and reviewed shipping costs across carriers. The module updates its existing owned freight adjustment document with the current tracking information and sender cost. When the carrier changes, it reclassifies the original freight payable to the replacement carrier, including equal-cost and postpaid replacements, while preserving the customer invoice totals.
+
+Before a new financial write, the module verifies the current shipment identity and provider booking state. Stale tracking codes, changed urban courier ride IDs, cancelled bookings and unresolved provider cancellations require review. A pending request cannot be resent with an obsolete cost or shipment. If Hesabfa already accepted a request whose response was lost, readback recovers that result before any later correction is sent. Existing document ownership, fiscal-year, manual-edit and durable request protections remain in effect.
+
+This release captures the current site runtime changes and retains the repository's prior pagination fixes and upgrade history. Version 2.3.40 itself is a code-only upgrade: it does not change settings, enable accounting, replay queues or contact Hesabfa or shipping providers. Installations upgrading from earlier versions retain the existing 2.3.39 storage and hook migration. Automated freight updates require Delivery Manager's current shipping-cost source, enabled freight accounting and reviewed carrier person mappings.
+
+Validation: PHP 8.1 and 8.2 syntax checks, the existing standalone freight upgrade, queue, log-level and invoice-pagination tests, plus 43 offline regression checks for replacement tracking and costs, cross-carrier reclassification, cancelled or stale sources, idempotent repeats, ambiguous response recovery and pending-request freshness. SQL and remote financial calls in those checks are fixtures.

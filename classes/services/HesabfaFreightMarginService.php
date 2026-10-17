@@ -96,6 +96,7 @@ class HesabfaFreightMarginService
                 || self::decimal($costRow['insurance']) !== self::decimal($source['insurance_toman'] ?? '')) {
                 throw new InvalidArgumentException('The saved shipping cost changed without verified accounting evidence.');
             }
+            $this->assertCurrentSource($shop,$orderId,$source);
             $invoiceNumber = $this->module->getInvoiceCodeByOrderId($orderId);
             if (!$invoiceNumber) { return $this->fail('INVOICE_MAPPING_NOT_FOUND', 'The shipping adjustment is waiting for the sales invoice.'); }
             $invoice = $this->read($this->api->invoiceGet($invoiceNumber, 0));
@@ -129,6 +130,7 @@ class HesabfaFreightMarginService
                 'version'=>(int)$state['version']+1, 'action'=>$plan['document'] ? 'save' : 'delete',
                 'request_unique_id'=>self::uuid(), 'created_at'=>date('c'), 'sent_at'=>null,
                 'account_fingerprint'=>$account, 'source_revision'=>$sourceRow['revision_hash'], 'policy_hash'=>$policy,
+                'source_identity'=>array_intersect_key($source,array_flip(array('id_shop','id_order','id_carrier','source','source_key','tracking','tracking_source_key'))),
                 'document'=>$plan['document'], 'previous'=>$previous, 'previous_id'=>(int)$state['document_id'],
                 'number'=>(int)$state['document_number'], 'plan'=>$plan,
             );
@@ -157,6 +159,7 @@ class HesabfaFreightMarginService
         if (!empty($pending['sent_at']) && time()-strtotime($pending['sent_at'])>=86400) {
             throw new InvalidArgumentException('A shipment accounting request is over 24 hours old and its result could not be verified.');
         }
+        $this->assertPendingSource($shop,$order,$pending);
         $pending['sent_at'] = $pending['sent_at'] ?: date('c');
         $this->repo->save($shop,$order,array('pending_json'=>json_encode($pending,JSON_UNESCAPED_UNICODE)));
         $result = $this->read($this->api->apiRequest('document/save',array('document'=>$document,'requestUniqueId'=>$pending['request_unique_id'])));
@@ -182,6 +185,7 @@ class HesabfaFreightMarginService
             throw new InvalidArgumentException('Only an unchanged owned shipment document can be cancelled.');
         }
         if (!empty($pending['sent_at']) && time()-strtotime($pending['sent_at'])>=86400) { throw new InvalidArgumentException('Shipment cancellation requires reconciliation after an expired request.'); }
+        $this->assertPendingSource($shop,$order,$pending);
         $pending['sent_at']=$pending['sent_at'] ?: date('c');
         $this->repo->save($shop,$order,array('pending_json'=>json_encode($pending,JSON_UNESCAPED_UNICODE)));
         $this->read($this->api->apiRequest('document/delete',array('number'=>$pending['number'],'requestUniqueId'=>$pending['request_unique_id'])),false);
@@ -200,6 +204,56 @@ class HesabfaFreightMarginService
         ));
         if (class_exists('HesabfaIssueRepository')) { HesabfaIssueRepository::resolveByObject('freight_margin_sync_failed','Shipment',(int)$shop.':'.(int)$order,'Shipment adjustment verified.'); }
         return true;
+    }
+
+    /** A queued old waybill must not become a new accounting write after replacement. */
+    private function assertCurrentSource($shop,$order,array $source)
+    {
+        if ((isset($source['id_shop']) && (int)$source['id_shop']!==(int)$shop)
+            || (isset($source['id_order']) && (int)$source['id_order']!==(int)$order)) {
+            throw new InvalidArgumentException('Shipping cost evidence does not belong to this order.');
+        }
+        $hasKey=array_key_exists('tracking_source_key',$source);
+        $providerIds=preg_match('/^(?:alopeyk|snapp):/',(string)($source['source_key'] ?? ''))===1;
+        $legacyProvider=($source['source'] ?? '')==='provider_reconciliation' && !$providerIds;
+        if (!$hasKey && !$legacyProvider && !$providerIds) { return; }
+        $current=$this->repo->trackingSource($shop,$order);
+        if ((isset($source['id_carrier']) && (int)$source['id_carrier']!==(int)$current['id_carrier'])
+            || ($hasKey && (!is_string($source['tracking_source_key']) || !preg_match('/^[a-f0-9]{64}$/D',$source['tracking_source_key'])
+                || !hash_equals($current['source_key'],$source['tracking_source_key'])))) {
+            throw new InvalidArgumentException('The shipment tracking changed; verified shipping costs must be refreshed before accounting.');
+        }
+        if ($providerIds && !$this->repo->providerCurrent($shop,$order,(string)$source['source_key'],$current['id_carrier'])) {
+            throw new InvalidArgumentException('The courier request changed; verified shipping costs must be refreshed before accounting.');
+        }
+        if ($legacyProvider) {
+            if (!is_array($source['tracking'] ?? null)) { throw new InvalidArgumentException('Invalid shipping cost evidence.'); }
+            foreach ($source['tracking'] as $code) { if ((!is_string($code) && !is_int($code)) || trim((string)$code)==='') { throw new InvalidArgumentException('Invalid shipping cost evidence.'); } }
+            $codes=array_map(array('HesabfaFreightMarginRepository','trackingCode'),$source['tracking']);
+            $codes=array_values(array_unique($codes)); sort($codes,SORT_STRING);
+            if (!$codes || in_array('',$codes,true) || $codes!==$current['tracking']) {
+                throw new InvalidArgumentException('The shipment tracking changed; verified shipping costs must be refreshed before accounting.');
+            }
+            if (!$this->repo->nativeBookingCurrent($shop,$order,$current['tracking'])) {
+                throw new InvalidArgumentException('The carrier booking is not confirmed; refresh verified shipping costs before accounting.');
+            }
+        }
+    }
+
+    /** Accepted remote writes may be recovered above; stale pending writes are never resent. */
+    private function assertPendingSource($shop,$order,array $pending)
+    {
+        $row=$this->repo->source($shop,$order);
+        if (!$row || ($pending['source_revision'] ?? '')!==$row['revision_hash']) {
+            throw new InvalidArgumentException('The pending shipment accounting source changed; reconcile the existing request before retrying.');
+        }
+        if (is_array($pending['source_identity'] ?? null)) {
+            $this->assertCurrentSource($shop,$order,$pending['source_identity']);
+            return;
+        }
+        $source=json_decode($row['payload_json'],true);
+        if (!is_array($source)) { throw new InvalidArgumentException('Invalid shipping cost evidence.'); }
+        $this->assertCurrentSource($shop,$order,$source);
     }
 
     private function findDocument($property,$value)

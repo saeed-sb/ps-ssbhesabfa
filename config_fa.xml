@@ -2,7 +2,7 @@
 <module>
     <name>ssbhesabfa</name>
     <displayName><![CDATA[نرم&zwnj;افزار حسابداری ابری حسابفا]]></displayName>
-    <version><![CDATA[2.3.39]]></version>
+    <version><![CDATA[2.3.40]]></version>
     <description><![CDATA[اتصال نرم&zwnj;افزار حسابداری ابری حسابفا به پرستاشاپ]]></description>
     <author><![CDATA[Saeed Sattar Beglou]]></author>
     <tab><![CDATA[billing_invoicing]]></tab>
