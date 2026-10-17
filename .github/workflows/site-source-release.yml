@@ -1,0 +1,86 @@
+name: Validate and publish site source
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - .github/workflows/site-source-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-source-release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  MODULE_NAME: ssbhesabfa
+  RELEASE_VERSION: 2.3.39
+  EXPECTED_REPOSITORY: saeed-sb/ps-ssbhesabfa
+
+jobs:
+  validate:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: none
+      - name: Validate source and run approved local tests
+        env:
+          RELEASE_PHP: ${{ matrix.php }}
+        run: python3 .github/scripts/site-source-release.py validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-source-validation-${{ matrix.php }}
+          path: dist/validation-php${{ matrix.php }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish immutable release
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: site-source-validation-*
+          path: dist/validation-input
+          merge-multiple: true
+      - name: Check that the version has never been published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/site-source-release.py preflight
+      - name: Build deterministic installable package
+        run: python3 .github/scripts/site-source-release.py build
+      - name: Preserve checked release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-source-${{ env.MODULE_NAME }}-${{ env.RELEASE_VERSION }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+            dist/validation.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create draft, upload and verify assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/site-source-release.py publish

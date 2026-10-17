@@ -593,3 +593,30 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_d19bc66979c16a20c43ea1977b26d5db'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_9fb000a2a10ebef2e2f00823db8d7d6a'] = 'حذف کلید API ذخیره‌شده';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fa3454a35aa1424e0335f4f98de52308'] = 'حذف توکن ورود ذخیره‌شده';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ae3579d0ec5bd34223e2670ce5dccaa0'] = 'فقط وقتی مقدار را خالی بگذارید حذف می‌شود. مقدار جدید بر گزینهٔ حذف اولویت دارد.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_feabc3262ac6d0f182d51af842ff2068'] = 'پیش از ویرایش تنظیمات فاکتور، یک فروشگاه انتخاب کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_26103231f95a5bb99c8eba56ef380d76'] = '%s (حامل %d)';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_0bacbf9af02d754ceaf301f087410356'] = 'حامل غیرفعال';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fbe01ab2db31805c23b7cbe7a89b2287'] = 'کد شخص حامل‌ها در حسابفا';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_426729c1fa78e32cefa348b92f78769d'] = 'ابتدا هر حامل را در کسب‌وکار متصل به حسابفا به‌عنوان شخص تعریف کنید و کد شخص را اینجا وارد کنید. اگر کد را خالی بگذارید، فاکتورها بدون شخص حمل‌کننده ثبت می‌شوند. صفرهای ابتدای کد حفظ می‌شوند.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_b1b71a576abf550ff36a22ad03b6b8cd'] = 'کد شخص این حامل در حسابفا؛ اختیاری.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_962cb9d6c8d8d6d16e07ae33aa6d87d2'] = 'کد شخص را به‌صورت عدد مثبت وارد کنید یا این فیلد را خالی بگذارید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ced44482a87021a4004a8da594c955b0'] = 'کد شخص حسابفا برای %s معتبر نیست. کد را به‌صورت عدد مثبت وارد کنید یا خالی بگذارید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_903f5b28c8ddb2b6f3d08d764f41be67'] = 'تنظیمات فاکتور به‌طور کامل ذخیره نشد. مقادیر را بررسی و دوباره ذخیره کنید.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f842db9362519a51a1588edf4ef43878'] = 'ذخیره اشخاص حامل‌ها';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_4b22b71abe4c2619a787c5e937948399'] = 'تنظیمات اشخاص حامل‌ها ذخیره شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a84c125ff282d1c1e5df86fc2169fde8'] = 'تنظیمات اشخاص حامل‌ها ذخیره نشد. مقادیر را بررسی و دوباره ذخیره کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_fbe01ab2db31805c23b7cbe7a89b2287'] = 'اشخاص حامل‌ها در حسابفا';
+$_MODULE['<{ssbhesabfa}prestashop>configure_426729c1fa78e32cefa348b92f78769d'] = 'ابتدا هر حامل را به‌عنوان شخص در کسب‌وکار متصل حسابفا تعریف کنید، سپس کد شخص آن را وارد کنید. فیلد خالی یعنی همگام‌سازی فاکتور بدون شخص حمل‌کننده. صفرهای ابتدایی کد حفظ می‌شوند.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_68b59f72c14559d558d7b4ba39ffdba1'] = 'ذخیره تنظیمات حسابداری حمل';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1320251b447dc924fdaf23a6da61630e'] = 'ثبت خودکار درآمد و هزینه حمل';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_461a22f421eb4a25a2b8ec7ca408ef14'] = 'پس از ثبت هزینه واقعی حمل، اختلاف آن با کرایه دریافتی از مشتری برای همان ارسال در حسابفا سند می‌شود.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_f821e0b0fdf9fb507dbd13427457aeaa'] = 'مسیر حساب درآمد حمل';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fd016d1cfefb365bd5916fba02521b60'] = 'مسیر حساب هزینه حمل';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_59fbb551bea2664cb73ca92c9532b576'] = 'مسیر دقیق حساب در حسابفا برای مبلغی که کرایه دریافتی از مشتری از هزینه واقعی حمل بیشتر است.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ea4c5f633091a76977ed70c69f3085ec'] = 'مسیر دقیق حساب در حسابفا برای بخشی از هزینه واقعی حمل که با کرایه دریافتی از مشتری پوشش داده نمی‌شود.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fc405d92ba22ce253a465e225ceb5263'] = 'گزینه ثبت خودکار و مسیر حساب‌ها را بررسی کنید. برای فعال‌کردن ثبت خودکار، مسیر هر دو حساب درآمد و هزینه حمل باید معتبر و تکمیل شده باشد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_c0e7fff04dfdc24f51eafeb5b9f58d13'] = 'تنظیمات حسابداری حمل ذخیره شد.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_56d7b359385f0ea3e428e5c38c868c34'] = 'تنظیمات حسابداری حمل به‌طور کامل ذخیره نشد. مقادیر را بررسی و دوباره ذخیره کنید.';

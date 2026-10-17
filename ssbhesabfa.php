@@ -55,11 +55,16 @@ include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaIssueRepository.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaOperationRepository.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaMappingRepository.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaPrestashopRepository.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaFreightPerson.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaFreightMarginSettings.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaFreightMarginPlan.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaFreightMarginRepository.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaAPI.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/HesabfaModel.php');
 
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaExportBatchService.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaQueueService.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaFreightMarginService.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaWebhookService.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaPaymentFeeService.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaAdminQueueRenderer.php');
@@ -180,7 +185,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.38';
+        $this->version = '2.3.39';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -232,7 +237,8 @@ class Ssbhesabfa extends Module
             Configuration::updateValue('SSBHESABFA_QUEUE_CRON_TOKEN', $this->generateSecureToken(32));
         }
 
-        return parent::install() &&
+        return (new HesabfaFreightMarginRepository())->install() && parent::install() &&
+            $this->registerHook('actionSsbDeliveryShippingCostSaved') &&
             $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('displayAdminProductsExtra') &&
             $this->registerHook('displayAdminOrderSide') &&
@@ -380,6 +386,26 @@ class Ssbhesabfa extends Module
         if ($this->isHesabfaSyncEnabled() && isset($params['order']) && Validate::isLoadedObject($params['order'])) {
             $this->safeSetOrderFromHook((int) $params['order']->id, 0, null, 'actionValidateOrder');
         }
+    }
+
+    public function hookActionSsbDeliveryShippingCostSaved($params)
+    {
+        if (empty($params['id_order']) || empty($params['id_shop'])) { return false; }
+        return $this->queueShipmentMargin((int)$params['id_shop'],(int)$params['id_order']);
+    }
+
+    public function queueShipmentMargin($shop,$order,$force=false)
+    {
+        try { return (new HesabfaFreightMarginService($this))->enqueue($shop,$order,$force); }
+        catch (Exception $e) {
+            self::addLegacyLog('Shipment accounting will be recovered from its cost outbox: '.$e->getMessage(),2,'FREIGHT_MARGIN_QUEUE_FAILED','Order',(int)$order,true);
+            return false;
+        }
+    }
+
+    public function syncShipmentMargin($shop,$order)
+    {
+        return (new HesabfaFreightMarginService($this))->process((int)$shop,(int)$order);
     }
 
     public function hookActionPaymentConfirmation($params)

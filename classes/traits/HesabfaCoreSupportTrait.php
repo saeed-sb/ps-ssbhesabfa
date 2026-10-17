@@ -232,6 +232,7 @@ trait HesabfaCoreSupportTrait
             'ModuleItem' => array('Settings', 'edit'),
             'ModuleContact' => array('Settings', 'edit'),
             'ModuleInvoice' => array('Settings', 'edit'),
+            'ModuleFreightPerson' => array('Settings', 'edit'),
             'ModuleManualGatewayPayment' => array('ManualPayment', 'add'),
             'ExportProducts' => array('Sync', 'edit'),
             'SetOpeningQuantity' => array('Sync', 'edit'),
@@ -291,6 +292,7 @@ trait HesabfaCoreSupportTrait
             'Item' => 'AdminSsbHesabfaSettings',
             'Contact' => 'AdminSsbHesabfaSettings',
             'Invoice' => 'AdminSsbHesabfaSettings',
+            'FreightPerson' => 'AdminSsbHesabfaSettings',
             'AccountingText' => 'AdminSsbHesabfaSettings',
             'Bank' => 'AdminSsbHesabfaPayments',
             'ManualGatewayPayment' => 'AdminSsbHesabfaManualPayment',
@@ -427,6 +429,7 @@ trait HesabfaCoreSupportTrait
             'Item' => 'Settings',
             'Contact' => 'Settings',
             'Invoice' => 'Settings',
+            'FreightPerson' => 'Settings',
             'AccountingText' => 'Settings',
             'Bank' => 'Payments',
             'ManualGatewayPayment' => 'ManualPayment',
@@ -451,7 +454,7 @@ trait HesabfaCoreSupportTrait
         if ($section === 'Settings') {
             $forms = array('Config');
             if (Configuration::get('SSBHESABFA_LIVE_MODE') == 1) {
-                $forms = array_merge($forms, array('Item', 'Contact', 'Invoice', 'AccountingText'));
+                $forms = array_merge($forms, array('Item', 'Contact', 'Invoice', 'FreightPerson', 'AccountingText'));
             }
             return $forms;
         }
@@ -610,8 +613,29 @@ trait HesabfaCoreSupportTrait
             $this->setConfigFormsValues('Contact');
             $output .= $this->displayConfirmation($this->l('Customers Setting updated.'));
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleInvoice')) == true) {
-            $this->setConfigFormsValues('Invoice');
-            $output .= $this->displayConfirmation($this->l('Invoice Setting updated.'));
+            try {
+                if ($this->setConfigFormsValues('Invoice')) {
+                    $output .= $this->displayConfirmation($this->l('Invoice Setting updated.'));
+                } else {
+                    $output .= $this->displayError($this->l('Invoice settings could not be saved completely. Review the values and save again.'));
+                }
+            } catch (InvalidArgumentException $e) {
+                $output .= $this->displayError($e->getMessage());
+            } catch (RuntimeException $e) {
+                $output .= $this->displayError($this->l('Invoice settings could not be saved completely. Review the values and save again.'));
+            }
+        } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleFreightPerson')) == true) {
+            try {
+                if ($this->setConfigFormsValues('FreightPerson')) {
+                    $output .= $this->displayConfirmation($this->l('Carrier accounting settings updated.'));
+                } else {
+                    $output .= $this->displayError($this->l('Carrier accounting settings could not be saved completely. Review the values and save again.'));
+                }
+            } catch (InvalidArgumentException $e) {
+                $output .= $this->displayError($e->getMessage());
+            } catch (RuntimeException $e) {
+                $output .= $this->displayError($this->l('Carrier accounting settings could not be saved completely. Review the values and save again.'));
+            }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaExportProducts')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
                 $exportProducts = $this->exportProducts();
@@ -777,7 +801,7 @@ trait HesabfaCoreSupportTrait
         $isHesabfaConnected = (Configuration::get('SSBHESABFA_LIVE_MODE') == 1);
 
         // Render only the active section forms. This avoids unnecessary Hesabfa API calls while browsing admin pages.
-        foreach (array('Bank', 'ManualGatewayPayment', 'Config', 'Item', 'Contact', 'Invoice', 'AccountingText') as $form) {
+        foreach (array('Bank', 'ManualGatewayPayment', 'Config', 'Item', 'Contact', 'Invoice', 'FreightPerson', 'AccountingText') as $form) {
             $this->context->smarty->assign($form, '');
         }
         foreach ($this->getFormsForSection($activeSection) as $form) {

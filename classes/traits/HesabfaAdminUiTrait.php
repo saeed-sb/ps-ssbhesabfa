@@ -1014,7 +1014,7 @@ trait HesabfaAdminUiTrait
             }
         }
 
-        return array(
+        $form = array(
             'form' => array(
                 'input' => array(
                     array(
@@ -1074,6 +1074,132 @@ trait HesabfaAdminUiTrait
                 ),
             ),
         );
+        return $form;
+    }
+
+    protected function getFreightPersonForm()
+    {
+        return array('form' => array(
+            'input' => $this->getFreightPersonFormInputs(),
+            'submit' => array('title' => $this->l('Save carrier accounting settings')),
+        ));
+    }
+
+    protected function getInvoiceSettingsShopId()
+    {
+        $idShop = isset($this->context->shop->id) ? (int) $this->context->shop->id : 0;
+        if ($idShop <= 0) {
+            throw new InvalidArgumentException($this->l('Select a shop before editing invoice settings.'));
+        }
+        return $idShop;
+    }
+
+    protected function getFreightPersonCarrierLabel(array $carrier)
+    {
+        $label = sprintf($this->l('%s (carrier %d)'), $carrier['name'], (int) $carrier['reference']);
+        if (empty($carrier['active'])) {
+            $label .= ' - ' . $this->l('Inactive carrier');
+        }
+        return $label;
+    }
+
+    protected function getFreightPersonFormInputs()
+    {
+        $inputs = array();
+        foreach (HesabfaFreightPerson::getCarriers($this->getInvoiceSettingsShopId()) as $carrier) {
+            $key = HesabfaFreightPerson::configKey($carrier['reference']);
+            $description = $this->l('Hesabfa person code for this carrier. Optional.');
+            if (Tools::isSubmit('submitSsbhesabfaModuleFreightPerson') && array_key_exists($key, $_POST)) {
+                try {
+                    HesabfaFreightPerson::normalizeCode($_POST[$key]);
+                } catch (InvalidArgumentException $e) {
+                    $description = '<span class="text-danger">'
+                        . $this->l('Enter a positive numeric person code, or leave this field blank.') . '</span>';
+                }
+            }
+            $inputs[] = array(
+                'type' => 'text',
+                'col' => 4,
+                'name' => $key,
+                'label' => htmlspecialchars($this->getFreightPersonCarrierLabel($carrier), ENT_QUOTES, 'UTF-8'),
+                'desc' => $description,
+            );
+        }
+        $inputs[] = array(
+            'type' => 'switch',
+            'label' => $this->l('Automatically record freight income and expense'),
+            'name' => 'SSBHESABFA_FREIGHT_MARGIN_ENABLED',
+            'is_bool' => true,
+            'desc' => $this->l('After the actual shipping cost is recorded, post its difference from the customer freight charge to Hesabfa for that shipment.'),
+            'values' => array(
+                array('id' => 'freight_margin_on', 'value' => true, 'label' => $this->l('Enabled')),
+                array('id' => 'freight_margin_off', 'value' => false, 'label' => $this->l('Disabled')),
+            ),
+        );
+        $inputs[] = array(
+            'type' => 'text',
+            'col' => 6,
+            'name' => 'SSBHESABFA_FREIGHT_MARGIN_INCOME_ACCOUNT',
+            'label' => $this->l('Freight income account path'),
+            'desc' => $this->l('Exact Hesabfa account path for the excess freight collected from the customer over the actual shipping cost.'),
+        );
+        $inputs[] = array(
+            'type' => 'text',
+            'col' => 6,
+            'name' => 'SSBHESABFA_FREIGHT_MARGIN_EXPENSE_ACCOUNT',
+            'label' => $this->l('Freight expense account path'),
+            'desc' => $this->l('Exact Hesabfa account path for the part of the actual shipping cost not covered by the customer freight charge.'),
+        );
+
+        return $inputs;
+    }
+
+    protected function setFreightPersonConfigFormValues()
+    {
+        $idShop = $this->getInvoiceSettingsShopId();
+        $submitted = array();
+        // Validate the whole card before writing any carrier or margin setting.
+        foreach (HesabfaFreightPerson::getCarriers($idShop) as $carrier) {
+            $key = HesabfaFreightPerson::configKey($carrier['reference']);
+            if (!array_key_exists($key, $_POST)) {
+                continue;
+            }
+            try {
+                $submitted[$key] = HesabfaFreightPerson::normalizeCode($_POST[$key]);
+            } catch (InvalidArgumentException $e) {
+                throw new InvalidArgumentException(sprintf(
+                    $this->l('Invalid Hesabfa person code for %s. Enter a positive numeric code, or leave it blank.'),
+                    htmlspecialchars($this->getFreightPersonCarrierLabel($carrier), ENT_QUOTES, 'UTF-8')
+                ));
+            }
+        }
+        try {
+            $marginSubmitted = HesabfaFreightMarginSettings::validateSubmitted($idShop, $_POST);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException($this->l('Review the freight margin switch and account paths. Both income and expense account paths are required when automatic entries are enabled.'));
+        }
+        if (!HesabfaFreightPerson::saveSubmitted($idShop, $submitted)) {
+            return false;
+        }
+
+        return HesabfaFreightMarginSettings::saveSubmitted($idShop, $marginSubmitted);
+    }
+
+    protected function setInvoiceConfigFormValues()
+    {
+        $success = true;
+        foreach (array(
+            'SSBHESABFA_INVOICE_RETURN_STATUS',
+            'SSBHESABFA_INVOICE_REFERENCE_TYPE',
+            'SSBHESABFA_INVOICE_SALESMEN',
+            'SSBHESABFA_INVOICE_PROJECT',
+        ) as $key) {
+            // Missing fields from older forms must not erase existing settings.
+            if (array_key_exists($key, $_POST) && !Configuration::updateValue($key, Tools::getValue($key))) {
+                $success = false;
+            }
+        }
+        return $success;
     }
 
     protected function getItemForm()
@@ -1275,6 +1401,27 @@ trait HesabfaAdminUiTrait
                     'SSBHESABFA_INVOICE_SALESMEN' => Configuration::get('SSBHESABFA_INVOICE_SALESMEN'),
                     'SSBHESABFA_INVOICE_PROJECT' => Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
                 );
+                if (Tools::isSubmit('submitSsbhesabfaModuleInvoice')) {
+                    foreach (array_keys($keys) as $key) {
+                        if (array_key_exists($key, $_POST) && is_scalar($_POST[$key])) {
+                            $keys[$key] = (string) $_POST[$key];
+                        }
+                    }
+                }
+                break;
+            case 'FreightPerson':
+                $idShop = $this->getInvoiceSettingsShopId();
+                $keys = array_merge(
+                    HesabfaFreightPerson::getFormValues($idShop),
+                    HesabfaFreightMarginSettings::getFormValues($idShop)
+                );
+                if (Tools::isSubmit('submitSsbhesabfaModuleFreightPerson')) {
+                    foreach (array_keys($keys) as $key) {
+                        if (array_key_exists($key, $_POST) && is_scalar($_POST[$key])) {
+                            $keys[$key] = (string) $_POST[$key];
+                        }
+                    }
+                }
                 break;
             case 'Bank':
                 $keys = array();
@@ -1364,6 +1511,12 @@ trait HesabfaAdminUiTrait
 
     protected function setConfigFormsValues($form = null)
     {
+        if ($form === 'FreightPerson') {
+            return $this->setFreightPersonConfigFormValues();
+        }
+        if ($form === 'Invoice') {
+            return $this->setInvoiceConfigFormValues();
+        }
         $form_values = $this->getConfigFormValues($form);
         $success = true;
 

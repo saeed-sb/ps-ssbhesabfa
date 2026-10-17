@@ -455,6 +455,25 @@ trait HesabfaPaymentTrait
             $data['SalesmanCode'] = $salesmanCode;
         }
 
+        // The billed freight amount stays unchanged; this identifies its carrier.
+        if ((int) $orderType === 0 && (float) $shipping > 0 && (int) $order->id_carrier > 0) {
+            try {
+                $carrier = new Carrier((int) $order->id_carrier);
+                if (!Validate::isLoadedObject($carrier) || (int) $carrier->id_reference <= 0) {
+                    throw new RuntimeException('The invoice carrier could not be resolved.');
+                }
+                $freightPersonCode = HesabfaFreightPerson::getCode((int) $carrier->id_reference, (int) $order->id_shop);
+                if ($freightPersonCode !== '') {
+                    $data['freightPersonCode'] = $freightPersonCode;
+                }
+            } catch (Exception $e) {
+                $message = 'The carrier person code could not be read. Check the carrier mapping in Hesabfa Invoice Settings.';
+                HesabfaApiResponse::normalize((object) array('Success' => false, 'ErrorCode' => 'FREIGHT_PERSON_CONFIGURATION_INVALID', 'ErrorMessage' => $message));
+                self::addLegacyLog($message, 3, 'FREIGHT_PERSON_CONFIGURATION_INVALID', 'Order', $id_order, true);
+                return false;
+            }
+        }
+
         $invoicePayloadHash = md5(json_encode($data));
         $invoiceOperationKey = $this->buildOperationKey('invoice_save', array($id_order, $orderType, $number ? $number : 'new', $invoicePayloadHash));
         $mappingType = $orderType == 2 ? 'returnOrder' : 'order';
@@ -473,6 +492,7 @@ trait HesabfaPaymentTrait
                 && (int) $existingMappingCode === $completedInvoiceNumber
             ) {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice save operation.', 'INFO', null, $operationObjectType, $id_order);
+                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
                 return true;
             }
 
@@ -482,6 +502,7 @@ trait HesabfaPaymentTrait
             ) {
                 $message = 'Repaired the missing local mapping for a completed Hesabfa invoice operation.';
                 self::addModuleLog($message, 'INFO', null, $operationObjectType, $id_order);
+                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
                 return true;
             }
 
@@ -522,6 +543,19 @@ trait HesabfaPaymentTrait
             }
 
             return false;
+        }
+
+        // A newly configured person changes the payload hash. Do not let that
+        // turn a successful, locally unmapped invoice into another remote create.
+        if ((int) $orderType === 0 && !$number) {
+            $recovery = HesabfaOperationRepository::getSuccessfulInvoiceRecovery($operationObjectType, $id_order);
+            if ($recovery['state'] !== 'none') {
+                $message = 'A prior successful invoice operation could not be safely reconciled with the local mapping. Reconcile the existing Hesabfa invoice before creating another.';
+                HesabfaApiResponse::normalize((object) array('Success' => false, 'ErrorCode' => 'INVOICE_MAPPING_RECONCILIATION_REQUIRED', 'ErrorMessage' => $message));
+                $this->addFollowUpIssue('invoice_mapping_reconciliation_required', $message, $operationObjectType, $id_order, $invoiceOperationKey, 'ERROR');
+                self::addLegacyLog($message, 3, 'INVOICE_MAPPING_RECONCILIATION_REQUIRED', $operationObjectType, $id_order, true);
+                return false;
+            }
         }
 
         if (!$this->startOperation($invoiceOperationKey, 'invoice_save', $operationObjectType, $id_order)) { return false; }
@@ -571,6 +605,7 @@ trait HesabfaPaymentTrait
             }
 
             $this->finishOperation($invoiceOperationKey, 'success', 'Hesabfa invoice save operation completed successfully.', (int)$response->Result->Number);
+            if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
             return true;
         } else {
             $msg = 'Failed to add or update the Hesabfa invoice. Details: ' . $this->getHesabfaErrorMessage($response);
@@ -699,10 +734,25 @@ trait HesabfaPaymentTrait
                 $id_order
             );
 
-            $feeBreakdown = $this->getPaymentFeeBreakdown(
-                $paymentConfigName,
-                $paidAmount
-            );
+            try {
+                $feeBreakdown = $this->getOrderPaymentFeeBreakdown(
+                    $paymentConfigName,
+                    $paidAmount,
+                    $payment,
+                    $order
+                );
+            } catch (Throwable $e) {
+                $msg = 'The balance payment fee snapshot does not match its recorded receipt.';
+                $lastFailureResponse = HesabfaApiResponse::normalize((object) array(
+                    'Success' => false,
+                    'ErrorCode' => 'BALANCE_PAYMENT_FEE_SNAPSHOT_INVALID',
+                    'ErrorMessage' => $msg,
+                ));
+                $hasFailure = true;
+                self::addLegacyLog($msg, 2, 'BALANCE_PAYMENT_FEE_SNAPSHOT_INVALID', 'Order', $id_order, true);
+                $this->addFollowUpIssue('balance_payment_fee_snapshot_invalid', $msg, 'Order', $id_order, null, 'ERROR');
+                continue;
+            }
 
             /*
              * Main invoice payment:
@@ -1281,6 +1331,78 @@ trait HesabfaPaymentTrait
     private function getPaymentFeeBreakdown($paymentConfigName, $paidAmount)
     {
         return HesabfaPaymentFeeService::getBreakdown($paymentConfigName,$paidAmount);
+    }
+
+    /** Preserve the actual principal and customer charge of a staged receipt. */
+    private function getOrderPaymentFeeBreakdown($paymentConfigName, $paidAmount, $payment, $order)
+    {
+        $breakdown = $this->getPaymentFeeBreakdown($paymentConfigName, $paidAmount);
+        if ((string) $order->module !== 'ssbpaymenthub') {
+            return $breakdown;
+        }
+        $hub = Module::getInstanceByName('ssbpaymenthub');
+        if (!Validate::isLoadedObject($hub) || !method_exists($hub, 'getBalancePaymentFeeSnapshot')) {
+            return $breakdown;
+        }
+        // Hub validates receipt identity, verified transaction, and fee application.
+        // Null identifies historical receipts that have no frozen fee information.
+        $snapshot = $hub->getBalancePaymentFeeSnapshot($payment, $order);
+        if ($snapshot === null) {
+            return $breakdown;
+        }
+        if (!is_array($snapshot)
+            || !isset($snapshot['currency_id'])
+            || (int) $snapshot['currency_id'] !== (int) $order->id_currency
+            || (int) $payment->id_currency !== (int) $order->id_currency) {
+            throw new RuntimeException('Invalid balance payment fee currency.');
+        }
+        foreach (array('principal_amount', 'customer_fee_amount', 'gross_amount') as $field) {
+            if (!isset($snapshot[$field]) || !is_scalar($snapshot[$field])
+                || !is_numeric($snapshot[$field]) || !is_finite((float) $snapshot[$field])) {
+                throw new RuntimeException('Invalid balance payment fee amount.');
+            }
+        }
+        $principal = (float) $snapshot['principal_amount'];
+        $customerFee = (float) $snapshot['customer_fee_amount'];
+        $gross = (float) $snapshot['gross_amount'];
+        if ($principal <= 0 || $customerFee < 0 || $gross <= 0
+            || round($principal + $customerFee, 6) !== round($gross, 6)
+            || round($gross, 6) !== round((float) $payment->amount, 6)) {
+            throw new RuntimeException('Balance payment fee amounts do not match the receipt.');
+        }
+
+        $principalAmount = round($this->getOrderPriceInHesabfaDefaultCurrency($principal, (int) $order->id));
+        $customerFeeAmount = round($this->getOrderPriceInHesabfaDefaultCurrency($customerFee, (int) $order->id));
+        $grossAmount = round($this->getOrderPriceInHesabfaDefaultCurrency($gross, (int) $order->id));
+        $paidAmount = round((float) $paidAmount);
+        if (!is_finite($principalAmount) || !is_finite($customerFeeAmount) || !is_finite($grossAmount) || !is_finite($paidAmount)
+            || $principalAmount <= 0 || $customerFeeAmount < 0 || $grossAmount <= 0
+            || abs($grossAmount - $paidAmount) > 1
+            || abs($principalAmount + $customerFeeAmount - $grossAmount) > 1) {
+            throw new RuntimeException('Balance payment fee currency conversion does not match.');
+        }
+
+        $breakdown['invoice_payment_amount'] = $principalAmount;
+        $breakdown['customer_charge_percent'] = round(($customerFee / $principal) * 100, 6);
+        $breakdown['income_amount'] = 0;
+        $breakdown['income_percent'] = 0;
+        if ($customerFee > 0) {
+            $breakdown['fee_payer'] = 'customer';
+            $breakdown['transaction_fee'] = 0;
+            // Match the native customer-pays calculation, preserving the actual
+            // recorded principal instead of dividing by a mutable charge rate.
+            $gatewayFee = $breakdown['fee_percent'] > 0
+                ? round($paidAmount * ($breakdown['fee_percent'] / 100)) : 0;
+            $breakdown['income_amount'] = max(0, round($paidAmount - $gatewayFee - $principalAmount));
+            $breakdown['income_percent'] = $breakdown['income_amount'] > 0
+                ? round(($breakdown['income_amount'] / $principalAmount) * 100, 6) : 0;
+            $breakdown['income_account_path'] = trim((string) Configuration::get($paymentConfigName . '_INCOME_ACCOUNT_PATH'));
+            $breakdown['income_contact_code'] = trim((string) Configuration::get($paymentConfigName . '_FEE_INCOME_CONTACT_CODE'));
+        } else {
+            $breakdown['fee_payer'] = 'merchant';
+            $breakdown['transaction_fee'] = round($this->getPaymentTransactionFee($paymentConfigName, $paidAmount));
+        }
+        return $breakdown;
     }
 
 

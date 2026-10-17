@@ -41,6 +41,56 @@ class HesabfaOperationRepository
         return Db::getInstance()->getRow($query, false);
     }
 
+    /**
+     * Recover a completed invoice independently of its old payload hash.
+     * A settings change must not turn a lost local mapping into another create.
+     * Callers may repair one verified number; every other non-empty state blocks
+     * a create until the successful operation history has been reconciled.
+     */
+    public static function getSuccessfulInvoiceRecovery($objectType, $objectId)
+    {
+        $objectType = (string) $objectType;
+        $objectId = (int) $objectId;
+        if ($objectType === '' || $objectId <= 0) {
+            return array('state' => 'invalid', 'number' => null);
+        }
+
+        $query = new DbQuery();
+        $query->select('`external_reference`');
+        $query->from('ssb_hesabfa_operation');
+        $query->where('`operation_type` = "invoice_save"');
+        $query->where('`object_type` = "' . pSQL($objectType) . '"');
+        $query->where('`object_id` = "' . pSQL((string) $objectId) . '"');
+        $query->where('`status` = "success"');
+
+        $rows = Db::getInstance()->executeS($query, true, false);
+        if (!is_array($rows)) {
+            return array('state' => 'error', 'number' => null);
+        }
+        if (!$rows) {
+            return array('state' => 'none', 'number' => null);
+        }
+
+        $numbers = array();
+        foreach ($rows as $row) {
+            $reference = isset($row['external_reference']) && is_scalar($row['external_reference'])
+                ? trim((string) $row['external_reference']) : '';
+            $canonical = ltrim($reference, '0');
+            $max = (string) PHP_INT_MAX;
+            if (!ctype_digit($reference) || $canonical === ''
+                || strlen($canonical) > strlen($max)
+                || (strlen($canonical) === strlen($max) && strcmp($canonical, $max) > 0)) {
+                return array('state' => 'invalid', 'number' => null);
+            }
+            $numbers[(int) $reference] = true;
+        }
+
+        if (count($numbers) !== 1) {
+            return array('state' => 'conflict', 'number' => null);
+        }
+        return array('state' => 'found', 'number' => (int) key($numbers));
+    }
+
     public static function exists($operationKey)
     {
         $operationKey = (string) $operationKey;

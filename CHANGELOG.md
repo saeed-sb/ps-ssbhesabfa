@@ -1,3 +1,9 @@
+## 2.3.39 - 2026-10-17
+
+- Capture live carrier-person mapping and durable freight-margin accounting with shop-scoped settings, recovery jobs and audits.
+- Use verified Payment Hub receipt fee snapshots and preserve completed invoice idempotency when local mappings change.
+- Create only the two owned freight-margin tables and register the shipping-cost hook during upgrade; do not replay accounting work.
+
 ## 2.3.38
 
 - Fixed invoice-driven stock synchronization stopping after the first ten Hesabfa items. Both webhook lookup paths now fetch all requested item codes with explicit pagination and batches of at most 100 codes.
