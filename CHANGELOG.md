@@ -1,3 +1,11 @@
+## 2.3.41 - 2026-10-20
+
+- Reassign the existing sales invoice freight person after a Delivery Manager carrier change, then recompute the owned freight expense or income document against the updated invoice.
+- Preserve the sales invoice identity, goods, quantities, serials, billed freight, payment totals and customer balance. Verify all protected fields after saving the invoice.
+- Queue carrier changes within the delivery transaction, including changes made before actual fulfillment cost is known. Reuse pending jobs and recover invoice writes with durable UUIDs and read-back checks.
+- Serialize carrier operations and financial updates. Stop stale requests, unmapped carriers, edited journals or invoices, expired requests and fiscal-year mismatches for review.
+- Add a nullable invoice recovery field and register the carrier-change hook during upgrade. Upgrading does not enable settings or replay existing orders.
+
 ## 2.3.40 - 2026-10-18
 
 - Refresh owned freight adjustment documents after the current shipment tracking code, actual sender cost or carrier changes, while preserving customer invoice totals.
