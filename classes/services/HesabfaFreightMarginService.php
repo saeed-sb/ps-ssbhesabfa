@@ -85,18 +85,7 @@ class HesabfaFreightMarginService
                 if (!$this->executePending($shop, $orderId, $state, $pending)) { return false; }
                 $state = $this->repo->state($shop, $orderId);
             }
-            $sourceRow = $this->repo->source($shop, $orderId);
-            if (!$sourceRow) { throw new InvalidArgumentException('No verified shipping cost has been saved.'); }
-            $source = json_decode($sourceRow['payload_json'], true);
-            if (!is_array($source)) { throw new InvalidArgumentException('Invalid shipping cost evidence.'); }
-            $costRow = $this->repo->shippingCost($shop,$orderId);
-            if (!$costRow || (int)$costRow['id_carrier'] !== (int)($source['id_carrier'] ?? 0)
-                || (string)$costRow['payment_method'] !== (string)($source['payment_method'] ?? '')
-                || self::decimal($costRow['cost']) !== self::decimal($source['cost_total_toman'] ?? '')
-                || self::decimal($costRow['insurance']) !== self::decimal($source['insurance_toman'] ?? '')) {
-                throw new InvalidArgumentException('The saved shipping cost changed without verified accounting evidence.');
-            }
-            $this->assertCurrentSource($shop,$orderId,$source);
+            list($sourceRow,$source) = $this->verifiedSource($shop,$orderId);
             $invoiceNumber = $this->module->getInvoiceCodeByOrderId($orderId);
             if (!$invoiceNumber) { return $this->fail('INVOICE_MAPPING_NOT_FOUND', 'The shipping adjustment is waiting for the sales invoice.'); }
             $invoice = $this->read($this->api->invoiceGet($invoiceNumber, 0));
@@ -140,6 +129,24 @@ class HesabfaFreightMarginService
         } catch (InvalidArgumentException $e) {
             return $this->fail('FREIGHT_MARGIN_REVIEW_REQUIRED',$e->getMessage());
         } finally { HesabfaLock::release($scope); }
+    }
+
+    /** Read-only preflight shared by invoice reassignment and margin updates. */
+    public function verifiedSource($shop,$orderId)
+    {
+        $sourceRow = $this->repo->source($shop, $orderId);
+        if (!$sourceRow) { throw new InvalidArgumentException('No verified shipping cost has been saved.'); }
+        $source = json_decode($sourceRow['payload_json'], true);
+        if (!is_array($source)) { throw new InvalidArgumentException('Invalid shipping cost evidence.'); }
+        $costRow = $this->repo->shippingCost($shop,$orderId);
+        if (!$costRow || (int)$costRow['id_carrier'] !== (int)($source['id_carrier'] ?? 0)
+            || (string)$costRow['payment_method'] !== (string)($source['payment_method'] ?? '')
+            || self::decimal($costRow['cost']) !== self::decimal($source['cost_total_toman'] ?? '')
+            || self::decimal($costRow['insurance']) !== self::decimal($source['insurance_toman'] ?? '')) {
+            throw new InvalidArgumentException('The saved shipping cost changed without verified accounting evidence.');
+        }
+        $this->assertCurrentSource($shop,$orderId,$source);
+        return array($sourceRow,$source);
     }
 
     private function executePending($shop,$order,array $state,array $pending)

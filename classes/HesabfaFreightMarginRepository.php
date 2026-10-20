@@ -15,7 +15,7 @@ class HesabfaFreightMarginRepository
             policy_hash CHAR(64) NOT NULL DEFAULT '', document_number VARCHAR(32) NOT NULL DEFAULT '',
             document_id BIGINT UNSIGNED NOT NULL DEFAULT 0, verified_document MEDIUMTEXT NULL,
             margin_rial BIGINT NOT NULL DEFAULT 0, version INT UNSIGNED NOT NULL DEFAULT 0,
-            pending_json MEDIUMTEXT NULL, date_upd DATETIME NOT NULL,
+            pending_json MEDIUMTEXT NULL, invoice_pending_json MEDIUMTEXT NULL, date_upd DATETIME NOT NULL,
             PRIMARY KEY(id_shop,id_order)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")
         && $this->db->execute('CREATE TABLE IF NOT EXISTS '._DB_PREFIX_."ssb_hesabfa_freight_margin_audit (
@@ -34,6 +34,35 @@ class HesabfaFreightMarginRepository
     public function source($shop, $order)
     {
         return $this->one('SELECT * FROM '._DB_PREFIX_.'ssbdm_shipping_cost_accounting WHERE id_shop='.(int)$shop.' AND id_order='.(int)$order);
+    }
+
+    public function acquireCourierLock($order)
+    {
+        return (int)$this->db->getValue("SELECT GET_LOCK('".$this->courierLockName($order)."',0)",false)===1;
+    }
+
+    public function releaseCourierLock($order)
+    {
+        $this->db->getValue("SELECT RELEASE_LOCK('".$this->courierLockName($order)."')",false);
+    }
+
+    private function courierLockName($order)
+    {
+        return 'ssbdm-snapp-'.sha1(_DB_NAME_.'|'._DB_PREFIX_.'|'.(int)$order);
+    }
+
+    public function invoicePendingOrders($shop)
+    {
+        $rows=$this->db->executeS('SELECT id_order FROM '._DB_PREFIX_.'ssb_hesabfa_freight_margin WHERE id_shop='.(int)$shop.' AND invoice_pending_json IS NOT NULL ORDER BY date_upd LIMIT 100',true,false);
+        if (!is_array($rows)) { throw new RuntimeException('Unable to read the invoice carrier outbox.'); }
+        return $rows;
+    }
+
+    public function carrierJobs($shop,$order)
+    {
+        $rows=$this->db->executeS('SELECT * FROM '._DB_PREFIX_."ssb_hesabfa_job WHERE job_type='sync_shipment_carrier' AND object_type='ShipmentCarrier' AND object_id='".(int)$shop.':'.(int)$order."' AND status<>'done' ORDER BY id_ssb_hesabfa_job",true,false);
+        if (!is_array($rows)) { throw new RuntimeException('Unable to read invoice carrier synchronization jobs.'); }
+        return $rows;
     }
 
     public function order($shop, $order)
