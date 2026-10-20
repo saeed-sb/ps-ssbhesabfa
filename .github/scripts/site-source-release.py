@@ -27,7 +27,7 @@ EXCLUDED_SUFFIXES = {
 EXCLUDED_NAMES = {'auth.json', '.npmrc', '.pypirc', '.DS_Store', 'secrets.json'}
 # Reviewed standalone, network-free tests only. Never guess installation scripts.
 LOCAL_TESTS = {
-    'ssbhesabfa': [['php', 'tests/freight_margin_upgrade.php'], ['php', 'tests/queue_repository_guards.php'], ['php', 'tests/log_level_mapping.php'], ['php', 'tests/invoice_item_pagination.php'], ['php', 'tests/freight-replacement-sync.php']],
+    'ssbhesabfa': [["php","tests/freight_margin_upgrade.php"],["php","tests/queue_repository_guards.php"],["php","tests/log_level_mapping.php"],["php","tests/invoice_item_pagination.php"],["php","tests/freight-replacement-sync.php"],["php","tests/invoice_carrier_sync.php"],["php","tests/invoice_carrier_upgrade.php"],["php","tests/manual_payment_reconciliation.php"],["php","tests/module_security_bootstrap.php"],["php","tests/paymenthub_compatibility.php"],["php","tests/queue_webhook_recovery.php"],["php","tests/security_boundaries.php"]],
     'ssbeditproduct': [
         ['php', 'tests/HomeCategoryCheckboxStateTest.php'],
         ['php', 'tests/PriceFilterSanitizationTest.php'],

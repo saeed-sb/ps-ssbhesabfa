@@ -16,7 +16,7 @@ concurrency:
 
 env:
   MODULE_NAME: ssbhesabfa
-  RELEASE_VERSION: 2.3.40
+  RELEASE_VERSION: 2.3.41
   EXPECTED_REPOSITORY: saeed-sb/ps-ssbhesabfa
 
 jobs:
