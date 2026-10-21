@@ -440,7 +440,9 @@ ssbhesabfa/
 ### Payments are not registered
 
 - Map the PrestaShop payment method to a Hesabfa bank.
-- Verify the fee type, fee payer, income account path, and optional contact code.
+- Verify the fee type, fee payer, income account path, expense account path, and optional income contact code.
+- When the customer pays an extra charge, the uncovered gateway fee is posted as an expense to that payment method's configured expense account. A positive margin remains income. Expense documents keep the receipt date and transaction reference.
+- Missing expense mappings and changed or unverifiable existing expense documents require attention; retrying does not send another invoice receipt.
 - Confirm that the order has a Hesabfa invoice mapping.
 - Review Payment-area logs and follow-up issues.
 

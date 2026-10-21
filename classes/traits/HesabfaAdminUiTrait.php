@@ -839,6 +839,14 @@ trait HesabfaAdminUiTrait
                     'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
                 );
 
+                $input_array[] = array(
+                    'col' => 6,
+                    'type' => 'text',
+                    'name' => $paymentConfigId . '_EXPENSE_ACCOUNT_PATH',
+                    'label' => $this->l('Fee expense account path'),
+                    'desc' => $this->l('Used for the part of the gateway fee not covered by the customer extra charge. Enter the exact Hesabfa expense account path.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
+                );
 
                 /*
                  * Optional contact code for fee income accounting document.
@@ -890,6 +898,19 @@ trait HesabfaAdminUiTrait
                         'type' => 'text',
                         'name' => 'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE',
                         'label' => $this->l('Manual fee income document description template'),
+                    ),
+                    array(
+                        'col' => 6,
+                        'type' => 'text',
+                        'name' => 'SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE',
+                        'label' => $this->l('Fee expense document description template'),
+                        'desc' => $this->l('Expense templates also support {expense_percent} and {expense_amount}.'),
+                    ),
+                    array(
+                        'col' => 6,
+                        'type' => 'text',
+                        'name' => 'SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE',
+                        'label' => $this->l('Manual fee expense document description template'),
                     ),
                 ),
                 'submit' => array(
@@ -1437,6 +1458,7 @@ trait HesabfaAdminUiTrait
                     $keys[$item['id'] . '_FEE_PAYER'] = Configuration::get($item['id'] . '_FEE_PAYER');
                     $keys[$item['id'] . '_CUSTOMER_CHARGE_PERCENT'] = Configuration::get($item['id'] . '_CUSTOMER_CHARGE_PERCENT');
                     $keys[$item['id'] . '_INCOME_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_INCOME_ACCOUNT_PATH');
+                    $keys[$item['id'] . '_EXPENSE_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_EXPENSE_ACCOUNT_PATH');
                     $keys[$item['id'] . '_FEE_INCOME_CONTACT_CODE'] = Configuration::get($item['id'] . '_FEE_INCOME_CONTACT_CODE');
                 }
                 break;
@@ -1445,6 +1467,8 @@ trait HesabfaAdminUiTrait
                     'SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE'),
                     'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'),
                     'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'),
+                    'SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE'),
+                    'SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE'),
                 );
                 break;
             case 'ManualGatewayPayment':
@@ -1490,6 +1514,8 @@ trait HesabfaAdminUiTrait
                     'SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_PAYMENT_DESCRIPTION_TEMPLATE'),
                     'SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'),
                     'SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_FEE_INCOME_DOCUMENT_DESCRIPTION_TEMPLATE'),
+                    'SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE'),
+                    'SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE' => Configuration::get('SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE'),
                 );
 
                 //Get config form value in Payment Method's tab
@@ -1503,6 +1529,7 @@ trait HesabfaAdminUiTrait
                     $keys[$item['id'] . '_FEE_PAYER'] = Configuration::get($item['id'] . '_FEE_PAYER');
                     $keys[$item['id'] . '_CUSTOMER_CHARGE_PERCENT'] = Configuration::get($item['id'] . '_CUSTOMER_CHARGE_PERCENT');
                     $keys[$item['id'] . '_INCOME_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_INCOME_ACCOUNT_PATH');
+                    $keys[$item['id'] . '_EXPENSE_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_EXPENSE_ACCOUNT_PATH');
                     $keys[$item['id'] . '_FEE_INCOME_CONTACT_CODE'] = Configuration::get($item['id'] . '_FEE_INCOME_CONTACT_CODE');
                 }
         }
@@ -1539,6 +1566,7 @@ trait HesabfaAdminUiTrait
                 && strpos($key, '_FEE_PAYER') === false
                 && strpos($key, '_CUSTOMER_CHARGE_PERCENT') === false
                 && strpos($key, '_INCOME_ACCOUNT_PATH') === false
+                && strpos($key, '_EXPENSE_ACCOUNT_PATH') === false
                 && strpos($key, '_FEE_INCOME_CONTACT_CODE') === false;
 
             $control2 = $isPaymentBankField && ($value === '0' || $value === 0);

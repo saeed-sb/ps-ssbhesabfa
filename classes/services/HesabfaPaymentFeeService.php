@@ -40,6 +40,9 @@ class HesabfaPaymentFeeService
             'income_amount'=>0,
             'income_account_path'=>'',
             'income_contact_code'=>'',
+            'expense_amount'=>0,
+            'expense_percent'=>0,
+            'expense_account_path'=>'',
             'fee_payer'=>'merchant',
             'fee_percent'=>0,
             'customer_charge_percent'=>0,
@@ -57,9 +60,8 @@ class HesabfaPaymentFeeService
         }
         if ($payer==='customer') {
             $charge=$result['customer_charge_percent'];
-            $feePercent=$result['fee_percent'];
             $base=round($charge>0 ? $paidAmount/(1+($charge/100)) : $paidAmount);
-            $gatewayFee=$feePercent>0 ? round($paidAmount*($feePercent/100)) : 0;
+            $gatewayFee=round(self::getTransactionFee($configName,$paidAmount));
             $income=($paidAmount-$gatewayFee)-$base;
             $roundedIncome=$income>0?round($income):0;
             $result['invoice_payment_amount']=$base;
@@ -69,6 +71,9 @@ class HesabfaPaymentFeeService
                 : 0;
             $result['income_account_path']=trim((string)Configuration::get($configName.'_INCOME_ACCOUNT_PATH'));
             $result['income_contact_code']=trim((string)Configuration::get($configName.'_FEE_INCOME_CONTACT_CODE'));
+            $result['expense_amount']=max(0,round(-$income));
+            $result['expense_percent']=$base>0 ? round(($result['expense_amount']/$base)*100,6) : 0;
+            $result['expense_account_path']=trim((string)Configuration::get($configName.'_EXPENSE_ACCOUNT_PATH'));
         }
         return $result;
     }

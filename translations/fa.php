@@ -620,3 +620,18 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_ea4c5f633091a76977ed70c69f3085ec'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fc405d92ba22ce253a465e225ceb5263'] = 'گزینه ثبت خودکار و مسیر حساب‌ها را بررسی کنید. برای فعال‌کردن ثبت خودکار، مسیر هر دو حساب درآمد و هزینه حمل باید معتبر و تکمیل شده باشد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_c0e7fff04dfdc24f51eafeb5b9f58d13'] = 'تنظیمات حسابداری حمل ذخیره شد.';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_56d7b359385f0ea3e428e5c38c868c34'] = 'تنظیمات حسابداری حمل به‌طور کامل ذخیره نشد. مقادیر را بررسی و دوباره ذخیره کنید.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_de7f66941ae680823fe1e1ee4063b4e5'] = 'مسیر حساب هزینه کارمزد';
+$_MODULE['<{ssbhesabfa}prestashop>configure_de7f66941ae680823fe1e1ee4063b4e5'] = 'مسیر حساب هزینه کارمزد';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a53ef589541a2d8cb53701102cec912f'] = 'برای بخشی از کارمزد درگاه که با مبلغ اضافه دریافتی از مشتری پوشش داده نمی‌شود. مسیر دقیق حساب هزینه در حسابفا را وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_a53ef589541a2d8cb53701102cec912f'] = 'برای بخشی از کارمزد درگاه که با مبلغ اضافه دریافتی از مشتری پوشش داده نمی‌شود. مسیر دقیق حساب هزینه در حسابفا را وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_96dd71942cf4488a6776ff85562e1ae9'] = 'قالب شرح سند هزینه کارمزد';
+$_MODULE['<{ssbhesabfa}prestashop>configure_96dd71942cf4488a6776ff85562e1ae9'] = 'قالب شرح سند هزینه کارمزد';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_e1765b8c098de9182df2603edb3546ce'] = 'قالب شرح سند هزینه کارمزد دریافت دستی';
+$_MODULE['<{ssbhesabfa}prestashop>configure_e1765b8c098de9182df2603edb3546ce'] = 'قالب شرح سند هزینه کارمزد دریافت دستی';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_1e07bc72aa1ce2a9dcad420ca2c2d10d'] = 'در قالب هزینه می‌توانید از {expense_percent} برای درصد هزینه و {expense_amount} برای مبلغ هزینه استفاده کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_1e07bc72aa1ce2a9dcad420ca2c2d10d'] = 'در قالب هزینه می‌توانید از {expense_percent} برای درصد هزینه و {expense_amount} برای مبلغ هزینه استفاده کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7077042a4022d684ac140d63a8c731dc'] = 'دریافت فاکتور ثبت شد، اما سند هزینه نیاز به بررسی دارد. جزئیات: ';
+$_MODULE['<{ssbhesabfa}prestashop>configure_7077042a4022d684ac140d63a8c731dc'] = 'دریافت فاکتور ثبت شد، اما سند هزینه نیاز به بررسی دارد. جزئیات: ';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_05b1c3be7cc1ef3b377769e8951b0323'] = 'سند هزینه با موفقیت ثبت شد.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_05b1c3be7cc1ef3b377769e8951b0323'] = 'سند هزینه با موفقیت ثبت شد.';
