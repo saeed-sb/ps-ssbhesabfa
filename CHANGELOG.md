@@ -1,3 +1,11 @@
+## 2.3.42 - 2026-10-21
+
+- Register the uncovered gateway fee as an expense when the customer surcharge is lower than the gateway fee. Preserve profitable payments as income and merchant-paid fees on their existing path.
+- Add a per-payment-method expense account path and configurable expense descriptions, including Persian settings labels.
+- Apply expense accounting to automatic payments, manual gateway receipts and verified Payment Hub balance-payment snapshots.
+- Preserve payment dates and transaction references. Retain exact expense document numbers, verify completed operations, and stop on missing or edited automatic documents, unavailable verification and ambiguous responses.
+- Add isolated expense, settings, retry and upgrade checks. Upgrading initializes missing description templates only, without replaying payments or accounting entries.
+
 ## 2.3.41 - 2026-10-20
 
 - Reassign the existing sales invoice freight person after a Delivery Manager carrier change, then recompute the owned freight expense or income document against the updated invoice.

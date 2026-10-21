@@ -33,6 +33,8 @@ LOCAL_TESTS = {
         ['php', 'tests/PriceFilterSanitizationTest.php'],
     ],
 }
+LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/payment_fee_expense.php'])
+
 DOWNLOAD_HOSTS = {
     'release-assets.githubusercontent.com', 'objects.githubusercontent.com',
     'github-releases.githubusercontent.com',

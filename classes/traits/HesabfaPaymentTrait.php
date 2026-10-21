@@ -853,6 +853,22 @@ trait HesabfaPaymentTrait
                 self::addLegacyLog($msg, 2, 'FEE_INCOME_ACCOUNT_PATH_MISSING', 'Order', $id_order, true);
                 $this->addFollowUpIssue('payment_fee_income_account_path_missing', $msg, 'Order', $id_order, null, 'ERROR');
             }
+
+            if ($feeBreakdown['expense_amount'] > 0) {
+                $expenseOperationKey = $this->buildOperationKey('payment_fee_expense_document', array($id_order, $number, $paymentId, $payment->transaction_id));
+                $expenseDescription = $this->getPaymentFeeExpenseDescription(false, $feeBreakdown, array(
+                    'order_id' => $id_order, 'order_reference' => $order->reference,
+                    'invoice_number' => $number, 'transaction_number' => $payment->transaction_id,
+                ));
+                $expenseResult = $this->registerPaymentFeeExpenseDocument(
+                    $expenseOperationKey, 'payment_fee_expense_document', 'Order', $id_order,
+                    $bank_code, $feeBreakdown, $payment->date_add, $payment->transaction_id, $expenseDescription
+                );
+                if (!$expenseResult['success']) {
+                    $hasFailure = true;
+                    $lastFailureResponse = $expenseResult['response'];
+                }
+            }
         }
 
         if ($hasFailure) {
@@ -1116,11 +1132,28 @@ trait HesabfaPaymentTrait
             );
         }
 
+        if ($feeBreakdown['expense_amount'] > 0) {
+            $expenseOperationKey = $this->buildOperationKey('manual_payment_fee_expense_document', array($invoiceNumber, $paymentConfigName, $transactionNumber));
+            $expenseDescription = $this->getPaymentFeeExpenseDescription(true, $feeBreakdown, array(
+                'order_reference' => $orderReference, 'invoice_number' => $invoiceNumber,
+                'transaction_number' => $transactionNumber,
+            ));
+            $expenseResult = $this->registerPaymentFeeExpenseDocument(
+                $expenseOperationKey, 'manual_payment_fee_expense_document', 'Invoice', $invoiceNumber,
+                $bankCode, $feeBreakdown, $paymentDate, $transactionNumber, $expenseDescription
+            );
+            if (!$expenseResult['success']) {
+                return array('success' => false, 'message' => $this->l('Invoice payment registered, but expense document requires attention. Details: ') . $this->getHesabfaErrorMessage($expenseResult['response']));
+            }
+            $incomeDocumentMessage .= ' ' . $this->l('Expense document registered successfully.');
+        }
+
         $logMessage = ($paymentAlreadyRegistered ? 'Existing manual gateway payment was verified in Hesabfa. Invoice: ' : 'Manual gateway payment was registered successfully. Invoice: ') . $invoiceNumber
             . '. Gateway paid amount in PrestaShop currency: ' . $manualPaidAmount
             . '. Gateway paid amount in Hesabfa currency: ' . $paidAmount
             . '. Invoice payment amount: ' . $feeBreakdown['invoice_payment_amount']
             . '. Income amount: ' . $feeBreakdown['income_amount']
+            . '. Expense amount: ' . $feeBreakdown['expense_amount']
             . '. Transaction number: ' . $transactionNumber;
         self::addLegacyLog($logMessage, 1, null, null, null, true);
 
@@ -1237,6 +1270,117 @@ trait HesabfaPaymentTrait
             }
         }
         return $bankMatched && $incomeMatched ? array('state' => 'exists', 'number' => $number) : $this->manualVerificationConflict();
+    }
+
+    private function getPaymentFeeExpenseDescription($manual, array $breakdown, array $values)
+    {
+        $key = $manual ? 'SSBHESABFA_MANUAL_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE' : 'SSBHESABFA_FEE_EXPENSE_DOCUMENT_DESCRIPTION_TEMPLATE';
+        $template = trim((string) Configuration::get($key));
+        if ($template === '') {
+            $template = 'Gateway fee expense - invoice {invoice_number} - transaction {transaction_number} - customer charge {customer_charge_percent}% - gateway fee {fee_percent}% - expense {expense_percent}%';
+        }
+        $description = $this->renderTemplateText($template, array_merge($values, array(
+            'customer_charge_percent' => $breakdown['customer_charge_percent'],
+            'fee_percent' => $breakdown['fee_percent'],
+            'expense_percent' => $breakdown['expense_percent'],
+            'expense_amount' => $breakdown['expense_amount'],
+        )));
+        return Tools::substr($description, 0, 199);
+    }
+
+    private function registerPaymentFeeExpenseDocument($operationKey, $operationType, $objectType, $objectId, $bankCode, array $breakdown, $date, $reference, $description)
+    {
+        $fail = function ($code, $message, $response = null) use ($operationKey, $objectType, $objectId) {
+            if ($response === null) {
+                $response = (object) array('Success' => false, 'ErrorCode' => $code, 'ErrorMessage' => $message);
+            }
+            $response = $this->normalizeHesabfaResponse($response, 'paymentFeeExpenseDocument', $objectType, $objectId);
+            $this->addFollowUpIssue('payment_fee_expense_document_failed', $message, $objectType, $objectId, $operationKey, 'ERROR');
+            return array('success' => false, 'response' => $response);
+        };
+        if (empty($breakdown['expense_account_path'])) {
+            return $fail('FEE_EXPENSE_ACCOUNT_PATH_MISSING', 'Payment fee expense was detected, but the expense account path is not defined.');
+        }
+        $hesabfa = new HesabfaApi();
+        $completed = $this->getCompletedOperation($operationKey);
+        if ($completed) {
+            $verification = $this->verifyPaymentFeeExpenseDocument($hesabfa, $completed, $bankCode, $breakdown, $date, $reference);
+            if ($verification === 'exists') {
+                return array('success' => true, 'response' => null);
+            }
+            if ($verification !== 'missing' || strpos($operationType, 'manual_') !== 0) {
+                return $fail('FEE_EXPENSE_RECONCILIATION_REQUIRED', 'The registered fee expense document could not be verified. Reconcile it in Hesabfa before retrying.');
+            }
+            // Only an explicitly deleted manual document permits a new logical write.
+            if (!$this->finishOperation($operationKey, 'failed', 'Verified manual fee expense document was deleted from Hesabfa.')) {
+                return $fail('FEE_EXPENSE_RECONCILIATION_REQUIRED', 'The deleted fee expense operation could not be reset.');
+            }
+        }
+        if (!$this->startOperation($operationKey, $operationType, $objectType, $objectId)) {
+            return $fail('FINANCIAL_OPERATION_BUSY', 'Financial operation is busy or requires reconciliation.');
+        }
+        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+        $amount = round($breakdown['expense_amount']);
+        $document = array(
+            'number' => 0, 'reference' => 0, 'date' => $date, 'description' => $description,
+            'project' => Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
+            'debit' => $amount, 'credit' => $amount, 'status' => 1,
+            'transactions' => array(
+                array('accountPath' => $breakdown['expense_account_path'], 'description' => $description,
+                    'info' => (string) $reference, 'amount' => $amount, 'currencyAmount' => $amount,
+                    'currency' => $currency->iso_code, 'type' => 0),
+                array('accountPath' => self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH, 'description' => $description,
+                    'info' => (string) $reference, 'amount' => $amount, 'currencyAmount' => $amount,
+                    'currency' => $currency->iso_code, 'type' => 1, 'bankCode' => $bankCode),
+            ),
+        );
+        $response = $this->normalizeHesabfaResponse($hesabfa->documentSave($document), 'savePaymentFeeExpenseDocument', $objectType, $objectId);
+        if (!$this->isHesabfaSuccess($response)) {
+            $message = 'Failed to register payment fee expense. Details: ' . $this->getHesabfaErrorMessage($response);
+            $this->finishOperation($operationKey, 'failed', $message);
+            return $fail('FEE_EXPENSE_DOCUMENT_FAILED', $message, $response);
+        }
+        $number = isset($response->Result->Number) ? (int) $response->Result->Number : 0;
+        if ($number <= 0) {
+            $this->finishOperation($operationKey, 'needs_attention', 'The fee expense response did not include a document number.');
+            return $fail('FEE_EXPENSE_DOCUMENT_NUMBER_MISSING', 'Verify the fee expense in Hesabfa before retrying; its document number was not returned.');
+        }
+        if (!$this->finishOperation($operationKey, 'success', 'Payment fee expense document registered successfully.', $number)) {
+            return $fail('FEE_EXPENSE_OPERATION_SAVE_FAILED', 'The fee expense was sent but its operation could not be finalized.');
+        }
+        self::addModuleLog('Payment fee expense document registered successfully.', 'INFO', null, $objectType, $objectId);
+        return array('success' => true, 'response' => $response);
+    }
+
+    private function verifyPaymentFeeExpenseDocument($hesabfa, array $operation, $bankCode, array $breakdown, $date, $reference)
+    {
+        $number = isset($operation['external_reference']) ? (string) $operation['external_reference'] : '';
+        if (!ctype_digit($number) || (int) $number <= 0) { return 'conflict'; }
+        $response = $hesabfa->documentGet((int) $number);
+        $data = json_decode(json_encode($response), true);
+        if (empty($data['Success'])) {
+            return isset($data['ErrorCode']) && (int) $data['ErrorCode'] === 112 ? 'missing' : 'error';
+        }
+        $doc = isset($data['Result']) ? $data['Result'] : array();
+        $amount = (float) $breakdown['expense_amount'];
+        if (!is_array($doc) || !isset($doc['Number'], $doc['Date'], $doc['Debit'], $doc['Credit'], $doc['Transactions'])
+            || !is_array($doc['Transactions'])
+            || (int) $doc['Number'] !== (int) $number || count($doc['Transactions']) !== 2
+            || substr($doc['Date'], 0, 10) !== substr($date, 0, 10)
+            || abs((float) $doc['Debit'] - $amount) > 0.01 || abs((float) $doc['Credit'] - $amount) > 0.01) { return 'conflict'; }
+        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+        $expense = false; $bank = false;
+        foreach ($doc['Transactions'] as $t) {
+            if (!isset($t['Amount'], $t['Type'], $t['AccountPath'], $t['Currency'], $t['Info'])
+                || abs((float) $t['Amount'] - $amount) > 0.01 || $t['Currency'] !== $currency->iso_code
+                || (string) $t['Info'] !== (string) $reference) { return 'conflict'; }
+            $account = preg_replace('/\s*:\s*/u', ':', trim($t['AccountPath']));
+            if ((int) $t['Type'] === 0 && empty($t['BankCode']) && empty($t['ContactCode'])
+                && $account === preg_replace('/\s*:\s*/u', ':', trim($breakdown['expense_account_path']))) { $expense = true; }
+            if ((int) $t['Type'] === 1 && isset($t['BankCode']) && (int) $t['BankCode'] === (int) $bankCode
+                && $account === preg_replace('/\s*:\s*/u', ':', trim(self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH))) { $bank = true; }
+        }
+        return $expense && $bank ? 'exists' : 'conflict';
     }
 
     private function savePaymentFeeIncomeDocument($bankCode, $incomeAccountPath, $contactCode, $date, $amount, $description = null, $project = null)
@@ -1386,18 +1530,23 @@ trait HesabfaPaymentTrait
         $breakdown['customer_charge_percent'] = round(($customerFee / $principal) * 100, 6);
         $breakdown['income_amount'] = 0;
         $breakdown['income_percent'] = 0;
+        $breakdown['expense_amount'] = 0;
+        $breakdown['expense_percent'] = 0;
         if ($customerFee > 0) {
             $breakdown['fee_payer'] = 'customer';
             $breakdown['transaction_fee'] = 0;
             // Match the native customer-pays calculation, preserving the actual
             // recorded principal instead of dividing by a mutable charge rate.
-            $gatewayFee = $breakdown['fee_percent'] > 0
-                ? round($paidAmount * ($breakdown['fee_percent'] / 100)) : 0;
-            $breakdown['income_amount'] = max(0, round($paidAmount - $gatewayFee - $principalAmount));
+            $gatewayFee = round($this->getPaymentTransactionFee($paymentConfigName, $paidAmount));
+            $margin = round($paidAmount - $gatewayFee - $principalAmount);
+            $breakdown['income_amount'] = max(0, $margin);
             $breakdown['income_percent'] = $breakdown['income_amount'] > 0
                 ? round(($breakdown['income_amount'] / $principalAmount) * 100, 6) : 0;
             $breakdown['income_account_path'] = trim((string) Configuration::get($paymentConfigName . '_INCOME_ACCOUNT_PATH'));
             $breakdown['income_contact_code'] = trim((string) Configuration::get($paymentConfigName . '_FEE_INCOME_CONTACT_CODE'));
+            $breakdown['expense_amount'] = max(0, -$margin);
+            $breakdown['expense_percent'] = round(($breakdown['expense_amount'] / $principalAmount) * 100, 6);
+            $breakdown['expense_account_path'] = trim((string) Configuration::get($paymentConfigName . '_EXPENSE_ACCOUNT_PATH'));
         } else {
             $breakdown['fee_payer'] = 'merchant';
             $breakdown['transaction_fee'] = round($this->getPaymentTransactionFee($paymentConfigName, $paidAmount));

@@ -113,7 +113,7 @@ $(document).ready(function () {
         var bankValue = $(bankSelectElement).val();
         if (!bankSelectName) { return; }
         var names = {
-            feeType: bankSelectName + '_FEE_TYPE', feePayer: bankSelectName + '_FEE_PAYER', percent: bankSelectName + '_FEE_PERCENT', fixed: bankSelectName + '_FEE_FIXED', customerCharge: bankSelectName + '_CUSTOMER_CHARGE_PERCENT', incomeAccount: bankSelectName + '_INCOME_ACCOUNT_PATH', incomeContact: bankSelectName + '_FEE_INCOME_CONTACT_CODE'
+            feeType: bankSelectName + '_FEE_TYPE', feePayer: bankSelectName + '_FEE_PAYER', percent: bankSelectName + '_FEE_PERCENT', fixed: bankSelectName + '_FEE_FIXED', customerCharge: bankSelectName + '_CUSTOMER_CHARGE_PERCENT', incomeAccount: bankSelectName + '_INCOME_ACCOUNT_PATH', expenseAccount: bankSelectName + '_EXPENSE_ACCOUNT_PATH', incomeContact: bankSelectName + '_FEE_INCOME_CONTACT_CODE'
         };
         var feeTypeRow = $('[name="' + names.feeType + '"]').closest('.form-group');
         var feePayerRow = $('[name="' + names.feePayer + '"]').closest('.form-group');
@@ -121,8 +121,9 @@ $(document).ready(function () {
         var fixedRow = $('[name="' + names.fixed + '"]').closest('.form-group');
         var customerChargeRow = $('[name="' + names.customerCharge + '"]').closest('.form-group');
         var incomeAccountRow = $('[name="' + names.incomeAccount + '"]').closest('.form-group');
+        var expenseAccountRow = $('[name="' + names.expenseAccount + '"]').closest('.form-group');
         var incomeContactRow = $('[name="' + names.incomeContact + '"]').closest('.form-group');
-        if (bankValue === '-1' || bankValue === '' || bankValue === '0') { feeTypeRow.hide(); feePayerRow.hide(); percentRow.hide(); fixedRow.hide(); customerChargeRow.hide(); incomeAccountRow.hide(); incomeContactRow.hide(); return; }
+        if (bankValue === '-1' || bankValue === '' || bankValue === '0') { feeTypeRow.hide(); feePayerRow.hide(); percentRow.hide(); fixedRow.hide(); customerChargeRow.hide(); incomeAccountRow.hide(); expenseAccountRow.hide(); incomeContactRow.hide(); return; }
         feeTypeRow.show(); feePayerRow.show(); ssbhesabfaToggleFeeFields($('[name="' + names.feeType + '"]')); ssbhesabfaToggleFeePayerFields($('[name="' + names.feePayer + '"]'));
     }
     function ssbhesabfaToggleFeeFields(selectElement) {
@@ -133,7 +134,8 @@ $(document).ready(function () {
     function ssbhesabfaToggleFeePayerFields(selectElement) {
         var selectName = $(selectElement).attr('name'); var feePayer = $(selectElement).val(); if (!selectName) { return; }
         var baseName = selectName.replace('_FEE_PAYER', ''); var customerChargeRow = $('[name="' + baseName + '_CUSTOMER_CHARGE_PERCENT"]').closest('.form-group'); var incomeAccountRow = $('[name="' + baseName + '_INCOME_ACCOUNT_PATH"]').closest('.form-group'); var incomeContactRow = $('[name="' + baseName + '_FEE_INCOME_CONTACT_CODE"]').closest('.form-group');
-        customerChargeRow.hide(); incomeAccountRow.hide(); incomeContactRow.hide(); if (feePayer === 'customer') { customerChargeRow.show(); incomeAccountRow.show(); incomeContactRow.show(); }
+        var expenseAccountRow = $('[name="' + baseName + '_EXPENSE_ACCOUNT_PATH"]').closest('.form-group');
+        customerChargeRow.hide(); incomeAccountRow.hide(); expenseAccountRow.hide(); incomeContactRow.hide(); if (feePayer === 'customer') { customerChargeRow.show(); incomeAccountRow.show(); expenseAccountRow.show(); incomeContactRow.show(); }
     }
     $("select[name^='SSBHESABFA_PAYMENT_METHOD_']:not([name$='_FEE_TYPE']):not([name$='_FEE_PAYER'])").each(function () { ssbhesabfaTogglePaymentFeeBlock(this); });
     $(document).on('change', "select[name^='SSBHESABFA_PAYMENT_METHOD_']:not([name$='_FEE_TYPE']):not([name$='_FEE_PAYER'])", function () { ssbhesabfaTogglePaymentFeeBlock(this); });
