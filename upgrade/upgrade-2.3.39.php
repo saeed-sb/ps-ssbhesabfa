@@ -1,14 +1,9 @@
 <?php
+if (!defined('_PS_VERSION_')) { exit; }
 
-if (!defined('_PS_VERSION_')) {
-    exit;
-}
-
-/** Install only owned storage and the shipping-cost event; never replay work. */
+// Delivery Manager now installs and upgrades shipping-owned storage.
+// Keep this historical step inert, including when Delivery Manager is absent.
 function upgrade_module_2_3_39($module)
 {
-    require_once dirname(__DIR__) . '/classes/HesabfaFreightMarginRepository.php';
-
-    return (new HesabfaFreightMarginRepository())->install()
-        && $module->registerHook('actionSsbDeliveryShippingCostSaved');
+    return true;
 }
