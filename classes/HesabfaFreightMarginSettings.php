@@ -26,12 +26,27 @@ class HesabfaFreightMarginSettings
             $row = self::row($key, $idShop);
             if ($row !== false) { $values[$key] = self::normalize($key, $row['value']); }
         }
+        if (self::deliveryManaged()) {
+            $delivery = \Ssb\DeliveryManager\ShippingCost\AccountingSettings::get(Db::getInstance(), $idShop);
+            $values[self::ENABLED] = $delivery[\Ssb\DeliveryManager\ShippingCost\AccountingSettings::ENABLED];
+            $values[self::EXPENSE_ACCOUNT] = $delivery[\Ssb\DeliveryManager\ShippingCost\AccountingSettings::EXPENSE_ACCOUNT];
+        }
         return $values;
+    }
+
+    public static function deliveryManaged()
+    {
+        if (!Module::isEnabled('ssbdeliverymanager')) { return false; }
+        if (!class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingSettings')) {
+            Module::getInstanceByName('ssbdeliverymanager');
+        }
+        return class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingSettings');
     }
 
     /** Normalize posted keys only, but validate their effective combination. */
     public static function validateSubmitted($idShop, array $input)
     {
+        if (self::deliveryManaged()) { throw new InvalidArgumentException('Manage shipment accounting in Delivery Manager.'); }
         $effective = self::getFormValues($idShop);
         $posted = array();
         foreach (self::defaults() as $key => $default) {

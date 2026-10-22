@@ -21,13 +21,19 @@ class HesabfaFreightMarginPlan
             || HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::ENABLED, $settings[HesabfaFreightMarginSettings::ENABLED]) !== '1') {
             throw new InvalidArgumentException('Automatic freight margin accounting is disabled.');
         }
-        $income = HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::INCOME_ACCOUNT,
+        $gross = ($source['accounting_model'] ?? '') === 'gross_v2';
+        $income = $gross ? '' : HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::INCOME_ACCOUNT,
             isset($settings[HesabfaFreightMarginSettings::INCOME_ACCOUNT]) ? $settings[HesabfaFreightMarginSettings::INCOME_ACCOUNT] : '');
         $expense = HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::EXPENSE_ACCOUNT,
             isset($settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT]) ? $settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT] : '');
-        if ($income === '' || $expense === '') { throw new InvalidArgumentException('Freight income and expense accounts are required.'); }
+        if ($expense === '' || (!$gross && $income === '')) { throw new InvalidArgumentException('The required freight account path is missing.'); }
+        // Older outbox rows remain readable; new rows carry the delivery-owned account through the internal API.
+        if ($gross && array_key_exists('expense_account_path', $source)) {
+            $sourceExpense = HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::EXPENSE_ACCOUNT, $source['expense_account_path']);
+            if ($sourceExpense !== $expense) { throw new InvalidArgumentException('The shipping expense account changed; refresh the shipping source.'); }
+            $expense = $sourceExpense;
+        }
         $person = HesabfaFreightPerson::normalizeCode(isset($settings['person_code']) ? $settings['person_code'] : '');
-        $gross = ($source['accounting_model'] ?? '') === 'gross_v2';
         $reference = self::text(isset($order['reference']) ? $order['reference'] : null, 128);
         if ($reference === '' || !isset($invoice['Reference']) || (string) $invoice['Reference'] !== $reference) {
             throw new InvalidArgumentException('Invoice reference does not match this order.');

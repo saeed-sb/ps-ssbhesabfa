@@ -5,6 +5,7 @@ require __DIR__.'/invoice_carrier_sync.php';
 ob_end_clean();
 require dirname(__DIR__,2).'/ssbdeliverymanager/src/ShippingCost/Input.php';
 require dirname(__DIR__,2).'/ssbdeliverymanager/src/ShippingCost/AccountingParty.php';
+require dirname(__DIR__,2).'/ssbdeliverymanager/src/ShippingCost/AccountingSettings.php';
 
 class GrossDb extends FixtureDb {
     public $contact='0044'; public $delivery=false;
@@ -19,6 +20,7 @@ function grossFixture($cost='165000') {
     Module::$enabled=false;
     list($oldDb,$repo,$api,$service,$source)=invoiceCarrierFixture($cost);
     $db=new GrossDb(); foreach (get_object_vars($oldDb) as $key=>$value) { $db->$key=$value; }
+    $db->config[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT] = HesabfaFreightMarginSettings::defaults()[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT];
     Db::$fixture=$db; Module::$enabled=true;
     $source['source_key']='';
     $source['accounting_model']='gross_v2';

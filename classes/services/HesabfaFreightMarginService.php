@@ -171,6 +171,12 @@ class HesabfaFreightMarginService
             }
             $party = \Ssb\DeliveryManager\ShippingCost\AccountingParty::resolve(Db::getInstance(), (int)$shop, (int)$orderId, (int)$source['id_carrier'], (string)($source['source_key'] ?? ''));
             if (($source['accounting_party'] ?? null) !== $party) { throw new InvalidArgumentException('The delivery accounting contact changed; refresh the shipping source.'); }
+            if (array_key_exists('expense_account_path', $source)) {
+                $settings = HesabfaFreightMarginSettings::getFormValues($shop);
+                if (HesabfaFreightMarginSettings::normalize(HesabfaFreightMarginSettings::EXPENSE_ACCOUNT, $source['expense_account_path']) !== $settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT]) {
+                    throw new InvalidArgumentException('The shipping expense account changed; refresh the shipping source.');
+                }
+            }
         }
         return array($sourceRow,$source);
     }
@@ -283,6 +289,12 @@ class HesabfaFreightMarginService
         $current = json_decode($row['payload_json'], true);
         if (is_array($current) && ($current['accounting_model'] ?? '') === 'gross_v2') {
             $this->verifiedSource($shop, $order);
+            if (($pending['action'] ?? '') === 'save') {
+                $settings = HesabfaFreightMarginSettings::getFormValues($shop);
+                if (($pending['document']['transactions'][0]['accountPath'] ?? '') !== $settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT]) {
+                    throw new InvalidArgumentException('The pending shipping expense account changed; reconcile the existing request before retrying.');
+                }
+            }
         }
         if (is_array($pending['source_identity'] ?? null)) {
             $this->assertCurrentSource($shop,$order,$pending['source_identity']);
