@@ -494,7 +494,7 @@ trait HesabfaPaymentTrait
                 && (int) $existingMappingCode === $completedInvoiceNumber
             ) {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice save operation.', 'INFO', null, $operationObjectType, $id_order);
-                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
+                if ((int)$orderType === 0) { Hook::exec('actionSsbHesabfaInvoiceSaved', array('id_shop'=>(int)$order->id_shop, 'id_order'=>(int)$id_order)); }
                 return true;
             }
 
@@ -504,7 +504,7 @@ trait HesabfaPaymentTrait
             ) {
                 $message = 'Repaired the missing local mapping for a completed Hesabfa invoice operation.';
                 self::addModuleLog($message, 'INFO', null, $operationObjectType, $id_order);
-                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
+                if ((int)$orderType === 0) { Hook::exec('actionSsbHesabfaInvoiceSaved', array('id_shop'=>(int)$order->id_shop, 'id_order'=>(int)$id_order)); }
                 return true;
             }
 
@@ -607,7 +607,7 @@ trait HesabfaPaymentTrait
             }
 
             $this->finishOperation($invoiceOperationKey, 'success', 'Hesabfa invoice save operation completed successfully.', (int)$response->Result->Number);
-            if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
+            if ((int)$orderType === 0) { Hook::exec('actionSsbHesabfaInvoiceSaved', array('id_shop'=>(int)$order->id_shop, 'id_order'=>(int)$id_order)); }
             return true;
         } else {
             $msg = 'Failed to add or update the Hesabfa invoice. Details: ' . $this->getHesabfaErrorMessage($response);

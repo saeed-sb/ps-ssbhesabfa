@@ -15,10 +15,6 @@ class HesabfaQueueService
     public function processPending($limit = 20)
     {
         if (!HesabfaSecurity::isOperational()) { return 0; }
-        try { if (class_exists('HesabfaFreightMarginService')) { (new HesabfaFreightMarginService($this->module))->enqueuePending((int)Context::getContext()->shop->id); } }
-        catch (Exception $e) { Ssbhesabfa::addLegacyLog('Shipment accounting outbox scan failed: '.$e->getMessage(),2,'FREIGHT_MARGIN_SCAN_FAILED',null,null,true); }
-        try { if (class_exists('HesabfaShipmentAccountingService')) { (new HesabfaShipmentAccountingService($this->module))->enqueuePending((int)Context::getContext()->shop->id); } }
-        catch (Exception $e) { Ssbhesabfa::addLegacyLog('Invoice carrier outbox scan failed: '.$e->getMessage(),2,'FREIGHT_CARRIER_SCAN_FAILED',null,null,true); }
         $processed = 0;
         foreach (HesabfaJobRepository::getPending($limit) as $job) {
             if ($this->processRow($job)) {
