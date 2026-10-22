@@ -85,9 +85,21 @@ class HesabfaFreightPerson
 
     public static function getCode($reference, $idShop)
     {
-        $row = self::configurationRow(self::configKey($reference), self::shopId($idShop));
+        $idShop = self::shopId($idShop);
+        if (Module::isEnabled('ssbdeliverymanager')) {
+            $rows = Db::getInstance()->executeS('SELECT settings_json FROM `'._DB_PREFIX_.'ssbdm_managed_carrier` WHERE id_shop='.$idShop.' AND id_reference='.(int)$reference, true, false);
+            $settings = $rows ? json_decode($rows[0]['settings_json'],true) : null;
+            if (is_array($settings) && array_key_exists('hesabfa_contact_code',$settings)) { return self::normalizeCode($settings['hesabfa_contact_code']); }
+        }
+        $row = self::configurationRow(self::configKey($reference), $idShop);
 
         return is_array($row) ? self::normalizeCode($row['value']) : '';
+    }
+
+    public static function managedCarrier($carrier, $shop)
+    {
+        if (!Module::isEnabled('ssbdeliverymanager')) { return false; }
+        return (bool) Db::getInstance()->getValue('SELECT m.id_reference FROM `'._DB_PREFIX_.'ssbdm_managed_carrier` m INNER JOIN `'._DB_PREFIX_.'carrier` c ON c.id_reference=m.id_reference WHERE c.id_carrier='.(int)$carrier.' AND m.id_shop='.(int)$shop);
     }
 
     public static function getFormValues($idShop)

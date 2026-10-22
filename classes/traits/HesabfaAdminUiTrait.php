@@ -1100,6 +1100,13 @@ trait HesabfaAdminUiTrait
 
     protected function getFreightPersonForm()
     {
+        if (HesabfaFreightMarginSettings::deliveryManaged()) {
+            $url = $this->context->link->getAdminLink('AdminSsbDeliveryManagerShippingSettings');
+            return array('form' => array('input' => array(array(
+                'type' => 'html', 'name' => 'delivery_accounting_settings',
+                'html_content' => '<p>' . $this->l('Carrier and delivery agent contact codes, automatic expense posting and the expense account are managed in Delivery Manager. Sales invoice freight income is handled by Hesabfa.') . '</p><a class="btn btn-default" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">' . $this->l('Open shipment accounting settings') . '</a>',
+            ))));
+        }
         return array('form' => array(
             'input' => $this->getFreightPersonFormInputs(),
             'submit' => array('title' => $this->l('Save carrier accounting settings')),
@@ -1126,6 +1133,7 @@ trait HesabfaAdminUiTrait
 
     protected function getFreightPersonFormInputs()
     {
+        if (HesabfaFreightMarginSettings::deliveryManaged()) { return array(); }
         $inputs = array();
         foreach (HesabfaFreightPerson::getCarriers($this->getInvoiceSettingsShopId()) as $carrier) {
             $key = HesabfaFreightPerson::configKey($carrier['reference']);
@@ -1177,6 +1185,9 @@ trait HesabfaAdminUiTrait
 
     protected function setFreightPersonConfigFormValues()
     {
+        if (HesabfaFreightMarginSettings::deliveryManaged()) {
+            throw new InvalidArgumentException($this->l('Manage shipment accounting in Delivery Manager.'));
+        }
         $idShop = $this->getInvoiceSettingsShopId();
         $submitted = array();
         // Validate the whole card before writing any carrier or margin setting.

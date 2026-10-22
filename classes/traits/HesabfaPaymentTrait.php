@@ -455,8 +455,10 @@ trait HesabfaPaymentTrait
             $data['SalesmanCode'] = $salesmanCode;
         }
 
-        // The billed freight amount stays unchanged; this identifies its carrier.
-        if ((int) $orderType === 0 && (float) $shipping > 0 && (int) $order->id_carrier > 0) {
+        // Delivery Manager invoices recognize freight income; actual carrier costs are separate journals.
+        $grossFreight = HesabfaFreightPerson::managedCarrier((int)$order->id_carrier, (int)$order->id_shop);
+        if ($grossFreight) { $data['FreightPersonCode'] = ''; }
+        if (!$grossFreight && (int) $orderType === 0 && (float) $shipping > 0 && (int) $order->id_carrier > 0) {
             try {
                 $carrier = new Carrier((int) $order->id_carrier);
                 if (!Validate::isLoadedObject($carrier) || (int) $carrier->id_reference <= 0) {
@@ -492,7 +494,6 @@ trait HesabfaPaymentTrait
                 && (int) $existingMappingCode === $completedInvoiceNumber
             ) {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice save operation.', 'INFO', null, $operationObjectType, $id_order);
-                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
                 return true;
             }
 
@@ -502,7 +503,6 @@ trait HesabfaPaymentTrait
             ) {
                 $message = 'Repaired the missing local mapping for a completed Hesabfa invoice operation.';
                 self::addModuleLog($message, 'INFO', null, $operationObjectType, $id_order);
-                if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
                 return true;
             }
 
@@ -605,7 +605,6 @@ trait HesabfaPaymentTrait
             }
 
             $this->finishOperation($invoiceOperationKey, 'success', 'Hesabfa invoice save operation completed successfully.', (int)$response->Result->Number);
-            if ((int)$orderType === 0 && method_exists($this,'queueShipmentMargin')) { $this->queueShipmentMargin((int)$order->id_shop,$id_order,true); }
             return true;
         } else {
             $msg = 'Failed to add or update the Hesabfa invoice. Details: ' . $this->getHesabfaErrorMessage($response);
@@ -1724,3 +1723,4 @@ trait HesabfaPaymentTrait
         return $price;
     }
 }
+

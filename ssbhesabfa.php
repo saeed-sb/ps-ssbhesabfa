@@ -189,7 +189,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.42';
+        $this->version = '2.3.43';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -241,7 +241,7 @@ class Ssbhesabfa extends Module
             Configuration::updateValue('SSBHESABFA_QUEUE_CRON_TOKEN', $this->generateSecureToken(32));
         }
 
-        return (new HesabfaFreightMarginRepository())->install() && parent::install() &&
+        return parent::install() &&
             $this->registerHook('actionSsbDeliveryShippingCostSaved') &&
             $this->registerHook('actionSsbDeliveryCarrierChanged') &&
             $this->registerHook('displayBackOfficeHeader') &&

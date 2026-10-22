@@ -6,6 +6,14 @@ trait HesabfaInternalApiTrait
     {
         if (!HesabfaSecurity::isOperational()) { return array('success'=>false,'error_code'=>'MODULE_UNAVAILABLE','error'=>'Module disabled or multi-shop unsupported.'); }
         $method = trim((string) $method);
+        // Callers with a durable outbox may pin a UUID for one synchronous write.
+        // This generic option is independent of any delivery/order business rules.
+        $pinnedId = $options['request_unique_id'] ?? null;
+        if ($pinnedId !== null && (!HesabfaRequestUniqueId::isValidGuid($pinnedId)
+            || !empty($options['queue']) || (!empty($options['log_request'])))) {
+            return array('success'=>false, 'error_code'=>'INVALID_REQUEST_UNIQUE_ID',
+                'error'=>'A pinned request UUID requires a synchronous caller-owned outbox.');
+        }
         $requester = isset($options['requester']) ? (string) $options['requester'] : 'external_module';
         $objectType = isset($options['object_type']) ? (string) $options['object_type'] : null;
         $objectId = isset($options['object_id']) ? (string) $options['object_id'] : null;
@@ -14,7 +22,7 @@ trait HesabfaInternalApiTrait
             return $this->enqueueInternalApiRequest($method, $arguments, $requester, $objectType, $objectId);
         }
 
-        $logRequest = array_key_exists('log_request', $options) ? (bool) $options['log_request'] : (bool) Configuration::get('SSBHESABFA_INTERNAL_API_USE_QUEUE');
+        $logRequest = $pinnedId === null && (array_key_exists('log_request', $options) ? (bool) $options['log_request'] : (bool) Configuration::get('SSBHESABFA_INTERNAL_API_USE_QUEUE'));
 
         $requestId = null;
         if ($logRequest) {
@@ -44,10 +52,11 @@ trait HesabfaInternalApiTrait
             );
         }
 
+        if ($pinnedId !== null) { HesabfaRequestUniqueId::beginPinnedContext($pinnedId); }
         try {
             $response = $this->executeInternalApiCall($method, $arguments, $requester, $objectType, $objectId);
         } finally {
-            if ($requestId) {
+            if ($requestId || $pinnedId !== null) {
                 HesabfaRequestUniqueId::endContext();
             }
         }
@@ -68,6 +77,16 @@ trait HesabfaInternalApiTrait
         }
 
         return $response;
+    }
+
+    /** Opaque business/year identity for caller-owned financial records; never expose credentials. */
+    public function getInternalApiAccountFingerprint(array $fiscalYear)
+    {
+        if (!HesabfaSecurity::isOperational() || empty($fiscalYear['StartDate']) || empty($fiscalYear['EndDate'])) {
+            throw new InvalidArgumentException('A connected accounting business and fiscal year are required.');
+        }
+        $api = new HesabfaApi();
+        return hash('sha256', (string) $api->apiKey . '|' . $fiscalYear['StartDate'] . '|' . $fiscalYear['EndDate']);
     }
 
     public function enqueueInternalApiRequest($method, array $arguments = array(), $requester = null, $objectType = null, $objectId = null)

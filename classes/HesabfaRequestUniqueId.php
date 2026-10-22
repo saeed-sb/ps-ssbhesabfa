@@ -9,6 +9,8 @@
 class HesabfaRequestUniqueId
 {
     private static $stack = array();
+    private static $pinnedId = null;
+    private static $pinnedUsed = false;
     private static $contextId = null;
     private static $requestIds = array();
     private static $methodCounters = array();
@@ -16,19 +18,27 @@ class HesabfaRequestUniqueId
 
     public static function beginContext($contextId, array $requestIds = array(), $persistCallback = null)
     {
-        self::$stack[] = array(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback);
+        self::$stack[] = array(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback, self::$pinnedId, self::$pinnedUsed);
+        self::$pinnedId = null; self::$pinnedUsed = false;
         self::$contextId = $contextId;
         self::$requestIds = $requestIds;
         self::$methodCounters = array();
         self::$persistCallback = is_callable($persistCallback) ? $persistCallback : null;
     }
 
+    public static function beginPinnedContext($uuid)
+    {
+        if (!self::isValidGuid($uuid)) { throw new InvalidArgumentException('Invalid request UUID.'); }
+        self::beginContext('caller:' . $uuid);
+        self::$pinnedId = $uuid;
+    }
+
     public static function endContext()
     {
         if (self::$stack) {
-            list(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback) = array_pop(self::$stack);
+            list(self::$contextId, self::$requestIds, self::$methodCounters, self::$persistCallback, self::$pinnedId, self::$pinnedUsed) = array_pop(self::$stack);
         } else {
-            self::$contextId = null; self::$requestIds = array(); self::$methodCounters = array(); self::$persistCallback = null;
+            self::$contextId = null; self::$requestIds = array(); self::$methodCounters = array(); self::$persistCallback = null; self::$pinnedId = null; self::$pinnedUsed = false;
         }
     }
 
@@ -36,6 +46,11 @@ class HesabfaRequestUniqueId
 
     public static function generate($method, $payload = array())
     {
+        if (self::$pinnedId !== null) {
+            if (self::$pinnedUsed) { throw new RuntimeException('A pinned UUID may identify only one API write.'); }
+            self::$pinnedUsed = true;
+            return self::$pinnedId;
+        }
         if (self::$contextId === null) {
             return self::uuidV4();
         }

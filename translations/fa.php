@@ -635,3 +635,9 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_7077042a4022d684ac140d63a8c731dc'] 
 $_MODULE['<{ssbhesabfa}prestashop>configure_7077042a4022d684ac140d63a8c731dc'] = 'دریافت فاکتور ثبت شد، اما سند هزینه نیاز به بررسی دارد. جزئیات: ';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_05b1c3be7cc1ef3b377769e8951b0323'] = 'سند هزینه با موفقیت ثبت شد.';
 $_MODULE['<{ssbhesabfa}prestashop>configure_05b1c3be7cc1ef3b377769e8951b0323'] = 'سند هزینه با موفقیت ثبت شد.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_91f2b17cf7cb5f2aa24daf4e87db9c72'] = 'کد شخص حامل‌ها و مأمورها، ثبت خودکار هزینه و حساب هزینه در ماژول مدیریت حمل تنظیم می‌شوند. درآمد کرایه فاکتور فروش را خود حسابفا ثبت می‌کند.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3d56eb3e50743b747c92e37974539d62'] = 'بازکردن تنظیمات حسابداری ارسال';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_444797a672d1ebb170ce37674c249c40'] = 'تنظیمات حسابداری ارسال را در ماژول مدیریت حمل تغییر دهید.';
