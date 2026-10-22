@@ -56,6 +56,9 @@ class HesabfaFreightMarginService
         if (!$this->repo->ready() || !$this->module->isHesabfaSyncEnabled()) { return 0; }
         $settings = HesabfaFreightMarginSettings::getFormValues($shop);
         if (empty($settings['SSBHESABFA_FREIGHT_MARGIN_ENABLED'])) { return 0; }
+        if (!class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingSource') && Module::isEnabled('ssbdeliverymanager')) {
+            Module::getInstanceByName('ssbdeliverymanager');
+        }
         $count = 0;
         foreach ($this->repo->candidates($shop, self::policy($shop), max(1,min(500,(int)$limit))) as $row) {
             // Resolve edited carrier/agent settings in the delivery-owned outbox before queuing.
@@ -160,6 +163,12 @@ class HesabfaFreightMarginService
         }
         $this->assertCurrentSource($shop,$orderId,$source);
         if (($source['accounting_model'] ?? '') === 'gross_v2') {
+            if (!class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingParty') && Module::isEnabled('ssbdeliverymanager')) {
+                Module::getInstanceByName('ssbdeliverymanager');
+            }
+            if (!class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingParty')) {
+                throw new InvalidArgumentException('Delivery accounting identity validation is unavailable.');
+            }
             $party = \Ssb\DeliveryManager\ShippingCost\AccountingParty::resolve(Db::getInstance(), (int)$shop, (int)$orderId, (int)$source['id_carrier'], (string)($source['source_key'] ?? ''));
             if (($source['accounting_party'] ?? null) !== $party) { throw new InvalidArgumentException('The delivery accounting contact changed; refresh the shipping source.'); }
         }
