@@ -20,7 +20,7 @@ class HesabfaInvoiceCarrierPlan
             throw new InvalidArgumentException('Only the confirmed, non-returned sales invoice owned by this order can be reassigned.');
         }
         $person = HesabfaFreightPerson::normalizeCode($person);
-        if ($person==='') { throw new InvalidArgumentException('The replacement carrier has no accounting contact mapping.'); }
+        // An empty freight contact recognizes the invoice freight in Hesabfa's income account.
         $payload = array_intersect_key($invoice,array_flip(self::FIELDS));
         $payload['FreightPersonCode'] = $person;
         $payload['InvoiceItems'] = array();

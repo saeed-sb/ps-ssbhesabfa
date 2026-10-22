@@ -80,7 +80,9 @@ class HesabfaShipmentAccountingService
             }
             $carrier=new Carrier((int)$order['id_carrier']);
             if (!Validate::isLoadedObject($carrier)) { throw new InvalidArgumentException('The replacement carrier is unavailable.'); }
-            $person=HesabfaFreightPerson::getCode((int)$carrier->id_reference,$shop);
+            $gross = ($evidence['accounting_model'] ?? '') === 'gross_v2' || (!$currentSource && HesabfaFreightPerson::managedCarrier((int)$order['id_carrier'], $shop));
+            $expensePerson = ($evidence['accounting_model'] ?? '') === 'gross_v2' ? HesabfaFreightPerson::normalizeCode($evidence['accounting_contact_code'] ?? '') : HesabfaFreightPerson::getCode((int)$carrier->id_reference,$shop);
+            $person = $gross ? '' : $expensePerson;
             $number=$this->module->getInvoiceCodeByOrderId($orderId);
             if (!$number) { return $this->fail('INVOICE_MAPPING_NOT_FOUND','The carrier synchronization is waiting for the sales invoice.'); }
             $year=$this->read($this->api->settingGetFiscalYear());
@@ -100,7 +102,7 @@ class HesabfaShipmentAccountingService
             if ((int)($invoice['Number'] ?? 0)!==(int)$number) { throw new InvalidArgumentException('The mapped sales invoice identity changed.'); }
             $invoicePlan=HesabfaInvoiceCarrierPlan::build($order,$invoice,$person);
             if ($currentSource && $marginEnabled) {
-                $settings['person_code']=$person;
+                $settings['person_code']=$expensePerson;
                 $date=!empty($state['verified_document']) ? substr(json_decode($state['verified_document'],true)['Date'],0,10) : substr((string)($evidence['captured_at'] ?? ''),0,10);
                 if ($date<substr($year['StartDate'],0,10) || $date>substr($year['EndDate'],0,10)) { throw new InvalidArgumentException('Shipping cost date is outside the current fiscal year.'); }
                 HesabfaFreightMarginPlan::build($order,$evidence,$invoicePlan['after'],$settings,$date,(int)$state['document_number']);
@@ -118,7 +120,7 @@ class HesabfaShipmentAccountingService
             // Recover an accepted older carrier write, then use a fresh UUID for the latest carrier.
             if (ltrim((string)($invoice['FreightPersonCode'] ?? ''),'0')!==ltrim((string)$person,'0')) {
                 $plan=HesabfaInvoiceCarrierPlan::build($order,$invoice,$person);
-                $pending=array_merge($plan,array('number'=>(int)$number,'id_carrier'=>(int)$order['id_carrier'],'person_code'=>(string)$person,'account_fingerprint'=>$account,'request_unique_id'=>HesabfaFreightMarginService::uuid(),'sent_at'=>null));
+                $pending=array_merge($plan,array('accounting_model'=>$gross ? 'gross_v2' : 'legacy','number'=>(int)$number,'id_carrier'=>(int)$order['id_carrier'],'person_code'=>(string)$person,'account_fingerprint'=>$account,'request_unique_id'=>HesabfaFreightMarginService::uuid(),'sent_at'=>null));
                 $this->savePending($shop,$orderId,$pending,$account);
                 $this->repo->audit($shop,$orderId,'invoice_carrier_prepared',$pending);
                 $invoice=$this->executeInvoice($shop,$orderId,$order,$invoice,$pending);
@@ -143,7 +145,7 @@ class HesabfaShipmentAccountingService
         if (HesabfaInvoiceCarrierPlan::same($pending['after'],$invoice)) { return $invoice; }
         if (!HesabfaInvoiceCarrierPlan::same($pending['before'],$invoice)) { throw new InvalidArgumentException('The sales invoice changed while its carrier reassignment was pending.'); }
         $carrier=new Carrier((int)$order['id_carrier']);
-        $person=HesabfaFreightPerson::getCode((int)$carrier->id_reference,$shop);
+        $person=($pending['accounting_model'] ?? '') === 'gross_v2' ? '' : HesabfaFreightPerson::getCode((int)$carrier->id_reference,$shop);
         if ((int)$pending['id_carrier']!==(int)$order['id_carrier'] || ltrim($pending['person_code'],'0')!==ltrim($person,'0')) { throw new InvalidArgumentException('The pending invoice carrier request is stale and will not be resent.'); }
         if (!empty($pending['sent_at']) && time()-strtotime($pending['sent_at'])>=86400) { throw new InvalidArgumentException('An expired invoice carrier request requires reconciliation.'); }
         $pending['sent_at']=$pending['sent_at'] ?: date('c');

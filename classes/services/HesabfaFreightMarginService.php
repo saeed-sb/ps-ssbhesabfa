@@ -18,6 +18,8 @@ class HesabfaFreightMarginService
     public static function policy($shop)
     {
         $values = array_merge(HesabfaFreightMarginSettings::getFormValues($shop), HesabfaFreightPerson::getFormValues($shop));
+        $values['accounting_model'] = 'gross_v2';
+        $values['delivery_agent_codes'] = Configuration::get('SSBDM_AGENT_HESABFA_CODES', null, null, $shop);
         ksort($values);
         return hash('sha256', json_encode($values));
     }
@@ -56,6 +58,17 @@ class HesabfaFreightMarginService
         if (empty($settings['SSBHESABFA_FREIGHT_MARGIN_ENABLED'])) { return 0; }
         $count = 0;
         foreach ($this->repo->candidates($shop, self::policy($shop), max(1,min(500,(int)$limit))) as $row) {
+            // Resolve edited carrier/agent settings in the delivery-owned outbox before queuing.
+            if (class_exists('Ssb\\DeliveryManager\\ShippingCost\\AccountingSource')) {
+                $order = $this->repo->order($row['id_shop'], $row['id_order']);
+                $state = $this->repo->state($row['id_shop'], $row['id_order']);
+                $outbox = $this->repo->source($row['id_shop'], $row['id_order']);
+                $evidence = $outbox ? json_decode($outbox['payload_json'], true) : null;
+                if ($order && ($evidence['accounting_model'] ?? '') === 'gross_v2' && empty($state['pending_json']) && empty($state['invoice_pending_json'])
+                    && HesabfaFreightPerson::managedCarrier((int)$order['id_carrier'], (int)$row['id_shop'])) {
+                    \Ssb\DeliveryManager\ShippingCost\AccountingSource::refreshIdentity(Db::getInstance(), (int)$row['id_shop'], (int)$row['id_order']);
+                }
+            }
             if ($this->enqueue($row['id_shop'], $row['id_order'])) { $count++; }
         }
         return $count;
@@ -91,7 +104,7 @@ class HesabfaFreightMarginService
             $invoice = $this->read($this->api->invoiceGet($invoiceNumber, 0));
             $carrier = new Carrier((int)($source['id_carrier'] ?? 0));
             if (!Validate::isLoadedObject($carrier)) { throw new InvalidArgumentException('The shipping carrier is unavailable.'); }
-            $settings['person_code'] = HesabfaFreightPerson::getCode((int)$carrier->id_reference, $shop);
+            $settings['person_code'] = ($source['accounting_model'] ?? '') === 'gross_v2' ? HesabfaFreightPerson::normalizeCode($source['accounting_contact_code'] ?? '') : HesabfaFreightPerson::getCode((int)$carrier->id_reference, $shop);
             $date = !empty($state['verified_document']) ? substr(json_decode($state['verified_document'],true)['Date'],0,10) : substr((string)($source['captured_at'] ?? ''),0,10);
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/D',$date) || $date<substr($year['StartDate'],0,10) || $date>substr($year['EndDate'],0,10)) {
                 throw new InvalidArgumentException('Shipping cost date is outside the current fiscal year.');
@@ -146,6 +159,10 @@ class HesabfaFreightMarginService
             throw new InvalidArgumentException('The saved shipping cost changed without verified accounting evidence.');
         }
         $this->assertCurrentSource($shop,$orderId,$source);
+        if (($source['accounting_model'] ?? '') === 'gross_v2') {
+            $party = \Ssb\DeliveryManager\ShippingCost\AccountingParty::resolve(Db::getInstance(), (int)$shop, (int)$orderId, (int)$source['id_carrier'], (string)($source['source_key'] ?? ''));
+            if (($source['accounting_party'] ?? null) !== $party) { throw new InvalidArgumentException('The delivery accounting contact changed; refresh the shipping source.'); }
+        }
         return array($sourceRow,$source);
     }
 
@@ -253,6 +270,10 @@ class HesabfaFreightMarginService
         $row=$this->repo->source($shop,$order);
         if (!$row || ($pending['source_revision'] ?? '')!==$row['revision_hash']) {
             throw new InvalidArgumentException('The pending shipment accounting source changed; reconcile the existing request before retrying.');
+        }
+        $current = json_decode($row['payload_json'], true);
+        if (is_array($current) && ($current['accounting_model'] ?? '') === 'gross_v2') {
+            $this->verifiedSource($shop, $order);
         }
         if (is_array($pending['source_identity'] ?? null)) {
             $this->assertCurrentSource($shop,$order,$pending['source_identity']);

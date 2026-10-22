@@ -27,7 +27,7 @@ class HesabfaFreightMarginPlan
             isset($settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT]) ? $settings[HesabfaFreightMarginSettings::EXPENSE_ACCOUNT] : '');
         if ($income === '' || $expense === '') { throw new InvalidArgumentException('Freight income and expense accounts are required.'); }
         $person = HesabfaFreightPerson::normalizeCode(isset($settings['person_code']) ? $settings['person_code'] : '');
-        if ($person === '') { throw new InvalidArgumentException('The carrier person code is required.'); }
+        $gross = ($source['accounting_model'] ?? '') === 'gross_v2';
         $reference = self::text(isset($order['reference']) ? $order['reference'] : null, 128);
         if ($reference === '' || !isset($invoice['Reference']) || (string) $invoice['Reference'] !== $reference) {
             throw new InvalidArgumentException('Invoice reference does not match this order.');
@@ -50,7 +50,8 @@ class HesabfaFreightMarginPlan
         if (!array_key_exists('Freight', $invoice)) { throw new InvalidArgumentException('The invoice freight amount is missing.'); }
         $freight = self::roundedRial($invoice['Freight'], 0, true);
         $invoicePerson = HesabfaFreightPerson::normalizeCode(isset($invoice['FreightPersonCode']) ? $invoice['FreightPersonCode'] : '');
-        if ($freight > 0 && $invoicePerson === '') { throw new InvalidArgumentException('Invoice freight was not assigned to a carrier person.'); }
+        if ($gross && $invoicePerson !== '') { throw new InvalidArgumentException('Clear the invoice freight contact before recording the shipping expense.'); }
+        if (!$gross && $freight > 0 && $invoicePerson === '') { throw new InvalidArgumentException('Invoice freight was not assigned to a carrier person.'); }
         $reclassify=$freight > 0 && ltrim($invoicePerson,'0')!==ltrim($person,'0');
         if (!array_key_exists('sender_cost_toman', $source) || !array_key_exists('cost_total_toman', $source)) {
             throw new InvalidArgumentException('The saved shipment cost is incomplete.');
@@ -58,6 +59,7 @@ class HesabfaFreightMarginPlan
         $cost = self::tomanToRial($source['sender_cost_toman']);
         $total = self::tomanToRial($source['cost_total_toman']);
         if ($cost > $total) { throw new InvalidArgumentException('Sender cost exceeds the total shipment cost.'); }
+        if ($person === '' && (!$gross || $cost > 0)) { throw new InvalidArgumentException('The carrier person code is required.'); }
         $margin = $freight - $cost;
         $result = array('document' => null, 'margin_rial' => $margin, 'customer_freight_rial' => $freight,
             'sender_cost_rial' => $cost, 'person_code' => $person);
@@ -66,7 +68,7 @@ class HesabfaFreightMarginPlan
             throw new InvalidArgumentException('Invalid freight document date.');
         }
         $number = self::nonnegativeId($number, 'document number');
-        if ($margin === 0 && !$reclassify) { return $result; }
+        if (($gross && $cost === 0) || (!$gross && $margin === 0 && !$reclassify)) { return $result; }
         $tracking = self::tracking(isset($source['tracking']) ? $source['tracking'] : '');
         $description = '[SSB-FREIGHT:' . $idShop . ':' . $idOrder . '] سفارش' . $idOrder
             . '/' . self::shortText($reference, 24) . '؛ فاکتور' . $invoiceNumber
@@ -77,7 +79,11 @@ class HesabfaFreightMarginPlan
         $room = 199 - self::apiTextLength($description . $extra);
         if ($room < 1) { throw new InvalidArgumentException('Freight description exceeds the API limit.'); }
         $description .= self::shortText($tracking ? $tracking[0] : 'ثبت نشده', $room) . $extra;
-        if ($reclassify) {
+        if ($gross) {
+            $amount = $cost;
+            $transactions = array(self::transaction($expense, 0, $cost, $description, ''),
+                self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT, 1, $cost, $description, $person));
+        } elseif ($reclassify) {
             // The immutable invoice credited its original carrier. Clear that
             // balance and establish only the current carrier's actual payable.
             $transactions=array(self::transaction(HesabfaFreightMarginSettings::CARRIER_ACCOUNT,0,$freight,$description,$invoicePerson));

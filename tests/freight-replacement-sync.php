@@ -2,6 +2,7 @@
 /** Fresh live service/plan/repository; all SQL, queues and remote API calls are fixtures. */
 define('_PS_VERSION_','8.1.7'); define('_DB_PREFIX_','fixture_');
 function pSQL($value,$html=false) { return addslashes((string)$value); }
+class Module { public static $enabled=false; public static function isEnabled($name) { return self::$enabled; } }
 class Configuration { public static function get($key) { return $key==='SSBHESABFA_LIVE_MODE'; } }
 class Validate { public static function isLoadedObject($object) { return !empty($object->id); } }
 class Carrier {
@@ -186,3 +187,4 @@ $db->native=array(array('id_carrier'=>138,'id_order_carrier'=>1,'shipment_carrie
 $identity=$repo->trackingSource(1,40001);
 $assert('Native identity matches delivery hash contract',$identity['source_key']===hash('sha256',json_encode(array(138,array(1,138,'AB123'),array(2,138,'')))) && $identity['tracking']===array('AB123'));
 echo json_encode(array('success'=>true,'checks'=>count($checks),'scope'=>'Real fresh-live freight service, plan, settings and native-identity repository; database, queue storage, module configuration and remote API are offline fixtures. No production writes.','tests'=>$checks),JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),"\n";
+

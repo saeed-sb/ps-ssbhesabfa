@@ -6,6 +6,20 @@ trait HesabfaInternalApiTrait
     {
         if (!HesabfaSecurity::isOperational()) { return array('success'=>false,'error_code'=>'MODULE_UNAVAILABLE','error'=>'Module disabled or multi-shop unsupported.'); }
         $method = trim((string) $method);
+        if ($method === 'shipmentCostSaved') {
+            $payload = $arguments['payload'] ?? null;
+            if (($options['requester'] ?? '') !== 'ssbdeliverymanager' || !is_array($payload)
+                || empty($payload['id_shop']) || empty($payload['id_order'])) {
+                return array('success'=>false, 'error_code'=>'INVALID_SHIPMENT_SOURCE');
+            }
+            $row = (new HesabfaFreightMarginRepository())->source((int)$payload['id_shop'], (int)$payload['id_order']);
+            if (!$row || !hash_equals((string)$row['revision_hash'], (string)($arguments['revision_hash'] ?? ''))
+                || json_decode($row['payload_json'],true) !== $payload) {
+                return array('success'=>false, 'error_code'=>'STALE_SHIPMENT_SOURCE');
+            }
+            $job = $this->queueShipmentMargin((int)$payload['id_shop'], (int)$payload['id_order']);
+            return array('success'=>(bool)$job, 'job_id'=>$job, 'status'=>$job ? 'pending' : 'deferred');
+        }
         $requester = isset($options['requester']) ? (string) $options['requester'] : 'external_module';
         $objectType = isset($options['object_type']) ? (string) $options['object_type'] : null;
         $objectId = isset($options['object_id']) ? (string) $options['object_id'] : null;
