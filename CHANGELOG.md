@@ -1,3 +1,10 @@
+## 2.3.44 - 2026-10-27
+
+- Refresh current Hesabfa stock for the union of previous invoice items, event item codes and the live invoice items, including removed or replaced products and edits with an empty Extra field.
+- Keep cumulative invoice item snapshots in the webhook journal before applying stock, bootstrap older invoices from their stored event history, and preserve the snapshot across failed attempts and retries.
+- Process inventory for API-originated invoice changes without replaying financial callbacks. Handle sales, purchase and return invoice deletions without fetching the deleted invoice.
+- Add an idempotent metadata-only upgrade and an invoice-history index. Upgrading does not replay completed events, rewind the checkpoint, change settings or write accounting data.
+
 ## 2.3.42 - 2026-10-21
 
 - Register the uncovered gateway fee as an expense when the customer surcharge is lower than the gateway fee. Preserve profitable payments as income and merchant-paid fees on their existing path.

@@ -7,6 +7,11 @@ class HesabfaSecurity { public static function isOperational() { return true; } 
 class HesabfaRequestUniqueId { public static function hasContext() { return false; } }
 class HesabfaRetryPolicy { public static function shouldRetryUntilSuccess(...$args) { return false; } }
 class Module { public static function isInstalled($name) { return false; } }
+class HesabfaWebhookChangeRepository {
+    public static function getInvoiceItemCodes($invoiceId, $changeId) { return array(); }
+    public static function normalizeItemCodes($codes) { return array_values(array_unique(array_filter(array_map('trim', $codes), 'strlen'))); }
+    public static function saveInvoiceItemCodes($changeId, $invoiceId, $codes) { return true; }
+}
 class Ssbhesabfa {
     public static $logs = array();
     public static function addLegacyLog(...$args) { self::$logs[] = $args; }

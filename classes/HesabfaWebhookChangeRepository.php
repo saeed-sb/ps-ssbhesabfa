@@ -57,6 +57,73 @@ class HesabfaWebhookChangeRepository
         $q=new DbQuery(); $q->select('*'); $q->from('ssb_hesabfa_webhook_change'); $q->where('`status` IN ("pending","failed")'); $q->orderBy('`change_id` ASC'); $q->limit(max(1,min(500,(int)$limit))); $r=Db::getInstance()->executeS($q); return is_array($r)?$r:array();
     }
 
+    public static function normalizeItemCodes(array $codes)
+    {
+        $result = array();
+        foreach ($codes as $code) {
+            if (!is_string($code) && !is_int($code)) {
+                throw new Exception('Invalid invoice item code in the webhook journal.');
+            }
+            $code = trim((string) $code);
+            if ($code !== '' && !in_array($code, $result, true)) {
+                $result[] = $code;
+            }
+        }
+
+        return $result;
+    }
+
+    public static function getInvoiceItemCodes($invoiceId, $changeId)
+    {
+        if ((int) $invoiceId <= 0 || (int) $changeId <= 0) {
+            throw new Exception('Invalid invoice webhook identity.');
+        }
+        // The newest snapshot is cumulative. Older journals bootstrap invoices
+        // first observed before snapshots existed. Never include future events.
+        $rows = Db::getInstance()->executeS(
+            'SELECT `payload`, `invoice_item_codes` FROM `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_change`'
+            . ' WHERE `object_type`="Invoice" AND `object_id`="' . (int) $invoiceId . '"'
+            . ' AND `change_id`<=' . (int) $changeId . ' ORDER BY `change_id` DESC',
+            true,
+            false
+        );
+        if (!is_array($rows)) {
+            throw new Exception('Invoice item history could not be read.');
+        }
+        $codes = array();
+        foreach ($rows as $row) {
+            if ($row['invoice_item_codes'] !== null) {
+                $snapshot = json_decode($row['invoice_item_codes'], true);
+                if (!is_array($snapshot) || json_last_error() !== JSON_ERROR_NONE) {
+                    throw new Exception('Invalid invoice item snapshot in the webhook journal.');
+                }
+                $codes = array_merge($codes, $snapshot);
+                break;
+            }
+            $change = json_decode($row['payload']);
+            if (!is_object($change) || (isset($change->Extra) && !is_string($change->Extra))) {
+                throw new Exception('Invalid invoice history in the webhook journal.');
+            }
+            $codes = array_merge($codes, explode(',', isset($change->Extra) ? $change->Extra : ''));
+        }
+
+        return self::normalizeItemCodes($codes);
+    }
+
+    public static function saveInvoiceItemCodes($changeId, $invoiceId, array $codes)
+    {
+        $json = json_encode(self::normalizeItemCodes($codes));
+        if ($json === false) {
+            return false;
+        }
+
+        return Db::getInstance()->update(
+            'ssb_hesabfa_webhook_change',
+            array('invoice_item_codes' => pSQL($json, true)),
+            '`change_id`=' . (int) $changeId . ' AND `object_type`="Invoice" AND `object_id`="' . (int) $invoiceId . '"'
+        );
+    }
+
     public static function getSupersededProductChangeIds(array $changeIds)
     {
         $changeIds = array_values(array_unique(array_filter(array_map('intval', $changeIds))));

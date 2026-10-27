@@ -198,6 +198,7 @@ $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_cha
     `object_id` varchar(64) DEFAULT NULL,
     `action_code` int(11) DEFAULT NULL,
     `payload` mediumtext NOT NULL,
+    `invoice_item_codes` mediumtext DEFAULT NULL,
     `status` varchar(32) NOT NULL DEFAULT "pending",
     `attempts` int(10) UNSIGNED NOT NULL DEFAULT 0,
     `last_error` text DEFAULT NULL,
@@ -205,7 +206,8 @@ $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_cha
     `date_upd` datetime NOT NULL,
     PRIMARY KEY (`id_ssb_hesabfa_webhook_change`),
     UNIQUE KEY `uniq_change_id` (`change_id`),
-    KEY `idx_status_change` (`status`,`change_id`)
+    KEY `idx_status_change` (`status`,`change_id`),
+    KEY `idx_invoice_history` (`object_type`,`object_id`,`change_id`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
 if (!Db::getInstance()->execute($query)) return false;
 

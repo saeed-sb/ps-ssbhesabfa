@@ -8,6 +8,9 @@ class Configuration {
     public static function get($key) { return self::$cursor; }
 }
 class HesabfaWebhookChangeRepository {
+    public static function getInvoiceItemCodes($invoiceId, $changeId) { return []; }
+    public static function normalizeItemCodes($codes) { return array_values(array_unique(array_filter(array_map('trim', $codes), 'strlen'))); }
+    public static function saveInvoiceItemCodes($changeId, $invoiceId, $codes) { return true; }
     public static $locked=false, $available=true, $rows=[], $recovered=0;
     public static function acquireProcessingLock() { return self::$locked=self::$available; }
     public static function releaseProcessingLock() { self::$locked=false; }

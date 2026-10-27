@@ -317,28 +317,49 @@ class HesabfaWebhookService
 
     protected function processChange($change)
     {
-        if (!empty($change->API)) return true;
+        // API-originated invoices also change stock. Their financial callbacks
+        // remain skipped, but their item history must not be discarded.
+        if (!empty($change->API) && (string) $change->ObjectType !== 'Invoice') return true;
         $api=new HesabfaApi(); $type=(string)$change->ObjectType; $action=(int)$change->Action;
         if ($type==='Product' && $action===53) { $id=Ssbhesabfa::getObjectIdByCode('product',$change->Extra); if ($id) { $m=new HesabfaModel($id); if (Validate::isLoadedObject($m)) $m->delete(); } return true; }
         if ($type==='Contact' && $action===33) { $id=Ssbhesabfa::getObjectIdByCode('customer',$change->Extra); if ($id) { $m=new HesabfaModel($id); if (Validate::isLoadedObject($m)) $m->delete(); } return true; }
         if ($type==='Invoice') {
+            $itemCodes = HesabfaWebhookChangeRepository::getInvoiceItemCodes($change->ObjectId, $change->Id);
+            $itemCodes = array_merge($itemCodes, explode(',', isset($change->Extra) ? (string) $change->Extra : ''));
             // A deletion event has no invoice to fetch; refresh its affected items below.
-            if ($action !== 123) {
+            if (!in_array($action, array(123, 133, 143, 153), true)) {
                 $r = $api->invoiceGetById(array($change->ObjectId));
-                if (!$r->Success) {
+                if (!is_object($r) || empty($r->Success)) {
                     $this->throwApiResponseException($r, 'Hesabfa invoice could not be fetched.');
                 }
-                foreach ((array) $r->Result as $invoice) {
-                    if (!$this->handler->setInvoiceChanges($invoice)) {
+                if (!isset($r->Result) || !is_array($r->Result) || count($r->Result) !== 1) {
+                    throw new Exception('Hesabfa invoice response is incomplete.');
+                }
+                foreach ($r->Result as $invoice) {
+                    if (!is_object($invoice) || !isset($invoice->Id) || (string) $invoice->Id !== (string) $change->ObjectId) {
+                        throw new Exception('Hesabfa invoice identity does not match the webhook.');
+                    }
+                    if (!is_object($invoice) || !isset($invoice->InvoiceItems) || !is_array($invoice->InvoiceItems)) {
+                        throw new Exception('Hesabfa invoice item list is invalid.');
+                    }
+                    foreach ($invoice->InvoiceItems as $line) {
+                        if (!is_object($line) || !isset($line->ItemCode)) {
+                            throw new Exception('Hesabfa invoice item code is missing.');
+                        }
+                        $itemCodes[] = $line->ItemCode;
+                    }
+                    if (empty($change->API) && !$this->handler->setInvoiceChanges($invoice)) {
                         throw new Exception('Invoice change could not be applied.');
                     }
                 }
             }
-            if (!empty($change->Extra)) {
-                $itemCodes = array_values(array_unique(array_filter(
-                    array_map('trim', explode(',', (string) $change->Extra)),
-                    'strlen'
-                )));
+            $itemCodes = HesabfaWebhookChangeRepository::normalizeItemCodes($itemCodes);
+            // Persist before item lookup/writes: an interrupted attempt must not
+            // lose codes if the invoice is edited again before its retry.
+            if (!HesabfaWebhookChangeRepository::saveInvoiceItemCodes($change->Id, $change->ObjectId, $itemCodes)) {
+                throw new Exception('Invoice item snapshot could not be saved.');
+            }
+            if (!empty($itemCodes)) {
                 $itemResponse = $api->itemGetItemsByCodes($itemCodes);
 
                 if (!is_object($itemResponse) || empty($itemResponse->Success)) {
@@ -369,7 +390,7 @@ class HesabfaWebhookService
                     if (!$this->hasStoreTag($item, 'id_product')) {
                         continue;
                     }
-                    if (!$this->handler->setItemChanges($item, false, true)) {
+                    if (!$this->handler->setItemChanges($item, false, true, empty($change->API))) {
                         throw new Exception('Invoice item change could not be applied.');
                     }
                 }
@@ -386,7 +407,7 @@ class HesabfaWebhookService
                     );
                 }
             }
-            if (Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty') && in_array((int)$change->Action,array(121,122,123),true)) {
+            if (empty($change->API) && Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty') && in_array((int)$change->Action,array(121,122,123),true)) {
                 require_once _PS_MODULE_DIR_ . 'ssbprofitloyalty/ssbprofitloyalty.php'; $loyalty=new Ssbprofitloyalty();
                 if ((int)$change->Action===121) $loyalty->addInvoiceById($change->ObjectId);
                 elseif ((int)$change->Action===122) $loyalty->updateInvoiceById($change->ObjectId);

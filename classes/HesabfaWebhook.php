@@ -183,7 +183,7 @@ class HesabfaWebhook
         return true;
     }
 
-    public static function setItemChanges($item, $allowCodeRemap = false, $ignoreUnlinkedItem = false)
+    public static function setItemChanges($item, $allowCodeRemap = false, $ignoreUnlinkedItem = false, $updatePrice = true)
     {
         if (!HesabfaSecurity::isOperational()) { return false; }
         if (!is_object($item)) {
@@ -272,7 +272,7 @@ class HesabfaWebhook
             }
 
             //2.set new Price
-            if (Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
+            if ($updatePrice && Configuration::get('SSBHESABFA_ITEM_UPDATE_PRICE')) {
                 if ($id_attribute != 0) {
                     $combination = new Combination($id_attribute);
                     if (!Validate::isLoadedObject($combination) || (int) $combination->id_product !== (int) $id_product) {
