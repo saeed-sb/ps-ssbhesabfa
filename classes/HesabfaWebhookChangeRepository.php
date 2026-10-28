@@ -57,6 +57,71 @@ class HesabfaWebhookChangeRepository
         $q=new DbQuery(); $q->select('*'); $q->from('ssb_hesabfa_webhook_change'); $q->where('`status` IN ("pending","failed")'); $q->orderBy('`change_id` ASC'); $q->limit(max(1,min(500,(int)$limit))); $r=Db::getInstance()->executeS($q); return is_array($r)?$r:array();
     }
 
+    /** Called under the processing lock; evidence does not complete the later change. */
+    public static function getLaterInvoiceDeletionId($invoiceId, $changeId, $action)
+    {
+        foreach (array($invoiceId, $changeId) as $identity) {
+            if ((!is_int($identity) && !is_string($identity))
+                || !ctype_digit((string) $identity) || (int) $identity <= 0) {
+                throw new Exception('Invalid invoice webhook identity.');
+            }
+        }
+        $deletionActions = array(121 => 123, 122 => 123, 131 => 133, 132 => 133,
+            141 => 143, 142 => 143, 151 => 153, 152 => 153);
+        if ((!is_int($action) && !is_string($action)) || !ctype_digit((string) $action)
+            || !isset($deletionActions[(int) $action])) {
+            return null;
+        }
+        $deletionAction = $deletionActions[(int) $action];
+        $rows = Db::getInstance()->executeS(
+            'SELECT `change_id`, `object_id`, `action_code`, `payload`'
+            . ' FROM `' . _DB_PREFIX_ . 'ssb_hesabfa_webhook_change`'
+            . ' WHERE `object_type`="Invoice" AND `object_id`="' . (int) $invoiceId . '"'
+            . ' AND `change_id`>' . (int) $changeId . ' AND `action_code`=' . $deletionAction
+            . ' AND `status` IN ("pending","failed","running","done")'
+            . ' ORDER BY `change_id` ASC LIMIT 1',
+            true,
+            false
+        );
+        if (!is_array($rows)) {
+            throw new Exception('Later invoice deletion could not be read.');
+        }
+        if (empty($rows)) {
+            return null;
+        }
+        if (count($rows) !== 1 || !isset($rows[0]) || !is_array($rows[0])) {
+            throw new Exception('Invalid later invoice deletion in the webhook journal.');
+        }
+        $row = $rows[0];
+        foreach (array('change_id', 'object_id', 'action_code') as $field) {
+            if (!isset($row[$field]) || (!is_int($row[$field]) && !is_string($row[$field]))
+                || !ctype_digit((string) $row[$field])) {
+                throw new Exception('Invalid later invoice deletion in the webhook journal.');
+            }
+        }
+        $deletion = isset($row['payload']) && is_string($row['payload'])
+            ? json_decode($row['payload']) : null;
+        if (!is_object($deletion) || json_last_error() !== JSON_ERROR_NONE
+            || !isset($deletion->Id, $deletion->ObjectId, $deletion->ObjectType, $deletion->Action)
+            || !is_string($deletion->ObjectType) || $deletion->ObjectType !== 'Invoice') {
+            throw new Exception('Invalid later invoice deletion in the webhook journal.');
+        }
+        foreach (array('Id' => 'change_id', 'ObjectId' => 'object_id', 'Action' => 'action_code') as $field => $column) {
+            if ((!is_int($deletion->$field) && !is_string($deletion->$field))
+                || !ctype_digit((string) $deletion->$field)
+                || (string) $deletion->$field !== (string) $row[$column]) {
+                throw new Exception('Invalid later invoice deletion in the webhook journal.');
+            }
+        }
+        if ((int) $row['change_id'] <= (int) $changeId
+            || (int) $row['object_id'] !== (int) $invoiceId
+            || (int) $row['action_code'] !== $deletionAction) {
+            throw new Exception('Invalid later invoice deletion in the webhook journal.');
+        }
+
+        return (int) $row['change_id'];
+    }
+
     public static function normalizeItemCodes(array $codes)
     {
         $result = array();

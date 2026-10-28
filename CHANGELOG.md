@@ -1,3 +1,9 @@
+## 2.3.46 - 2026-10-28
+
+- Recover queued invoice creations and updates that return an empty successful lookup only when a validated later deletion exists for the same invoice identity and action family.
+- Refresh authoritative stock using cumulative item history and the current event, preserve ordered checkpoint advancement, and omit callbacks for the vanished invoice.
+- Keep missing, malformed and mismatched API responses blocking processing. Add regression coverage for deleted return invoice 6487 and journal proof failures. The upgrade changes code only.
+
 ## 2.3.45 - 2026-10-28
 
 - Read invoice line codes from the embedded Item.Code when ItemCode is null, absent or blank. Preserve explicit top-level codes and leading zeroes.
