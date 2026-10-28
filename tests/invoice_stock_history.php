@@ -12,6 +12,7 @@ function pSQL($text, $html = false) { return addslashes($text); }
 class Db {
     public static $rows = array(), $readFail = false, $writeFail = false;
     public static $column = false, $index = false, $ddl = 0;
+    public static $deletionRows = null, $deletionSql = '';
     public static function getInstance() { return new self(); }
     public function executeS($sql, $array = true, $cache = true) {
         check($cache === false, 'History/schema lookup used cached data');
@@ -20,6 +21,22 @@ class Db {
         if (self::$readFail) { return false; }
         check(strpos($sql, '`object_type`="Invoice"') !== false, 'History is not invoice scoped');
         preg_match('/`object_id`="([0-9]+)"/', $sql, $invoice);
+        if (strpos($sql, 'SELECT `change_id`, `object_id`, `action_code`, `payload`') === 0) {
+            self::$deletionSql = $sql;
+            preg_match('/`change_id`>([0-9]+)/', $sql, $change);
+            preg_match('/`action_code`=([0-9]+)/', $sql, $action);
+            check(isset($invoice[1], $change[1], $action[1]), 'Deletion lookup omitted invoice/action/event scope');
+            check(strpos($sql, '`status` IN ("pending","failed","running","done")') !== false, 'Deletion lookup trusted dead events');
+            check(strpos($sql, 'ORDER BY `change_id` ASC LIMIT 1') !== false, 'Deletion lookup omitted deterministic bound');
+            if (self::$deletionRows !== null) { return self::$deletionRows; }
+            $rows = array_filter(self::$rows, function ($row) use ($invoice, $change, $action) {
+                return $row['object_type'] === 'Invoice' && $row['object_id'] === (int) $invoice[1]
+                    && $row['change_id'] > (int) $change[1] && $row['action_code'] === (int) $action[1]
+                    && in_array($row['status'], array('pending', 'failed', 'running', 'done'), true);
+            });
+            usort($rows, function ($a, $b) { return $a['change_id'] <=> $b['change_id']; });
+            return array_slice($rows, 0, 1);
+        }
         preg_match('/`change_id`<=([0-9]+)/', $sql, $change);
         check(isset($invoice[1], $change[1]), 'History omitted invoice identity or event boundary');
         $rows = array_filter(self::$rows, function ($row) use ($invoice, $change) {
@@ -56,13 +73,17 @@ class Ssbhesabfa {
 }
 class HesabfaApi {
     public static $codes = array(), $stocks = array(), $requested = array(), $fetches = 0;
-    public static $fail = false, $invalid = '', $missing = array();
+    public static $fail = false, $invalid = '', $missing = array(), $lines = null;
     public function invoiceGetById($ids) {
         self::$fetches++;
         $items = array_map(function ($code) { return (object) array('ItemCode' => $code); }, self::$codes);
-        $invoice = (object) array('Id' => $ids[0], 'InvoiceItems' => $items);
+        $invoice = (object) array('Id' => $ids[0], 'InvoiceItems' => self::$lines === null ? $items : self::$lines);
         if (self::$invalid === 'identity') { $invoice->Id++; }
         if (self::$invalid === 'line') { $invoice->InvoiceItems = array((object) array()); }
+        if (self::$invalid === 'missing') { return (object) array('Success' => true); }
+        if (self::$invalid === 'null') { return (object) array('Success' => true, 'Result' => null); }
+        if (self::$invalid === 'object') { return (object) array('Success' => true, 'Result' => $invoice); }
+        if (self::$invalid === 'multiple') { return (object) array('Success' => true, 'Result' => array($invoice, $invoice)); }
         return (object) array('Success' => true, 'Result' => self::$invalid === 'empty' ? array() : array($invoice));
     }
     public function itemGetItemsByCodes($codes) {
@@ -95,19 +116,23 @@ class HistoryProbe extends HesabfaWebhookService {
 }
 function resetHistory() {
     Db::$rows = array(); Db::$readFail = Db::$writeFail = false;
+    Db::$deletionRows = null; Db::$deletionSql = '';
     HesabfaApi::$codes = HesabfaApi::$stocks = HesabfaApi::$requested = HesabfaApi::$missing = array();
     HesabfaApi::$fetches = 0; HesabfaApi::$fail = false; HesabfaApi::$invalid = '';
+    HesabfaApi::$lines = null;
     Module::$calls = 0; Ssbhesabfa::$logs = array();
 }
 function event($id, $extra = '', $action = 132, $api = false, $invoice = 150140) {
     $change = (object) array('Id' => $id, 'ObjectId' => $invoice, 'ObjectType' => 'Invoice', 'Action' => $action, 'Extra' => $extra, 'API' => $api);
-    Db::$rows[$id] = array('change_id' => $id, 'object_id' => $invoice, 'payload' => json_encode($change), 'invoice_item_codes' => null);
+    Db::$rows[$id] = array('change_id' => $id, 'object_type' => 'Invoice', 'object_id' => $invoice,
+        'action_code' => $action, 'status' => 'pending', 'payload' => json_encode($change), 'invoice_item_codes' => null);
     return $change;
 }
 function fails($callback, $message) {
     try { $callback(); } catch (Exception $e) { check(true, $message); return; }
     check(false, $message);
 }
+function sortedCodes($codes) { sort($codes, SORT_STRING); return $codes; }
 
 // Invoice 482: eleven old lines are replaced by twenty new lines.
 resetHistory();
@@ -194,6 +219,156 @@ check(count(Ssbhesabfa::$logs) === 1 && Ssbhesabfa::$logs[0][2] === 'WEBHOOK_INV
 resetHistory(); $change = event(1); $change->ObjectType = 'Product'; $change->API = true;
 (new HistoryProbe(new HistoryHandler()))->apply($change);
 check(HesabfaApi::$fetches === 0 && HesabfaApi::$requested === array(), 'API non-invoice behavior changed');
+
+// Live invoice 6481: null top-level codes, four embedded items, only two in Extra.
+resetHistory();
+$change = event(2251866, '904688,904435', 121, false, 150888);
+$liveCodes = array('904688', '904435', '904852', '905295');
+HesabfaApi::$lines = array_map(function ($code) {
+    return (object) array('ItemCode' => null, 'Item' => (object) array('Code' => $code));
+}, $liveCodes);
+$handler = new HistoryHandler();
+(new HistoryProbe($handler))->apply($change);
+check(HesabfaApi::$requested === array($liveCodes), 'Embedded invoice item codes were omitted');
+check(json_decode(Db::$rows[2251866]['invoice_item_codes'], true) === $liveCodes, 'Embedded codes were not persisted');
+check(count($handler->stocks) === 4 && $handler->invoices === 1, 'Embedded invoice did not complete normal callbacks');
+
+// Direct codes remain authoritative; missing/blank direct codes use the same line's Item.Code.
+$validLines = array(
+    array((object) array('Item' => (object) array('Code' => '000007')), '000007'),
+    array((object) array('ItemCode' => '', 'Item' => (object) array('Code' => '000007')), '000007'),
+    array((object) array('ItemCode' => '  ', 'Item' => (object) array('Code' => ' 000007 ')), '000007'),
+    array((object) array('ItemCode' => '000008', 'Item' => (object) array('Code' => '000009')), '000008'),
+    array((object) array('ItemCode' => 0), '0'),
+    array((object) array('ItemCode' => null, 'Item' => (object) array('Code' => 0)), '0'),
+);
+foreach ($validLines as $case) {
+    resetHistory(); $change = event(1);
+    HesabfaApi::$lines = array($case[0]);
+    $handler = new HistoryHandler();
+    (new HistoryProbe($handler))->apply($change);
+    check(HesabfaApi::$requested === array(array($case[1])), 'Invoice code fallback or leading zero preservation failed');
+}
+
+// No guessing from Extra: malformed or missing codes still stop before every callback/write.
+$invalidLines = array(
+    null, array('ItemCode' => '000007'), (object) array(),
+    (object) array('ItemCode' => null, 'Item' => (object) array()),
+    (object) array('ItemCode' => '', 'Item' => (object) array('Code' => '  ')),
+    (object) array('ItemCode' => null, 'Item' => array('Code' => '000007')),
+    (object) array('ItemCode' => false, 'Item' => (object) array('Code' => '000007')),
+    (object) array('ItemCode' => array('000007')),
+    (object) array('ItemCode' => null, 'Item' => (object) array('Code' => false)),
+    (object) array('ItemCode' => null, 'Item' => (object) array('Code' => 7.5)),
+);
+foreach ($invalidLines as $line) {
+    resetHistory(); $change = event(1, '000001');
+    HesabfaApi::$lines = array((object) array('ItemCode' => '000002'), $line);
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Malformed line was accepted');
+    check($handler->stocks === array() && $handler->invoices === 0 && HesabfaApi::$requested === array(), 'Malformed line applied partial changes');
+    check(Db::$rows[1]['invoice_item_codes'] === null, 'Malformed invoice saved a partial snapshot');
+}
+
+// Later-deletion evidence is scoped to an immutable invoice ID and its action family.
+foreach (array(121 => 123, 122 => 123, 131 => 133, 132 => 133,
+    141 => 143, 142 => 143, 151 => 153, 152 => 153) as $action => $deletion) {
+    resetHistory(); event(10, '', $action); event(20, '', $deletion);
+    check(HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 10, $action) === 20, 'Same-family deletion was not recognized');
+}
+foreach (array('pending', 'failed', 'running', 'done') as $status) {
+    resetHistory(); event(20, '', 143); Db::$rows[20]['status'] = $status;
+    check(HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 10, 141) === 20, 'Valid deletion status was not recognized');
+}
+resetHistory();
+event(9, '', 143);                         // Earlier deletion.
+event(30, '', 143, false, 999);           // Another internal invoice ID.
+event(40, '', 133);                       // Another invoice family.
+event(50, '', 143); Db::$rows[50]['status'] = 'dead';
+event(60, '', 143); Db::$rows[60]['object_type'] = 'Product';
+check(HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 20, 141) === null, 'Unrelated or ignored deletion was trusted');
+event(900, '', 143); event(901, '', 143);
+check(HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 20, 141) === 900, 'Evidence outside the processing batch was lost or a later candidate was chosen');
+resetHistory();
+check(HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 10, 123) === null && Db::$deletionSql === '', 'Deletion/unknown action queried for fallback evidence');
+Db::$readFail = true;
+fails(function () { HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 10, 141); }, 'Deletion lookup DB failure was accepted');
+resetHistory(); event(20, '', 143);
+$validDeletionRow = Db::$rows[20];
+$corruptDeletionRows = array(false, array($validDeletionRow, $validDeletionRow));
+foreach (array('Id' => 21, 'ObjectId' => 999, 'Action' => 133, 'ObjectType' => 'Product') as $field => $value) {
+    $row = $validDeletionRow; $payload = json_decode($row['payload']); $payload->$field = $value;
+    $row['payload'] = json_encode($payload); $corruptDeletionRows[] = array($row);
+}
+foreach (array('payload' => 'invalid JSON', 'change_id' => 9, 'object_id' => 999, 'action_code' => 133) as $field => $value) {
+    $row = $validDeletionRow; $row[$field] = $value; $corruptDeletionRows[] = array($row);
+}
+$row = $validDeletionRow; $row['payload'] = '{}'; $corruptDeletionRows[] = array($row);
+$row = $validDeletionRow; $row['change_id'] = true; $corruptDeletionRows[] = array($row);
+$row = $validDeletionRow; $payload = json_decode($row['payload']); $payload->Id = 20.5;
+$row['payload'] = json_encode($payload); $corruptDeletionRows[] = array($row);
+foreach ($corruptDeletionRows as $rows) {
+    Db::$deletionRows = $rows;
+    fails(function () { HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(150140, 10, 141); }, 'Corrupt deletion evidence was accepted');
+}
+
+// Live return 6487 was created and deleted before the create event could be replayed.
+resetHistory(); event(2252535, '000007', 142, false, 150924);
+$change = event(2252536, '009645', 141, false, 150924);
+$deletion = event(2252537, '009646', 143, false, 150924);
+HesabfaApi::$invalid = 'empty'; HesabfaApi::$stocks = array('000007' => 0, '009645' => 3, '009646' => 4);
+$handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+check($probe->apply($change), 'Deleted-before-replay return was blocked');
+check($handler->stocks == array('000007' => 0, '009645' => 3), 'Deleted return lost cumulative history or imported future codes');
+check(sortedCodes(json_decode(Db::$rows[2252536]['invoice_item_codes'], true)) === array('000007', '009645'), 'Deleted return did not retain its scoped snapshot');
+check(Db::$rows[2252537]['invoice_item_codes'] === null && Db::$rows[2252537]['status'] === 'pending', 'Fallback prematurely processed the later deletion');
+check($handler->invoices === 0 && Module::$calls === 0, 'Vanished invoice replayed financial callbacks');
+check(count(Ssbhesabfa::$logs) === 1 && Ssbhesabfa::$logs[0][2] === 'WEBHOOK_INVOICE_DELETED_BEFORE_REPLAY', 'Deleted-before-replay completion was not audited');
+check(strpos(Ssbhesabfa::$logs[0][0], '2252537') !== false, 'Audit omitted the proving deletion ID');
+$probe->apply($deletion);
+check(HesabfaApi::$fetches === 1, 'Later deletion fetched the vanished invoice');
+check($handler->stocks == array('000007' => 0, '009645' => 3, '009646' => 4), 'Later deletion lost cumulative inventory refresh');
+check(sortedCodes(json_decode(Db::$rows[2252537]['invoice_item_codes'], true)) === array('000007', '009645', '009646'), 'Later deletion did not inherit the predecessor snapshot');
+
+// Sales creates/edits must not invoke loyalty add/update after a proved deletion.
+foreach (array(121, 122) as $action) {
+    resetHistory(); $change = event(10, '000007', $action); event(20, '', 123);
+    HesabfaApi::$invalid = 'empty';
+    $handler = new HistoryHandler(); (new HistoryProbe($handler))->apply($change);
+    check($handler->invoices === 0 && Module::$calls === 0 && count($handler->stocks) === 1, 'Deleted sales invoice replayed invoice/loyalty callbacks');
+}
+resetHistory(); $change = event(10, '000007', 141, true); event(20, '', 143, true);
+HesabfaApi::$invalid = 'empty';
+$handler = new HistoryHandler(); (new HistoryProbe($handler))->apply($change);
+check($handler->invoices === 0 && Module::$calls === 0 && $handler->prices === array(false), 'API fallback enabled financial or price callbacks');
+
+// Only an explicitly empty response qualifies; malformed or mismatched data stays blocking.
+foreach (array('missing', 'null', 'object', 'multiple', 'identity', 'line') as $invalid) {
+    resetHistory(); $change = event(10, '000007', 141); event(20, '', 143);
+    HesabfaApi::$invalid = $invalid;
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Invalid invoice response used deletion fallback');
+    check($handler->stocks === array() && $handler->invoices === 0 && Db::$rows[10]['invoice_item_codes'] === null, 'Invalid response applied partial fallback');
+}
+resetHistory(); $change = event(10, '000007', 141); event(20, '', 143);
+HesabfaApi::$codes = array('000008');
+$handler = new HistoryHandler(); (new HistoryProbe($handler))->apply($change);
+check($handler->invoices === 1 && Db::$deletionSql === '' && Ssbhesabfa::$logs === array(), 'Valid live response was unnecessarily superseded');
+
+// A failed stock lookup keeps its durable codes; retry cannot consume the future event.
+resetHistory(); $change = event(10, '000007', 141); event(20, '000008', 143);
+HesabfaApi::$invalid = 'empty'; HesabfaApi::$fail = true;
+$handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+fails(function () use ($probe, $change) { $probe->apply($change); }, 'Deleted-invoice stock lookup failure was accepted');
+check($handler->stocks === array() && Ssbhesabfa::$logs === array(), 'Failed refresh logged completion or applied partial stock');
+check(json_decode(Db::$rows[10]['invoice_item_codes'], true) === array('000007') && Db::$rows[20]['invoice_item_codes'] === null, 'Failed fallback lost its own snapshot or changed the later event');
+HesabfaApi::$fail = false; $change->Extra = '';
+check($probe->apply($change) && $handler->stocks === array('000007' => 0), 'Fallback retry lost durable codes');
+resetHistory(); $change = event(10, '000007', 141); event(20, '', 143);
+HesabfaApi::$invalid = 'empty'; Db::$writeFail = true;
+$handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+fails(function () use ($probe, $change) { $probe->apply($change); }, 'Failed fallback snapshot was accepted');
+check($handler->stocks === array() && HesabfaApi::$requested === array(), 'Snapshot failure changed stock');
 
 // The upgrade is repeatable and only adds metadata and its lookup index.
 check(upgrade_module_2_3_44((object) array('name' => 'ssbhesabfa')), 'Upgrade failed');
