@@ -315,6 +315,30 @@ class HesabfaWebhookService
         throw new Exception($message);
     }
 
+    protected function getInvoiceItemCode($line)
+    {
+        if (!is_object($line)) {
+            throw new Exception('Hesabfa invoice item code is missing.');
+        }
+
+        $code = isset($line->ItemCode) ? $line->ItemCode : null;
+        // Hesabfa can leave ItemCode null while returning the full Item object.
+        // Use only that same line's explicit code; event order is not a mapping.
+        if ($code === null || (is_string($code) && trim($code) === '')) {
+            $code = isset($line->Item) && is_object($line->Item) && isset($line->Item->Code)
+                ? $line->Item->Code
+                : null;
+        }
+        if ($code === null || (is_string($code) && trim($code) === '')) {
+            throw new Exception('Hesabfa invoice item code is missing.');
+        }
+        if (!is_string($code) && !is_int($code)) {
+            throw new Exception('Hesabfa invoice item code is invalid.');
+        }
+
+        return trim((string) $code);
+    }
+
     protected function processChange($change)
     {
         // API-originated invoices also change stock. Their financial callbacks
@@ -343,10 +367,7 @@ class HesabfaWebhookService
                         throw new Exception('Hesabfa invoice item list is invalid.');
                     }
                     foreach ($invoice->InvoiceItems as $line) {
-                        if (!is_object($line) || !isset($line->ItemCode)) {
-                            throw new Exception('Hesabfa invoice item code is missing.');
-                        }
-                        $itemCodes[] = $line->ItemCode;
+                        $itemCodes[] = $this->getInvoiceItemCode($line);
                     }
                     if (empty($change->API) && !$this->handler->setInvoiceChanges($invoice)) {
                         throw new Exception('Invoice change could not be applied.');

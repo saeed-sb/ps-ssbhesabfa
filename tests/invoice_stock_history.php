@@ -56,11 +56,11 @@ class Ssbhesabfa {
 }
 class HesabfaApi {
     public static $codes = array(), $stocks = array(), $requested = array(), $fetches = 0;
-    public static $fail = false, $invalid = '', $missing = array();
+    public static $fail = false, $invalid = '', $missing = array(), $lines = null;
     public function invoiceGetById($ids) {
         self::$fetches++;
         $items = array_map(function ($code) { return (object) array('ItemCode' => $code); }, self::$codes);
-        $invoice = (object) array('Id' => $ids[0], 'InvoiceItems' => $items);
+        $invoice = (object) array('Id' => $ids[0], 'InvoiceItems' => self::$lines === null ? $items : self::$lines);
         if (self::$invalid === 'identity') { $invoice->Id++; }
         if (self::$invalid === 'line') { $invoice->InvoiceItems = array((object) array()); }
         return (object) array('Success' => true, 'Result' => self::$invalid === 'empty' ? array() : array($invoice));
@@ -97,6 +97,7 @@ function resetHistory() {
     Db::$rows = array(); Db::$readFail = Db::$writeFail = false;
     HesabfaApi::$codes = HesabfaApi::$stocks = HesabfaApi::$requested = HesabfaApi::$missing = array();
     HesabfaApi::$fetches = 0; HesabfaApi::$fail = false; HesabfaApi::$invalid = '';
+    HesabfaApi::$lines = null;
     Module::$calls = 0; Ssbhesabfa::$logs = array();
 }
 function event($id, $extra = '', $action = 132, $api = false, $invoice = 150140) {
@@ -194,6 +195,56 @@ check(count(Ssbhesabfa::$logs) === 1 && Ssbhesabfa::$logs[0][2] === 'WEBHOOK_INV
 resetHistory(); $change = event(1); $change->ObjectType = 'Product'; $change->API = true;
 (new HistoryProbe(new HistoryHandler()))->apply($change);
 check(HesabfaApi::$fetches === 0 && HesabfaApi::$requested === array(), 'API non-invoice behavior changed');
+
+// Live invoice 6481: null top-level codes, four embedded items, only two in Extra.
+resetHistory();
+$change = event(2251866, '904688,904435', 121, false, 150888);
+$liveCodes = array('904688', '904435', '904852', '905295');
+HesabfaApi::$lines = array_map(function ($code) {
+    return (object) array('ItemCode' => null, 'Item' => (object) array('Code' => $code));
+}, $liveCodes);
+$handler = new HistoryHandler();
+(new HistoryProbe($handler))->apply($change);
+check(HesabfaApi::$requested === array($liveCodes), 'Embedded invoice item codes were omitted');
+check(json_decode(Db::$rows[2251866]['invoice_item_codes'], true) === $liveCodes, 'Embedded codes were not persisted');
+check(count($handler->stocks) === 4 && $handler->invoices === 1, 'Embedded invoice did not complete normal callbacks');
+
+// Direct codes remain authoritative; missing/blank direct codes use the same line's Item.Code.
+$validLines = array(
+    array((object) array('Item' => (object) array('Code' => '000007')), '000007'),
+    array((object) array('ItemCode' => '', 'Item' => (object) array('Code' => '000007')), '000007'),
+    array((object) array('ItemCode' => '  ', 'Item' => (object) array('Code' => ' 000007 ')), '000007'),
+    array((object) array('ItemCode' => '000008', 'Item' => (object) array('Code' => '000009')), '000008'),
+    array((object) array('ItemCode' => 0), '0'),
+    array((object) array('ItemCode' => null, 'Item' => (object) array('Code' => 0)), '0'),
+);
+foreach ($validLines as $case) {
+    resetHistory(); $change = event(1);
+    HesabfaApi::$lines = array($case[0]);
+    $handler = new HistoryHandler();
+    (new HistoryProbe($handler))->apply($change);
+    check(HesabfaApi::$requested === array(array($case[1])), 'Invoice code fallback or leading zero preservation failed');
+}
+
+// No guessing from Extra: malformed or missing codes still stop before every callback/write.
+$invalidLines = array(
+    null, array('ItemCode' => '000007'), (object) array(),
+    (object) array('ItemCode' => null, 'Item' => (object) array()),
+    (object) array('ItemCode' => '', 'Item' => (object) array('Code' => '  ')),
+    (object) array('ItemCode' => null, 'Item' => array('Code' => '000007')),
+    (object) array('ItemCode' => false, 'Item' => (object) array('Code' => '000007')),
+    (object) array('ItemCode' => array('000007')),
+    (object) array('ItemCode' => null, 'Item' => (object) array('Code' => false)),
+    (object) array('ItemCode' => null, 'Item' => (object) array('Code' => 7.5)),
+);
+foreach ($invalidLines as $line) {
+    resetHistory(); $change = event(1, '000001');
+    HesabfaApi::$lines = array((object) array('ItemCode' => '000002'), $line);
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Malformed line was accepted');
+    check($handler->stocks === array() && $handler->invoices === 0 && HesabfaApi::$requested === array(), 'Malformed line applied partial changes');
+    check(Db::$rows[1]['invoice_item_codes'] === null, 'Malformed invoice saved a partial snapshot');
+}
 
 // The upgrade is repeatable and only adds metadata and its lookup index.
 check(upgrade_module_2_3_44((object) array('name' => 'ssbhesabfa')), 'Upgrade failed');

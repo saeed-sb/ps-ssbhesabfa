@@ -1,3 +1,9 @@
+## 2.3.45 - 2026-10-28
+
+- Read invoice line codes from the embedded Item.Code when ItemCode is null, absent or blank. Preserve explicit top-level codes and leading zeroes.
+- Continue rejecting malformed or truly missing codes before callbacks, snapshots or stock changes; never infer a line mapping from event order.
+- Add regression coverage for invoice 6481, embedded codes beyond Extra, code validation and leading zeroes. The code-only upgrade preserves journal state and checkpoints.
+
 ## 2.3.44 - 2026-10-27
 
 - Refresh current Hesabfa stock for the union of previous invoice items, event item codes and the live invoice items, including removed or replaced products and edits with an empty Extra field.
