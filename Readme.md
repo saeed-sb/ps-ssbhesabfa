@@ -333,6 +333,18 @@ Recommended setup order:
 
 ## Cron setup
 
+Prefer the module-owned CLI entry point when PHP CLI is available:
+
+```cron
+* * * * * /path/to/php /path/to/shop/modules/ssbhesabfa/bin/cron.php --shop=1 >/dev/null 2>&1
+```
+
+Run as the shop filesystem owner. `--dry-run` verifies bootstrap, shop and module availability without processing queues or webhooks. Defaults are `--limit=20` and `--webhook-limit=80`; accepted ranges are 1–50 and 0–100. The CLI preserves the module's single-shop boundary and uses the same `HesabfaCronRunner` as the authenticated HTTP endpoint. API credentials remain in the module settings; CLI does not require a copied cron token.
+
+Private lock/result files live in `<shop-account>/ops/runtime/hesabfa-cron`, outside the web root and release content. CLI shares `cron.lock` with the former scheduler. On iPhoneChi, PHP is `/opt/cpanel/ea-php81/root/usr/bin/php`. Configure exactly one scheduler; the old curl entry must be removed when switching. Preserve logs and the rollback copy of old request configuration under `ops`.
+
+The authenticated HTTP endpoint remains supported for hosts without PHP CLI:
+
 The Request Queue page displays a cron URL without credentials. The endpoint requires the generated token in the `X-SSB-Hesabfa-Token` HTTP header. Employees with Queue **edit** permission can expand the authentication header on that page. URL query tokens are rejected in 2.3.35.
 
 Keep the header in a private curl configuration file readable only by the scheduler user (`chmod 600 /private/path/hesabfa-cron.curl`):
