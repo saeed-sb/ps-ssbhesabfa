@@ -34,6 +34,8 @@ LOCAL_TESTS = {
     ],
 }
 LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/payment_fee_expense.php'])
+LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/invoice_stock_history.php'])
+LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/invoice_stock_only.php'])
 
 DOWNLOAD_HOSTS = {
     'release-assets.githubusercontent.com', 'objects.githubusercontent.com',
