@@ -374,7 +374,7 @@ class HesabfaWebhookService
         unset($years[max(array_keys($years))]);
 
         foreach ($years as $yearId => $dates) {
-            // Scope only this read. Item stock and all writes stay in the current year.
+            // Read only to identify the fiscal year; historical changes are not imported.
             $response = $api->apiRequest('invoice/getById', array(
                 'idList' => array($change->ObjectId),
                 'yearId' => $yearId,
@@ -438,7 +438,6 @@ class HesabfaWebhookService
         if ($type==='Contact' && $action===33) { $id=Ssbhesabfa::getObjectIdByCode('customer',$change->Extra); if ($id) { $m=new HesabfaModel($id); if (Validate::isLoadedObject($m)) $m->delete(); } return true; }
         if ($type==='Invoice') {
             $invoiceDeletedLater = false;
-            $historicalYearId = null;
             $laterDeletionId = null;
             $itemCodes = HesabfaWebhookChangeRepository::getInvoiceItemCodes($change->ObjectId, $change->Id);
             $itemCodes = array_merge($itemCodes, explode(',', isset($change->Extra) ? (string) $change->Extra : ''));
@@ -464,8 +463,20 @@ class HesabfaWebhookService
                         if ($historical === null) {
                             throw new Exception('Hesabfa invoice was not found in any fiscal year and no later deletion was recorded.');
                         }
-                        $historicalYearId = $historical['year_id'];
-                        $r->Result = array($historical['invoice']);
+                        // Old fiscal years are outside synchronization scope. Return
+                        // before item reads, snapshots, order or loyalty callbacks;
+                        // the queue will mark this event done and advance normally.
+                        Ssbhesabfa::addLegacyLog(
+                            'Invoice ' . (int) $change->ObjectId . ' belongs to fiscal year ' . $historical['year_id']
+                            . '. Change skipped: only the current fiscal year is synchronized.',
+                            1,
+                            'WEBHOOK_HISTORICAL_INVOICE_SKIPPED',
+                            'Webhook',
+                            (int) $change->Id,
+                            true
+                        );
+
+                        return true;
                     }
                 }
                 foreach ($r->Result as $invoice) {
@@ -478,7 +489,7 @@ class HesabfaWebhookService
                     foreach ($invoice->InvoiceItems as $line) {
                         $itemCodes[] = $this->getInvoiceItemCode($line);
                     }
-                    if ($historicalYearId === null && empty($change->API) && !$this->handler->setInvoiceChanges($invoice)) {
+                    if (empty($change->API) && !$this->handler->setInvoiceChanges($invoice)) {
                         throw new Exception('Invoice change could not be applied.');
                     }
                 }
@@ -520,7 +531,7 @@ class HesabfaWebhookService
                     if (!$this->hasStoreTag($item, 'id_product')) {
                         continue;
                     }
-                    if (!$this->handler->setItemChanges($item, false, true, $historicalYearId === null && empty($change->API))) {
+                    if (!$this->handler->setItemChanges($item, false, true, empty($change->API))) {
                         throw new Exception('Invoice item change could not be applied.');
                     }
                 }
@@ -537,17 +548,6 @@ class HesabfaWebhookService
                     );
                 }
             }
-            if ($historicalYearId !== null) {
-                Ssbhesabfa::addLegacyLog(
-                    'Invoice ' . (int) $change->ObjectId . ' belongs to fiscal year ' . $historicalYearId
-                    . '. Current-year inventory was refreshed; historical invoice and loyalty callbacks were omitted.',
-                    1,
-                    'WEBHOOK_HISTORICAL_INVOICE',
-                    'Webhook',
-                    (int) $change->Id,
-                    true
-                );
-            }
             if ($invoiceDeletedLater) {
                 Ssbhesabfa::addLegacyLog(
                     'Invoice ' . (int) $change->ObjectId . ' was deleted before replay. Later deletion change: '
@@ -559,7 +559,7 @@ class HesabfaWebhookService
                     true
                 );
             }
-            if (!$invoiceDeletedLater && $historicalYearId === null && empty($change->API) && Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty') && in_array((int)$change->Action,array(121,122,123),true)) {
+            if (!$invoiceDeletedLater && empty($change->API) && Module::isInstalled('ssbprofitloyalty') && Module::isEnabled('ssbprofitloyalty') && in_array((int)$change->Action,array(121,122,123),true)) {
                 require_once _PS_MODULE_DIR_ . 'ssbprofitloyalty/ssbprofitloyalty.php'; $loyalty=new Ssbprofitloyalty();
                 if ((int)$change->Action===121) $loyalty->addInvoiceById($change->ObjectId);
                 elseif ((int)$change->Action===122) $loyalty->updateInvoiceById($change->ObjectId);

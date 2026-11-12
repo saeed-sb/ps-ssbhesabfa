@@ -384,7 +384,7 @@ fails(function () use ($probe, $change) { $probe->apply($change); }, 'Failed fal
 check($handler->stocks === array() && HesabfaApi::$requested === array(), 'Snapshot failure changed stock');
 
 
-// Incident 2265373: an old-year edit appears in today's change feed.
+// Incident 2265373: old-year changes are acknowledged without synchronization.
 function historicalFixture($api = false) {
     resetHistory();
     $change = event(2265373, '017524,017533', 122, $api, 63737);
@@ -404,27 +404,50 @@ function historicalFixture($api = false) {
     return $change;
 }
 foreach (array(false, true) as $api) {
-    $change = historicalFixture($api);
-    HesabfaApi::$stocks = array('017524' => 8, '017533' => 3);
-    $handler = new HistoryHandler();
-    check((new HistoryProbe($handler))->apply($change), 'Historical invoice did not recover');
-    check(array_column(HesabfaApi::$yearRequests, 'yearId') === array(5, 2), 'Historical lookup retried latest year or guessed year from event date');
-    check(HesabfaApi::$yearRequests[1]['idList'] === array(63737), 'Historical lookup used invoice number instead of immutable ID');
-    check($handler->invoices === 0 && Module::$calls === 0, 'Historical invoice replayed financial/loyalty callbacks');
-    check($handler->stocks === array('017524' => 8, '017533' => 3), 'Historical invoice did not use current-year stock');
-    check($handler->prices === array(false, false), 'Historical edit enabled price changes');
-    check(json_decode(Db::$rows[2265373]['invoice_item_codes'], true) === array('017524', '017533'), 'Historical item history was lost');
-    check(end(Ssbhesabfa::$logs)[2] === 'WEBHOOK_HISTORICAL_INVOICE', 'Historical completion was not audited');
+    foreach (array(121 => 0, 122 => 0, 131 => 1, 132 => 1, 141 => 2, 142 => 2, 151 => 3, 152 => 3) as $action => $type) {
+        $change = historicalFixture($api);
+        $change->Action = $action;
+        HesabfaApi::$historical[2]->Result[0]->InvoiceType = $type;
+        HesabfaApi::$stocks = array('017524' => 8, '017533' => 3);
+        $handler = new HistoryHandler();
+        check((new HistoryProbe($handler))->apply($change), 'Historical invoice was not acknowledged');
+        check(array_column(HesabfaApi::$yearRequests, 'yearId') === array(5, 2), 'Historical lookup retried latest year or guessed year from event date');
+        check(HesabfaApi::$yearRequests[1]['idList'] === array(63737), 'Historical lookup used invoice number instead of immutable ID');
+        check($handler->invoices === 0 && Module::$calls === 0, 'Historical invoice replayed financial/loyalty callbacks');
+        check($handler->stocks === array() && $handler->prices === array() && HesabfaApi::$requested === array(), 'Historical invoice fetched items or changed current-year stock/prices');
+        check(Db::$rows[2265373]['invoice_item_codes'] === null, 'Skipped historical invoice persisted item codes');
+        check(count(Ssbhesabfa::$logs) === 1 && Ssbhesabfa::$logs[0][2] === 'WEBHOOK_HISTORICAL_INVOICE_SKIPPED', 'Historical skip was not audited');
+        check(strpos(Ssbhesabfa::$logs[0][0], 'fiscal year 2') !== false, 'Historical skip omitted its fiscal year');
+    }
 }
+
+// Old item payloads and unavailable inventory cannot block an out-of-scope event.
+foreach (array(null, array((object) array()), array()) as $lines) {
+    $change = historicalFixture();
+    HesabfaApi::$historical[2]->Result[0]->InvoiceItems = $lines;
+    HesabfaApi::$fail = true;
+    Db::$writeFail = true;
+    $handler = new HistoryHandler();
+    check((new HistoryProbe($handler))->apply($change), 'Historical item payload or inventory failure blocked the queue');
+    check($handler->stocks === array() && HesabfaApi::$requested === array(), 'Skipped historical invoice queried items');
+}
+
+// A current-year invoice following an old-year event still runs normally.
 $change = historicalFixture();
-HesabfaApi::$missing = array('017524', '017533');
 $handler = new HistoryHandler();
-check((new HistoryProbe($handler))->apply($change), 'Old-year items absent from latest year blocked recovery');
-check($handler->stocks === array() && count(Ssbhesabfa::$logs) === 2, 'Missing old-year items wrote inventory or lost audit');
+$probe = new HistoryProbe($handler);
+check($probe->apply($change), 'Historical predecessor blocked processing');
+$current = event(2265374, '000008', 122);
+HesabfaApi::$invalid = '';
+HesabfaApi::$codes = array('000008');
+HesabfaApi::$stocks = array('000008' => 9);
+check($probe->apply($current), 'Current-year successor was blocked');
+check($handler->invoices === 1 && $handler->stocks === array('000008' => 9) && $handler->prices === array(true), 'Current-year synchronization changed');
+check(count(HesabfaApi::$yearRequests) === 2, 'Current-year successor searched old years');
 
 // Wrong identity/year/number/type and malformed data never authorize a skip.
 foreach (array('Id' => 999, 'Number' => '999', 'InvoiceType' => 1,
-    'Date' => '2026-11-11T00:00:00', 'InvoiceItems' => null) as $field => $value) {
+    'Date' => '2026-11-11T00:00:00') as $field => $value) {
     $change = historicalFixture();
     HesabfaApi::$historical[2]->Result[0]->$field = $value;
     $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
@@ -454,14 +477,6 @@ foreach (array(array(), array((object) array('Id' => 0)), array(
     $probe = new HistoryProbe(new HistoryHandler());
     fails(function () use ($probe, $change) { $probe->apply($change); }, 'Malformed fiscal catalog was accepted');
 }
-$change = historicalFixture(); HesabfaApi::$fail = true;
-$handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
-fails(function () use ($probe, $change) { $probe->apply($change); }, 'Failed current-year inventory refresh completed historical event');
-check(Ssbhesabfa::$logs === array() && $handler->stocks === array(), 'Failed stock refresh logged completion');
-check(json_decode(Db::$rows[2265373]['invoice_item_codes'], true) === array('017524', '017533'), 'Historical retry lost durable item codes');
-HesabfaApi::$fail = false; $change->Extra = '';
-check($probe->apply($change), 'Historical stock retry did not complete');
-
 // The upgrade is repeatable and only adds metadata and its lookup index.
 check(upgrade_module_2_3_44((object) array('name' => 'ssbhesabfa')), 'Upgrade failed');
 check(Db::$column && Db::$index && Db::$ddl === 2, 'Upgrade omitted metadata/index');
