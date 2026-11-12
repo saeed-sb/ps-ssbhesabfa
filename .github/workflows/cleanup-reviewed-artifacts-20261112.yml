@@ -1,0 +1,63 @@
+name: Clean reviewed old Actions artifacts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: cleanup-reviewed-artifacts-20261112
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'saeed-sb/ps-ssbhesabfa' && github.ref == 'refs/heads/main' && github.actor == 'saeed-sb'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete only inventoried old artifacts and verify absence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          repo=os.environ['GITHUB_REPOSITORY']
+          assert repo=="saeed-sb/ps-ssbhesabfa"
+          approved=json.loads(r'''[{"id":13147786478,"name":"site-source-ssbhesabfa-2.3.46","size_in_bytes":215680,"created_at":"2026-11-02T14:00:39Z","run_id":41457778296,"digest":"sha256:5b1aa74d883d331a3a39a55ec88dbe81af6d88d22ab41c904099ab366d60cc3d"},{"id":12460771015,"name":"site-source-ssbhesabfa-2.3.43","size_in_bytes":208489,"created_at":"2026-10-22T21:32:16Z","run_id":39857997917,"digest":"sha256:b1302fd07482eaac6d2256ed5eb5f0b216422c9672de2022c35b3aa5aa9b559f"},{"id":12294862490,"name":"site-source-ssbhesabfa-2.3.41","size_in_bytes":221025,"created_at":"2026-10-20T20:06:19Z","run_id":39489059108,"digest":"sha256:99a221adb4613f4b18f48e67fc591eeefcac61b1230e4d36e3cac812ce882757"},{"id":12116584508,"name":"site-source-ssbhesabfa-2.3.40","size_in_bytes":213313,"created_at":"2026-10-17T22:41:21Z","run_id":39076055982,"digest":"sha256:eb36ba4c0159f687084563a2fe20dd436a6f1952df31fff0e72aa1f3943f8dc3"},{"id":12110587091,"name":"site-source-ssbhesabfa-2.3.39","size_in_bytes":209476,"created_at":"2026-10-17T18:44:35Z","run_id":39059391486,"digest":"sha256:2e9644b977e739459f94a8a98b1835a955c2c4a4073f152c637755ab30d98b37"}]''')
+          base='https://api.github.com/repos/'+repo
+          headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+os.environ['GH_TOKEN'],'X-GitHub-Api-Version':'2022-11-28'}
+          def request(path,method='GET'):
+           try:
+            with urllib.request.urlopen(urllib.request.Request(base+path,headers=headers,method=method),timeout=30) as response:
+             body=response.read()
+             return response.status,json.loads(body) if body else None
+           except urllib.error.HTTPError as error:
+            if error.code==404:return 404,None
+            raise
+          removed=[]
+          already_absent=[]
+          for expected in approved:
+           status,fresh=request('/actions/artifacts/'+str(expected['id']))
+           if status==404:
+            already_absent.append(expected['id']);continue
+           assert not fresh['expired'] and fresh['created_at']<'2026-11-05T00:00:00Z'
+           for key in ['id','name','size_in_bytes','created_at','digest']:assert fresh.get(key)==expected.get(key),'Artifact metadata changed: '+key
+           assert fresh['workflow_run']['id']==expected['run_id']
+           _,run=request('/actions/runs/'+str(expected['run_id']))
+           assert run['status']=='completed'
+           status,_=request('/actions/artifacts/'+str(expected['id']),'DELETE')
+           assert status==204
+           removed.append(expected)
+          for expected in approved:
+           status,_=request('/actions/artifacts/'+str(expected['id']))
+           assert status==404,'Artifact still exists'
+          remaining=[]
+          for page in range(1,101):
+           _,data=request('/actions/artifacts?per_page=100&page='+str(page))
+           remaining+=data['artifacts']
+           if len(data['artifacts'])<100:break
+          else:raise RuntimeError('Artifact pagination limit reached')
+          report={'repository':repo,'approved_count':len(approved),'removed_count':len(removed),'removed_bytes':sum(a['size_in_bytes'] for a in removed),'already_absent':already_absent,'remaining_count':len(remaining),'remaining_bytes':sum(a['size_in_bytes'] for a in remaining if not a['expired']),'removed_ids':[a['id'] for a in removed]}
+          print('CLEANUP_REPORT='+json.dumps(report,separators=(',',':')))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+           out.write('## Reviewed artifact cleanup\n\nDeleted and verified the exact owner-authorized old build artifacts.\n\n')
+           for key in ['approved_count','removed_count','removed_bytes','remaining_count','remaining_bytes']:out.write('- '+key+': '+str(report[key])+'\n')
+          PY
