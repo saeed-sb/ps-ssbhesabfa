@@ -1,3 +1,10 @@
+## 2.3.47 - 2026-11-12
+
+- Recognize invoice creation and edit notifications from previous fiscal years using explicit yearId reads when the current-year lookup is empty and no later deletion is recorded.
+- Validate invoice identity, number, type and fiscal date, then acknowledge confirmed historical changes without importing item snapshots, stock, prices, order changes or loyalty changes. Continue ordered checkpoint advancement.
+- Preserve current-year synchronization and existing deletion recovery. Unproven missing records, malformed responses and API failures remain errors instead of being silently skipped.
+- Add regression coverage for all invoice creation/edit families, API and UI events, unavailable historical item data and a current-year event following a skipped historical event. The upgrade changes code only.
+
 ## 2.3.46 - 2026-10-28
 
 - Recover queued invoice creations and updates that return an empty successful lookup only when a validated later deletion exists for the same invoice identity and action family.

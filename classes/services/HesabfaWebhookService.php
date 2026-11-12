@@ -339,6 +339,95 @@ class HesabfaWebhookService
         return trim((string) $code);
     }
 
+    /**
+     * GetChanges can contain edits from any fiscal year, while an unscoped
+     * invoice/getById reads only the latest year. Never treat an empty result
+     * alone as proof that an invoice was deleted.
+     */
+    protected function findHistoricalInvoice($api, $change)
+    {
+        $response = $api->settingGetFiscalYears();
+        if (!is_object($response) || empty($response->Success)) {
+            $this->throwApiResponseException($response, 'Hesabfa fiscal years could not be fetched.');
+        }
+        if (!isset($response->Result) || !is_array($response->Result) || !$response->Result) {
+            throw new Exception('Hesabfa fiscal year response is incomplete.');
+        }
+
+        $years = array();
+        foreach ($response->Result as $year) {
+            if (!is_object($year) || !isset($year->Id, $year->StartDate, $year->EndDate)
+                || (!is_int($year->Id) && !is_string($year->Id))
+                || !ctype_digit((string) $year->Id) || (int) $year->Id <= 0
+                || isset($years[(int) $year->Id])) {
+                throw new Exception('Hesabfa fiscal year identity is invalid.');
+            }
+            $start = $this->getFiscalDate($year->StartDate);
+            $end = $this->getFiscalDate($year->EndDate);
+            if ($start > $end) {
+                throw new Exception('Hesabfa fiscal year dates are invalid.');
+            }
+            $years[(int) $year->Id] = array('start' => $start, 'end' => $end);
+        }
+        krsort($years, SORT_NUMERIC);
+        // yearId increases with each year; the latest was already requested.
+        unset($years[max(array_keys($years))]);
+
+        foreach ($years as $yearId => $dates) {
+            // Read only to identify the fiscal year; historical changes are not imported.
+            $response = $api->apiRequest('invoice/getById', array(
+                'idList' => array($change->ObjectId),
+                'yearId' => $yearId,
+            ));
+            if (!is_object($response) || empty($response->Success)) {
+                $this->throwApiResponseException($response, 'Historical Hesabfa invoice could not be fetched.');
+            }
+            if (!isset($response->Result) || !is_array($response->Result) || count($response->Result) > 1) {
+                throw new Exception('Historical Hesabfa invoice response is incomplete.');
+            }
+            if (!$response->Result) {
+                continue;
+            }
+            $invoice = reset($response->Result);
+            $types = array(121 => 0, 122 => 0, 131 => 1, 132 => 1,
+                141 => 2, 142 => 2, 151 => 3, 152 => 3);
+            if (!is_object($invoice) || !isset($invoice->Id, $invoice->InvoiceType, $invoice->Date)
+                || (!is_int($invoice->Id) && !is_string($invoice->Id))
+                || (string) $invoice->Id !== (string) $change->ObjectId
+                || !isset($types[(int) $change->Action])
+                || (string) $invoice->InvoiceType !== (string) $types[(int) $change->Action]) {
+                throw new Exception('Historical Hesabfa invoice identity does not match the webhook.');
+            }
+            if (isset($change->Extra2) && trim((string) $change->Extra2) !== ''
+                && (!isset($invoice->Number) || !is_scalar($invoice->Number)
+                    || (string) $invoice->Number !== trim((string) $change->Extra2))) {
+                throw new Exception('Historical Hesabfa invoice number does not match the webhook.');
+            }
+            $date = $this->getFiscalDate($invoice->Date);
+            if ($date < $dates['start'] || $date > $dates['end']) {
+                throw new Exception('Historical Hesabfa invoice is outside the requested fiscal year.');
+            }
+
+            return array('invoice' => $invoice, 'year_id' => $yearId);
+        }
+
+        return null;
+    }
+
+    protected function getFiscalDate($value)
+    {
+        if (!is_string($value)) {
+            throw new Exception('Hesabfa fiscal date is invalid.');
+        }
+        $date = substr($value, 0, 10);
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
+            throw new Exception('Hesabfa fiscal date is invalid.');
+        }
+
+        return $date;
+    }
+
     protected function processChange($change)
     {
         // API-originated invoices also change stock. Their financial callbacks
@@ -367,10 +456,28 @@ class HesabfaWebhookService
                     $laterDeletionId = HesabfaWebhookChangeRepository::getLaterInvoiceDeletionId(
                         $change->ObjectId, $change->Id, $action
                     );
-                    if ($laterDeletionId === null) {
-                        throw new Exception('Hesabfa invoice response is incomplete.');
+                    if ($laterDeletionId !== null) {
+                        $invoiceDeletedLater = true;
+                    } else {
+                        $historical = $this->findHistoricalInvoice($api, $change);
+                        if ($historical === null) {
+                            throw new Exception('Hesabfa invoice was not found in any fiscal year and no later deletion was recorded.');
+                        }
+                        // Old fiscal years are outside synchronization scope. Return
+                        // before item reads, snapshots, order or loyalty callbacks;
+                        // the queue will mark this event done and advance normally.
+                        Ssbhesabfa::addLegacyLog(
+                            'Invoice ' . (int) $change->ObjectId . ' belongs to fiscal year ' . $historical['year_id']
+                            . '. Change skipped: only the current fiscal year is synchronized.',
+                            1,
+                            'WEBHOOK_HISTORICAL_INVOICE_SKIPPED',
+                            'Webhook',
+                            (int) $change->Id,
+                            true
+                        );
+
+                        return true;
                     }
-                    $invoiceDeletedLater = true;
                 }
                 foreach ($r->Result as $invoice) {
                     if (!is_object($invoice) || !isset($invoice->Id) || (string) $invoice->Id !== (string) $change->ObjectId) {

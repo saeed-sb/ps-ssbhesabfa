@@ -74,6 +74,17 @@ class Ssbhesabfa {
 class HesabfaApi {
     public static $codes = array(), $stocks = array(), $requested = array(), $fetches = 0;
     public static $fail = false, $invalid = '', $missing = array(), $lines = null;
+    public static $years = null, $historical = array(), $yearRequests = array(), $catalogFailure = false;
+    public function settingGetFiscalYears() {
+        if (self::$catalogFailure) { return (object) array('Success' => false, 'ErrorMessage' => 'year lookup failed'); }
+        $years = self::$years === null ? array((object) array('Id' => 6, 'StartDate' => '2026-03-21', 'EndDate' => '2027-03-20')) : self::$years;
+        return (object) array('Success' => true, 'Result' => $years);
+    }
+    public function apiRequest($method, $data) {
+        check($method === 'invoice/getById' && array_keys($data) === array('idList', 'yearId'), 'Historical lookup changed unrelated request scope');
+        self::$yearRequests[] = $data;
+        return self::$historical[$data['yearId']] ?? (object) array('Success' => true, 'Result' => array());
+    }
     public function invoiceGetById($ids) {
         self::$fetches++;
         $items = array_map(function ($code) { return (object) array('ItemCode' => $code); }, self::$codes);
@@ -120,6 +131,8 @@ function resetHistory() {
     HesabfaApi::$codes = HesabfaApi::$stocks = HesabfaApi::$requested = HesabfaApi::$missing = array();
     HesabfaApi::$fetches = 0; HesabfaApi::$fail = false; HesabfaApi::$invalid = '';
     HesabfaApi::$lines = null;
+    HesabfaApi::$years = null; HesabfaApi::$historical = HesabfaApi::$yearRequests = array();
+    HesabfaApi::$catalogFailure = false;
     Module::$calls = 0; Ssbhesabfa::$logs = array();
 }
 function event($id, $extra = '', $action = 132, $api = false, $invoice = 150140) {
@@ -370,6 +383,100 @@ $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
 fails(function () use ($probe, $change) { $probe->apply($change); }, 'Failed fallback snapshot was accepted');
 check($handler->stocks === array() && HesabfaApi::$requested === array(), 'Snapshot failure changed stock');
 
+
+// Incident 2265373: old-year changes are acknowledged without synchronization.
+function historicalFixture($api = false) {
+    resetHistory();
+    $change = event(2265373, '017524,017533', 122, $api, 63737);
+    $change->Extra2 = '38962';
+    HesabfaApi::$invalid = 'empty';
+    HesabfaApi::$years = array(
+        (object) array('Id' => 2, 'StartDate' => '2021-04-03T00:00:00', 'EndDate' => '2023-03-20T00:00:00'),
+        (object) array('Id' => 6, 'StartDate' => '2026-03-21T00:00:00', 'EndDate' => '2027-03-20T00:00:00'),
+        (object) array('Id' => 5, 'StartDate' => '2025-03-21T00:00:00', 'EndDate' => '2026-03-20T00:00:00'),
+    );
+    HesabfaApi::$historical[2] = (object) array('Success' => true, 'Result' => array((object) array(
+        'Id' => 63737, 'Number' => '38962', 'Date' => '2023-03-04T00:00:00', 'InvoiceType' => 0,
+        'Tag' => '{"id_order":42}', 'InvoiceItems' => array(
+            (object) array('ItemCode' => '017524'), (object) array('ItemCode' => null, 'Item' => (object) array('Code' => '017533')),
+        ),
+    )));
+    return $change;
+}
+foreach (array(false, true) as $api) {
+    foreach (array(121 => 0, 122 => 0, 131 => 1, 132 => 1, 141 => 2, 142 => 2, 151 => 3, 152 => 3) as $action => $type) {
+        $change = historicalFixture($api);
+        $change->Action = $action;
+        HesabfaApi::$historical[2]->Result[0]->InvoiceType = $type;
+        HesabfaApi::$stocks = array('017524' => 8, '017533' => 3);
+        $handler = new HistoryHandler();
+        check((new HistoryProbe($handler))->apply($change), 'Historical invoice was not acknowledged');
+        check(array_column(HesabfaApi::$yearRequests, 'yearId') === array(5, 2), 'Historical lookup retried latest year or guessed year from event date');
+        check(HesabfaApi::$yearRequests[1]['idList'] === array(63737), 'Historical lookup used invoice number instead of immutable ID');
+        check($handler->invoices === 0 && Module::$calls === 0, 'Historical invoice replayed financial/loyalty callbacks');
+        check($handler->stocks === array() && $handler->prices === array() && HesabfaApi::$requested === array(), 'Historical invoice fetched items or changed current-year stock/prices');
+        check(Db::$rows[2265373]['invoice_item_codes'] === null, 'Skipped historical invoice persisted item codes');
+        check(count(Ssbhesabfa::$logs) === 1 && Ssbhesabfa::$logs[0][2] === 'WEBHOOK_HISTORICAL_INVOICE_SKIPPED', 'Historical skip was not audited');
+        check(strpos(Ssbhesabfa::$logs[0][0], 'fiscal year 2') !== false, 'Historical skip omitted its fiscal year');
+    }
+}
+
+// Old item payloads and unavailable inventory cannot block an out-of-scope event.
+foreach (array(null, array((object) array()), array()) as $lines) {
+    $change = historicalFixture();
+    HesabfaApi::$historical[2]->Result[0]->InvoiceItems = $lines;
+    HesabfaApi::$fail = true;
+    Db::$writeFail = true;
+    $handler = new HistoryHandler();
+    check((new HistoryProbe($handler))->apply($change), 'Historical item payload or inventory failure blocked the queue');
+    check($handler->stocks === array() && HesabfaApi::$requested === array(), 'Skipped historical invoice queried items');
+}
+
+// A current-year invoice following an old-year event still runs normally.
+$change = historicalFixture();
+$handler = new HistoryHandler();
+$probe = new HistoryProbe($handler);
+check($probe->apply($change), 'Historical predecessor blocked processing');
+$current = event(2265374, '000008', 122);
+HesabfaApi::$invalid = '';
+HesabfaApi::$codes = array('000008');
+HesabfaApi::$stocks = array('000008' => 9);
+check($probe->apply($current), 'Current-year successor was blocked');
+check($handler->invoices === 1 && $handler->stocks === array('000008' => 9) && $handler->prices === array(true), 'Current-year synchronization changed');
+check(count(HesabfaApi::$yearRequests) === 2, 'Current-year successor searched old years');
+
+// Wrong identity/year/number/type and malformed data never authorize a skip.
+foreach (array('Id' => 999, 'Number' => '999', 'InvoiceType' => 1,
+    'Date' => '2026-11-11T00:00:00') as $field => $value) {
+    $change = historicalFixture();
+    HesabfaApi::$historical[2]->Result[0]->$field = $value;
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Invalid historical invoice was accepted: ' . $field);
+    check($handler->stocks === array() && $handler->invoices === 0 && Db::$rows[2265373]['invoice_item_codes'] === null, 'Invalid historical invoice applied partial writes');
+}
+foreach (array(null, (object) array(), array((object) array(), (object) array())) as $invalidResult) {
+    $change = historicalFixture();
+    HesabfaApi::$historical[5] = (object) array('Success' => true, 'Result' => $invalidResult);
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Malformed historical response was accepted');
+    check($handler->stocks === array() && Ssbhesabfa::$logs === array(), 'Malformed historical response applied changes');
+}
+foreach (array('catalog', 'lookup', 'missing') as $failure) {
+    $change = historicalFixture();
+    if ($failure === 'catalog') { HesabfaApi::$catalogFailure = true; }
+    elseif ($failure === 'lookup') { HesabfaApi::$historical[5] = (object) array('Success' => false, 'ErrorMessage' => 'temporary failure'); }
+    else { HesabfaApi::$historical = array(); }
+    $handler = new HistoryHandler(); $probe = new HistoryProbe($handler);
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Failed/missing historical invoice was skipped');
+    check($handler->stocks === array() && Ssbhesabfa::$logs === array(), 'Failed historical lookup applied changes');
+}
+foreach (array(array(), array((object) array('Id' => 0)), array(
+    (object) array('Id' => 6, 'StartDate' => '2026-02-30', 'EndDate' => '2027-03-20')),
+    array((object) array('Id' => 6, 'StartDate' => '2027-03-21', 'EndDate' => '2026-03-20'))) as $years) {
+    $change = historicalFixture(); HesabfaApi::$years = $years;
+    $probe = new HistoryProbe(new HistoryHandler());
+    fails(function () use ($probe, $change) { $probe->apply($change); }, 'Malformed fiscal catalog was accepted');
+}
 // The upgrade is repeatable and only adds metadata and its lookup index.
 check(upgrade_module_2_3_44((object) array('name' => 'ssbhesabfa')), 'Upgrade failed');
 check(Db::$column && Db::$index && Db::$ddl === 2, 'Upgrade omitted metadata/index');
