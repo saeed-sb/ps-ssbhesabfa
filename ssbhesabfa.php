@@ -89,6 +89,7 @@ class Ssbhesabfa extends Module
     use HesabfaJobTrait;
 
     const HESABFA_DEFAULT_BANK_ACCOUNT_PATH = 'دارایی ها : دارایی های جاری : موجودی نقد و بانک : بانک';
+    const HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH = 'دارایی ها : دارایی های جاری : حساب های دریافتنی : حساب های دریافتنی';
     const HESABFA_CACHE_TTL = 3600;
     const HESABFA_BATCH_SIZE = 100;
 
@@ -190,7 +191,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.50';
+        $this->version = '2.3.51';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

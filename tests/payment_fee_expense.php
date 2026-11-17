@@ -75,6 +75,7 @@ class HesabfaApi {
             'Transactions' => array(array(
                 'Bank' => isset($target['bankCode']) ? array('Code' => $target['bankCode']) : null,
                 'Account' => $target['accountPath'] ?? null,
+                'ContactCode' => $target['contactCode'] ?? null,
                 'Reference' => $ref, 'Amount' => $amount, 'TransactionFee' => $fee,
             )));
         return self::ok(array('Number' => 7001));
@@ -98,12 +99,14 @@ class HesabfaApi {
         return isset(self::$documents[$number]) ? self::ok(self::$documents[$number]) : (object) array('Success' => false, 'ErrorCode' => 112);
     }
 }
+require dirname(__DIR__) . '/classes/HesabfaFreightPerson.php';
 require dirname(__DIR__) . '/classes/services/HesabfaPaymentFeeService.php';
 require dirname(__DIR__) . '/classes/traits/HesabfaPaymentTrait.php';
 require dirname(__DIR__) . '/classes/traits/HesabfaAdminUiTrait.php';
 class FeeSubject {
     use HesabfaPaymentTrait, HesabfaAdminUiTrait;
     const HESABFA_DEFAULT_BANK_ACCOUNT_PATH = 'Assets:Bank';
+    const HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH = 'دارایی ها : دارایی های جاری : حساب های دریافتنی : حساب های دریافتنی';
     public $operations = array(), $claim = true, $issues = array();
     public function getPaymentConfigByOrderPayment($id, $method) { return array('configuration_name' => 'SSBHESABFA_PAYMENT_METHOD_fixture', 'bank_code' => '0019'); }
     public function getPaymentMethodsName() {
@@ -242,7 +245,8 @@ function qestyarFixture($charge = 1100) {
     Order::$total = $charge;
     OrderPayment::$payment->amount = $charge;
     Configuration::$values[$mode] = OrderPayment::$payment->id;
-    Configuration::$values[$digipay . '_RECEIVABLE_ACCOUNT_PATH'] = 'Assets:Receivables:DigiPay';
+    Configuration::$values[$digipay . '_RECEIVABLE_ACCOUNT_PATH'] = 'Assets:Receivables:Legacy';
+    Configuration::$values[$digipay . '_RECEIVABLE_CONTACT_CODE'] = '000421';
     Configuration::$values[$digipay . '_EXPENSE_ACCOUNT_PATH'] = 'Expenses:DigiPay';
     Configuration::$values[$digipay . '_FEE_TYPE'] = 'percent';
     Configuration::$values[$digipay . '_FEE_PERCENT'] = 7.7;
@@ -255,14 +259,21 @@ function qestyarFixture($charge = 1100) {
 $s = qestyarFixture();
 check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment', 'expense'), 'Qestyar posts a receipt and the whole fee');
 $receipt = HesabfaApi::$receipts[0]['Transactions'][0];
-check((float) $receipt['Amount'] === 11000.0 && $receipt['TransactionFee'] === 0 && $receipt['Account'] === 'Assets:Receivables:DigiPay' && $receipt['Bank'] === null, 'The full paid invoice amount goes to receivables, without a built-in fee');
+check((float) $receipt['Amount'] === 11000.0 && $receipt['TransactionFee'] === 0
+    && $receipt['Account'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH && $receipt['ContactCode'] === '000421'
+    && $receipt['Bank'] === null, 'The full receipt uses the fixed account and the gateway contact, with no built-in fee');
 $fee = HesabfaApi::$documents[9001];
 check((float) $fee['Debit'] === 847.0 && (float) $fee['Credit'] === 847.0, 'The entire 7.7% fee is expensed');
 check($fee['Transactions'][0]['AccountPath'] === 'Expenses:DigiPay' && $fee['Transactions'][0]['Type'] === 0, 'Expense account must be debited');
-check($fee['Transactions'][1]['AccountPath'] === 'Assets:Receivables:DigiPay' && $fee['Transactions'][1]['Type'] === 1 && $fee['Transactions'][1]['BankCode'] === '', 'Gateway receivables must be credited');
+check($fee['Transactions'][1]['AccountPath'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH
+    && $fee['Transactions'][1]['ContactCode'] === '000421'
+    && $fee['Transactions'][1]['Type'] === 1 && $fee['Transactions'][1]['BankCode'] === ''
+    && $fee['Transactions'][0]['ContactCode'] === '', 'Only the receivables credit uses the gateway contact');
 check(count(HesabfaApi::$documents) === 1, 'The surcharge that was included in the sale creates no separate income');
 HesabfaApi::$writes = array();
 check($s->setOrderPayment(38015) && !HesabfaApi::$writes, 'A completed Qestyar payment does not create another receipt or expense');
+HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] = '001234';
+check(!$s->setOrderPayment(38015) && !HesabfaApi::$writes, 'A different credit contact requires reconciliation');
 
 $s = qestyarFixture(1050);
 Configuration::$values[$digipay . '_CUSTOMER_CHARGE_PERCENT'] = 5;
@@ -280,11 +291,30 @@ HesabfaApi::$writes = array();
 Configuration::$values[$mode] = 0;
 Configuration::$values[$digipay . '_QESTYAR_RECEIVABLE_FROM_PAYMENT'] = 0;
 Configuration::$values[$digipay . '_FEE_PERCENT'] = 9;
-Configuration::$values[$digipay . '_RECEIVABLE_ACCOUNT_PATH'] = 'Assets:Receivables:New';
+Configuration::$values[$digipay . '_RECEIVABLE_CONTACT_CODE'] = '000815';
 Module::$qestyarInstalled = false;
 check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('expense')
     && (float) HesabfaApi::$documents[9001]['Debit'] === 847.0
-    && HesabfaApi::$documents[9001]['Transactions'][1]['AccountPath'] === 'Assets:Receivables:DigiPay', 'A retry after switching modes uses the saved fee and account and only writes the expense');
+    && HesabfaApi::$documents[9001]['Transactions'][1]['AccountPath'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH
+    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '000421', 'A fee retry uses the stored account, fee and contact');
+
+$s = qestyarFixture();
+$payment = OrderPayment::$payment;
+$key = $s->buildOperationKey('invoice_payment', array(38015, 2080, $payment->id, $payment->transaction_id));
+$s->operations[$key] = array('status' => 'failed', 'payment_plan' => json_encode(array(
+    'receivable' => 'Assets:Receivables:Legacy',
+    'expense' => 'Expenses:DigiPay',
+    'amount' => 11000.0,
+    'fee' => 847.0,
+    'date' => $payment->date_add,
+    'reference' => $payment->transaction_id,
+    'currency' => 'IRR',
+    'project' => '',
+)));
+check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment', 'expense')
+    && HesabfaApi::$receipts[0]['Transactions'][0]['Account'] === 'Assets:Receivables:Legacy'
+    && HesabfaApi::$receipts[0]['Transactions'][0]['ContactCode'] === null
+    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '', 'Plans saved before contact mapping retry with their original payloads');
 
 $s = qestyarFixture();
 Configuration::$values[$digipay . '_FEE_TYPE'] = 'none';
@@ -294,8 +324,11 @@ $s = qestyarFixture();
 HesabfaPrestashopRepository::$verifiedProvider = 'tara';
 check(!$s->setOrderPayment(38015) && !HesabfaApi::$writes, 'A mismatched verified gateway does not post the full Qestyar payment');
 $s = qestyarFixture();
-unset(Configuration::$values[$digipay . '_RECEIVABLE_ACCOUNT_PATH']);
-check(!$s->setOrderPayment(38015) && !HesabfaApi::$writes, 'A missing account is reported before the receipt is written');
+unset(Configuration::$values[$digipay . '_RECEIVABLE_CONTACT_CODE']);
+check(!$s->setOrderPayment(38015) && !HesabfaApi::$writes, 'The old account mapping cannot replace a missing gateway contact');
+$s = qestyarFixture();
+Configuration::$values[$digipay . '_EXPENSE_ACCOUNT_PATH'] = 'حساب ها:' . FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH;
+check(!$s->setOrderPayment(38015) && !HesabfaApi::$writes, 'The same account cannot be used for expense and receivables');
 
 $s = qestyarFixture();
 Configuration::$values[$mode] = OrderPayment::$payment->id + 1;
@@ -309,6 +342,18 @@ check($s->setOrderPayment(38015) && isset(HesabfaApi::$receipts[0]['Transactions
 
 $tara = 'SSBHESABFA_PAYMENT_METHOD_' . md5('ssbpaymenthub|@provider:tara');
 $modeSuffix = '_QESTYAR_RECEIVABLE_FROM_PAYMENT';
+$s = qestyarFixture();
+HesabfaPrestashopRepository::$installmentMethods = array('ssbpaymenthub:tara');
+HesabfaPrestashopRepository::$verifiedProvider = 'tara';
+Configuration::$values[$tara . '_RECEIVABLE_CONTACT_CODE'] = '000568';
+Configuration::$values[$tara . '_FEE_TYPE'] = 'fixed';
+Configuration::$values[$tara . '_FEE_FIXED'] = 100;
+Configuration::$values[$tara . '_EXPENSE_ACCOUNT_PATH'] = 'Expenses:Tara';
+check($s->setOrderPayment(38015)
+    && HesabfaApi::$receipts[0]['Transactions'][0]['ContactCode'] === '000568'
+    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '000568'
+    && HesabfaApi::$documents[9001]['Transactions'][1]['AccountPath'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH,
+    'Another gateway uses its own contact on the same fixed ledger account');
 $s = qestyarFixture();
 Configuration::$values[$digipay . $modeSuffix] = 0;
 Configuration::$values[$tara . $modeSuffix] = OrderPayment::$payment->id;
@@ -327,43 +372,46 @@ check($s->setOrderPayment(38015) && isset(HesabfaApi::$receipts[0]['Transactions
 $s = fresh();
 $formMode = $p . $modeSuffix;
 $taraMode = $tara . $modeSuffix;
-$path = $p . '_RECEIVABLE_ACCOUNT_PATH';
-Tools::$values = array($formMode => '1', $path => 'Assets:Receivables:DigiPay');
+$contact = $p . '_RECEIVABLE_CONTACT_CODE';
+$legacyPath = $p . '_RECEIVABLE_ACCOUNT_PATH';
+Tools::$values = array($formMode => '1', $contact => '000421');
 check(!isset($s->bankValues()[$formMode]) && $s->saveBank() && Configuration::get($formMode) === false, 'Mode activation requires Qestyar even for a submitted value');
 
 $s = fresh();
 Module::$qestyarInstalled = true;
 $inputs = array_column($s->bankForm()['form']['input'], null, 'name');
-check($s->bankValues()[$formMode] === 0 && isset($inputs[$formMode], $inputs[$taraMode]) && !isset($inputs[$mode])
-    && str_contains($inputs[$path]['form_group_class'], ' hide')
-    && !str_contains($inputs[$p]['form_group_class'], ' hide'), 'Every gateway has an independent selector and initially shows only its saved mode fields');
-Tools::$values = array($formMode => '1', $path => ' Assets:Receivables:DigiPay ', $p => '0042', $p . '_FEE_PAYER' => 'merchant');
-check($s->saveBank() && Configuration::get($formMode) === 1 && Configuration::get($path) === 'Assets:Receivables:DigiPay'
+check($s->bankValues()[$formMode] === 0 && isset($inputs[$formMode], $inputs[$taraMode]) && !isset($inputs[$mode], $inputs[$legacyPath])
+    && str_contains($inputs[$contact]['form_group_class'], ' hide')
+    && !str_contains($inputs[$p]['form_group_class'], ' hide'), 'Bank mode hides the contact field and has no receivables path input');
+Tools::$values = array($formMode => '1', $contact => ' ۰۰۰۴۲۱ ', $p => '0042', $p . '_FEE_PAYER' => 'merchant');
+check($s->saveBank() && Configuration::get($formMode) === 1 && Configuration::get($contact) === '000421'
     && Configuration::get($p . '_FEE_PERCENT') === 7.7 && Configuration::get($p) === '0019'
-    && Configuration::get($p . '_FEE_PAYER') === 'customer' && $s->bankValues()[$taraMode] === 0, 'Activation saves only the current gateway and keeps its bank settings');
+    && Configuration::get($p . '_FEE_PAYER') === 'customer' && $s->bankValues()[$taraMode] === 0, 'Activation stores the contact code as text and preserves the bank settings');
 $inputs = array_column($s->bankForm()['form']['input'], null, 'name');
-check(!str_contains($inputs[$path]['form_group_class'], ' hide')
+check(!str_contains($inputs[$contact]['form_group_class'], ' hide')
     && !str_contains($inputs[$p . '_EXPENSE_ACCOUNT_PATH']['form_group_class'], ' hide')
     && str_contains($inputs[$p]['form_group_class'], ' hide')
-    && str_contains($inputs[$p . '_INCOME_ACCOUNT_PATH']['form_group_class'], ' hide'), 'The saved receivables form hides the bank and income settings');
+    && str_contains($inputs[$p . '_INCOME_ACCOUNT_PATH']['form_group_class'], ' hide'), 'Receivables mode displays the contact and fee fields');
 
 Configuration::$values[$mode] = 10;
-Tools::$values = array($formMode => '0', $path => '');
-check($s->saveBank() && Configuration::get($formMode) === 0 && Configuration::get($path) === 'Assets:Receivables:DigiPay'
-    && $s->bankValues()[$formMode] === 0 && $s->bankValues()[$taraMode] === 1, 'Switching back keeps the hidden receivable account and does not override other gateways');
+Tools::$values = array($formMode => '0', $contact => '');
+check($s->saveBank() && Configuration::get($formMode) === 0 && Configuration::get($contact) === '000421'
+    && $s->bankValues()[$formMode] === 0 && $s->bankValues()[$taraMode] === 1, 'Switching to bank mode preserves the saved contact');
 
 $s = fresh();
 Module::$qestyarInstalled = true;
-Tools::$values = array($formMode => '1', $tara => '1234');
-try {
-    $s->saveBank();
-    check(false, 'Activation needs a receivable account');
-} catch (InvalidArgumentException $e) {
-    check(Configuration::get($formMode) === false && Configuration::get($tara) === false, 'Invalid activation leaves all settings intact');
+foreach (array('', '000000', 'invalid') as $value) {
+    Tools::$values = array($formMode => '1', $contact => $value, $tara => '1234');
+    try {
+        $s->saveBank();
+        check(false, 'Activation needs a valid contact code');
+    } catch (InvalidArgumentException $e) {
+        check(Configuration::get($formMode) === false && Configuration::get($tara) === false, 'Invalid activation leaves all settings intact');
+    }
 }
-Tools::$values = array($formMode => '1', $path => 'Assets:Receivables:DigiPay');
+Tools::$values = array($formMode => '1', $contact => '000421');
 Configuration::$failedKey = $formMode;
-check(!$s->saveBank() && Configuration::get($path) === false && Configuration::get($formMode) === false, 'A failed mode write rolls back its associated account settings');
+check(!$s->saveBank() && Configuration::get($contact) === false && Configuration::get($formMode) === false, 'A failed mode write rolls back its contact setting');
 
 require dirname(__DIR__) . '/upgrade/upgrade-2.3.48.php';
 check(upgrade_module_2_3_48(null) && upgrade_module_2_3_48(null) && Db::$alterCount === 1, 'The operation journal schema upgrade is repeatable');

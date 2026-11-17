@@ -134,7 +134,7 @@ $(document).ready(function () {
         var hasFee = ['percent', 'fixed', 'shaparak_purchase'].indexOf(feeType) !== -1;
 
         show('', !receivable);
-        show('_RECEIVABLE_ACCOUNT_PATH', receivable);
+        show('_RECEIVABLE_CONTACT_CODE', receivable);
         show('_FEE_TYPE', showFees);
         show('_FEE_PERCENT', showFees && feeType === 'percent');
         show('_FEE_FIXED', showFees && feeType === 'fixed');

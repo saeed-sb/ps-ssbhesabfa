@@ -771,11 +771,11 @@ trait HesabfaAdminUiTrait
 
                 if ($qestyarInstalled) {
                     $input_array[] = array(
-                        'col' => 6,
+                        'col' => 4,
                         'type' => 'text',
-                        'name' => $paymentConfigId . '_RECEIVABLE_ACCOUNT_PATH',
-                        'label' => $this->l('Gateway receivable account path'),
-                        'desc' => $this->l('Enter the full Hesabfa receivable account path for this gateway.'),
+                        'name' => $paymentConfigId . '_RECEIVABLE_CONTACT_CODE',
+                        'label' => $this->l('Gateway contact code'),
+                        'desc' => $this->l('Enter the gateway contact code as shown in Hesabfa.'),
                         'form_group_class' => 'ssbhesabfa-payment-row',
                     );
                 }
@@ -1512,7 +1512,7 @@ trait HesabfaAdminUiTrait
                     }
                     if ($qestyarInstalled) {
                         $keys[$id . '_QESTYAR_RECEIVABLE_FROM_PAYMENT'] = (int) ($this->getQestyarReceivableFirstPayment($id) > 0);
-                        $keys[$id . '_RECEIVABLE_ACCOUNT_PATH'] = Configuration::get($id . '_RECEIVABLE_ACCOUNT_PATH');
+                        $keys[$id . '_RECEIVABLE_CONTACT_CODE'] = Configuration::get($id . '_RECEIVABLE_CONTACT_CODE');
                     }
                 }
                 break;
@@ -1592,7 +1592,7 @@ trait HesabfaAdminUiTrait
 
     private function getVisibleBankSettings($receivable, $bank, $feeType, $feePayer)
     {
-        $suffixes = $receivable ? array('_RECEIVABLE_ACCOUNT_PATH') : array('');
+        $suffixes = $receivable ? array('_RECEIVABLE_CONTACT_CODE') : array('');
         if (!$receivable && in_array((string) $bank, array('', '0', '-1'), true)) {
             return $suffixes;
         }
@@ -1630,7 +1630,7 @@ trait HesabfaAdminUiTrait
         if ($suffix === '_FEE_PAYER') {
             return $value ?: 'merchant';
         }
-        if (in_array($suffix, array('_RECEIVABLE_ACCOUNT_PATH', '_EXPENSE_ACCOUNT_PATH'), true)) {
+        if (in_array($suffix, array('_RECEIVABLE_CONTACT_CODE', '_EXPENSE_ACCOUNT_PATH'), true)) {
             return trim((string) $value);
         }
 
@@ -1680,7 +1680,15 @@ trait HesabfaAdminUiTrait
                 if (!is_scalar($value) || ($suffix === '' && (string) $value === '0')) {
                     continue;
                 }
-                $value = $this->normalizeBankSetting($suffix, $value);
+                if ($suffix === '_RECEIVABLE_CONTACT_CODE') {
+                    try {
+                        $value = HesabfaFreightPerson::normalizeCode($value);
+                    } catch (InvalidArgumentException $e) {
+                        throw new InvalidArgumentException(sprintf($this->l('Enter a valid gateway contact code for %s.'), $item['name']), 0, $e);
+                    }
+                } else {
+                    $value = $this->normalizeBankSetting($suffix, $value);
+                }
                 if ($value !== $this->normalizeBankSetting($suffix, $formValues[$key])) {
                     $gatewaySettings[$key] = $value;
                 }
@@ -1689,16 +1697,16 @@ trait HesabfaAdminUiTrait
             $modeChanged = (int) $selection !== $previousMode;
             if ($receivable && ($modeChanged || $gatewaySettings)) {
                 $values = $gatewaySettings + $formValues;
-                $receivablePath = trim((string) $values[$id . '_RECEIVABLE_ACCOUNT_PATH']);
+                $contactCode = trim((string) $values[$id . '_RECEIVABLE_CONTACT_CODE']);
                 $expensePath = trim((string) $values[$id . '_EXPENSE_ACCOUNT_PATH']);
                 $feeType = $values[$id . '_FEE_TYPE'];
                 $hasFee = $feeType === 'shaparak_purchase'
                     || ($feeType === 'percent' && (float) $values[$id . '_FEE_PERCENT'] > 0)
                     || ($feeType === 'fixed' && (float) $values[$id . '_FEE_FIXED'] > 0);
-                if ($receivablePath === '') {
-                    throw new InvalidArgumentException(sprintf($this->l('Enter the receivable account path for %s.'), $item['name']));
+                if ($contactCode === '') {
+                    throw new InvalidArgumentException(sprintf($this->l('Enter a valid gateway contact code for %s.'), $item['name']));
                 }
-                if ($hasFee && ($expensePath === '' || $expensePath === $receivablePath)) {
+                if ($hasFee && ($expensePath === '' || $this->isQestyarReceivableAccountPath($expensePath))) {
                     throw new InvalidArgumentException(sprintf($this->l('Enter a separate fee expense account path for %s.'), $item['name']));
                 }
             }

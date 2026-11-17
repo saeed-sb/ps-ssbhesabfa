@@ -385,6 +385,7 @@ class HesabfaApi
          *
          * array('bankCode' => 12)
          * array('accountPath' => 'Income: Payment fee income')
+         * array('accountPath' => 'Assets:Current assets:Accounts receivable', 'contactCode' => '10001')
          * array('contactCode' => '10001')
          * array('cashCode' => 1)
          * array('pettyCashCode' => 2)
@@ -402,36 +403,24 @@ class HesabfaApi
                 'pettyCashCode',
             );
 
-            $selectedTargetKey = null;
-            $selectedTargetValue = null;
-
-            foreach ($allowedTargets as $targetKey) {
-                if (
-                    isset($paymentTarget[$targetKey])
-                    && $paymentTarget[$targetKey] !== ''
-                    && $paymentTarget[$targetKey] !== null
-                    && $paymentTarget[$targetKey] !== false
-                ) {
-                    if ($selectedTargetKey !== null) {
-                        return (object) array(
-                            'Success' => false,
-                            'ErrorCode' => 'INVALID_PAYMENT_TARGET',
-                            'ErrorMessage' => 'Only one of bankCode, accountPath, contactCode, cashCode, pettyCashCode can be set.',
-                        );
-                    }
-
-                    $selectedTargetKey = $targetKey;
-                    $selectedTargetValue = $paymentTarget[$targetKey];
+            $targets = array();
+            foreach ($allowedTargets as $key) {
+                if (!isset($paymentTarget[$key]) || $paymentTarget[$key] === '' || $paymentTarget[$key] === false) {
+                    continue;
                 }
+                $targets[$key] = in_array($key, array('bankCode', 'cashCode', 'pettyCashCode'), true)
+                    ? (int) $paymentTarget[$key]
+                    : (string) $paymentTarget[$key];
             }
 
-            if ($selectedTargetKey !== null) {
-                if (in_array($selectedTargetKey, array('bankCode', 'cashCode', 'pettyCashCode'))) {
-                    $data[$selectedTargetKey] = (int) $selectedTargetValue;
-                } else {
-                    $data[$selectedTargetKey] = (string) $selectedTargetValue;
-                }
+            if (count($targets) > 1 && array_keys($targets) !== array('accountPath', 'contactCode')) {
+                return (object) array(
+                    'Success' => false,
+                    'ErrorCode' => 'INVALID_PAYMENT_TARGET',
+                    'ErrorMessage' => 'Select one payment target or supply an account path with a contact code.',
+                );
             }
+            $data += $targets;
         } else {
             /*
              * Backward compatibility:

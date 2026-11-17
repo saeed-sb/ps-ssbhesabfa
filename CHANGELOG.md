@@ -1,3 +1,8 @@
+## 2.3.51 - 2026-11-17
+
+- Use the standard accounts receivable ledger for Qestyar receipts and fee expense credits. Configure the Hesabfa contact code separately for each gateway.
+- Keep the original accounts and contact code of any saved receipt plan when retrying.
+
 ## 2.3.50 - 2026-11-17
 
 - Rename the per-gateway payment receipt posting method field in English and Persian.

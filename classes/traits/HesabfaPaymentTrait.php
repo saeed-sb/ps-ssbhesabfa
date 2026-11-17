@@ -928,7 +928,8 @@ trait HesabfaPaymentTrait
     {
         if (!empty($operation['payment_plan'])) {
             $plan = json_decode($operation['payment_plan'], true);
-            if (!isset($plan['receivable'], $plan['expense'], $plan['amount'], $plan['fee'], $plan['date'], $plan['reference'], $plan['currency'], $plan['project'])) {
+            if (!isset($plan['receivable'], $plan['expense'], $plan['amount'], $plan['fee'], $plan['date'], $plan['reference'], $plan['currency'], $plan['project'])
+                || (array_key_exists('contact_code', $plan) && (!is_string($plan['contact_code']) || empty($plan['contact_code'])))) {
                 throw new RuntimeException('The saved Qestyar payment plan is invalid.');
             }
             return $plan;
@@ -974,12 +975,15 @@ trait HesabfaPaymentTrait
             return null;
         }
 
-        $receivable = trim((string) Configuration::get($configurationName . '_RECEIVABLE_ACCOUNT_PATH'));
+        $contactCode = HesabfaFreightPerson::normalizeCode((string) Configuration::get($configurationName . '_RECEIVABLE_CONTACT_CODE'));
+        if ($contactCode === '') {
+            throw new RuntimeException('Set the Hesabfa contact code for this Qestyar gateway.');
+        }
         $expense = trim((string) Configuration::get($configurationName . '_EXPENSE_ACCOUNT_PATH'));
         $amount = round($this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, (int) $order->id), 2);
         $fee = round($this->getPaymentTransactionFee($configurationName, $amount), 2);
-        if ($receivable === '' || ($fee > 0 && ($expense === '' || $expense === $receivable))) {
-            throw new RuntimeException('Set the Qestyar receivable and fee expense account paths for this gateway.');
+        if ($fee > 0 && ($expense === '' || $this->isQestyarReceivableAccountPath($expense))) {
+            throw new RuntimeException('Set a separate fee expense account path for this Qestyar gateway.');
         }
 
         $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
@@ -990,7 +994,8 @@ trait HesabfaPaymentTrait
         }
 
         return array(
-            'receivable' => $receivable,
+            'receivable' => self::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH,
+            'contact_code' => $contactCode,
             'expense' => $expense,
             'amount' => $amount,
             'fee' => $fee,
@@ -999,6 +1004,15 @@ trait HesabfaPaymentTrait
             'currency' => $currency->iso_code,
             'project' => (string) Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
         );
+    }
+
+    private function isQestyarReceivableAccountPath($path)
+    {
+        $pattern = '/[\s\p{Z}\x{200C}]+/u';
+        $path = preg_replace($pattern, '', $path);
+        $receivable = preg_replace($pattern, '', self::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH);
+
+        return $path === $receivable || $path === 'حسابها:' . $receivable;
     }
 
     private function checkQestyarGatewayMismatch($verifiedConfigurationName, array $methods, $order, $payment)
@@ -1027,9 +1041,13 @@ trait HesabfaPaymentTrait
                 return array('success' => false, 'response' => null);
             }
 
+            $target = array('accountPath' => $plan['receivable']);
+            if (isset($plan['contact_code'])) {
+                $target['contactCode'] = $plan['contact_code'];
+            }
             $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSavePayment(
                 $invoice,
-                array('accountPath' => $plan['receivable']),
+                $target,
                 $plan['date'],
                 $plan['amount'],
                 $plan['reference'],
@@ -1069,6 +1087,7 @@ trait HesabfaPaymentTrait
                 'expense_account_path' => $plan['expense'],
                 'expense_amount' => $plan['fee'],
                 'receivable_account_path' => $plan['receivable'],
+                'receivable_contact_code' => $plan['contact_code'] ?? null,
                 'currency' => $plan['currency'],
                 'project' => $plan['project'],
             ),
@@ -1525,6 +1544,8 @@ trait HesabfaPaymentTrait
         );
         if ($receivable === null) {
             $creditLine['bankCode'] = $bankCode;
+        } elseif (isset($breakdown['receivable_contact_code'])) {
+            $creditLine['contactCode'] = $breakdown['receivable_contact_code'];
         }
         $document = array(
             'number' => 0, 'reference' => 0, 'date' => $date, 'description' => $description,
@@ -1574,6 +1595,7 @@ trait HesabfaPaymentTrait
         $currency = $breakdown['currency'] ?? (new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY')))->iso_code;
         $receivable = $breakdown['receivable_account_path'] ?? null;
         $creditPath = $receivable ?? self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH;
+        $expectedContactCode = $breakdown['receivable_contact_code'] ?? null;
         $expense = false;
         $credit = false;
         foreach ($doc['Transactions'] as $t) {
@@ -1583,9 +1605,14 @@ trait HesabfaPaymentTrait
             $account = preg_replace('/\s*:\s*/u', ':', trim($t['AccountPath']));
             if ((int) $t['Type'] === 0 && empty($t['BankCode']) && empty($t['ContactCode'])
                 && $account === preg_replace('/\s*:\s*/u', ':', trim($breakdown['expense_account_path']))) { $expense = true; }
-            $matchesCreditTarget = $receivable === null
-                ? isset($t['BankCode']) && (int) $t['BankCode'] === (int) $bankCode
-                : empty($t['BankCode']) && empty($t['ContactCode']);
+            if ($receivable === null) {
+                $matchesCreditTarget = isset($t['BankCode']) && (int) $t['BankCode'] === (int) $bankCode;
+            } else {
+                $matchesContact = $expectedContactCode === null
+                    ? empty($t['ContactCode'])
+                    : (string) ($t['ContactCode'] ?? '') === $expectedContactCode;
+                $matchesCreditTarget = empty($t['BankCode']) && $matchesContact;
+            }
             if ((int) $t['Type'] === 1 && $matchesCreditTarget
                 && $account === preg_replace('/\s*:\s*/u', ':', trim($creditPath))) { $credit = true; }
         }
