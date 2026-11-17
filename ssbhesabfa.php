@@ -149,6 +149,7 @@ class Ssbhesabfa extends Module
     private $configurations = array(
         'SSBHESABFA_LIVE_MODE' => 0,
         'SSBHESABFA_SYNC_ENABLED' => 1,
+        'SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT' => 0,
         'SSBHESABFA_DEBUG_MODE' => 0,
         'SSBHESABFA_DELETE_DATA_ON_UNINSTALL' => 0,
         'SSBHESABFA_ASYNC_ORDER_SYNC' => 0,
@@ -189,7 +190,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.47';
+        $this->version = '2.3.48';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

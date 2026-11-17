@@ -85,6 +85,7 @@ $query = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'ssb_hesabfa_operation` 
     `request_unique_ids` mediumtext DEFAULT NULL,
     `request_unique_ids_created_at` datetime DEFAULT NULL,
     `date_add` datetime NOT NULL,
+    `payment_plan` text DEFAULT NULL,
     `date_upd` datetime NOT NULL,
     PRIMARY KEY (`id_ssb_hesabfa_operation`),
     UNIQUE KEY `uniq_operation_key` (`operation_key`),

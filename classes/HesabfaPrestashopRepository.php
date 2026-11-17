@@ -88,6 +88,44 @@ class HesabfaPrestashopRepository
         return (bool) Db::getInstance()->getValue($query);
     }
 
+    public static function getInstallmentPaymentModules($idOrder)
+    {
+        // Vendor Pay records the selected vendor and gateway on the order lines.
+        $query = new DbQuery();
+        $query->select('DISTINCT `payment_module`');
+        $query->from('installment_order_detail');
+        $query->where('`id_order` = ' . (int) $idOrder);
+        $query->where("`vendor_type` = 'installment'");
+        $rows = Db::getInstance()->executeS($query, true, false);
+        if (!is_array($rows)) {
+            throw new RuntimeException('The Qestyar order details could not be read.');
+        }
+
+        return array_column($rows, 'payment_module');
+    }
+
+    public static function getVerifiedCheckoutProvider($order, $payment)
+    {
+        $reference = pSQL((string) $payment->transaction_id);
+        $query = new DbQuery();
+        $query->select('DISTINCT `provider`');
+        $query->from('ssbph_transaction');
+        $query->where('`id_shop` = ' . (int) $order->id_shop);
+        $query->where('`id_cart` = ' . (int) $order->id_cart);
+        // The confirmation hook can run before Payment Hub attaches the order.
+        $query->where('(`id_order` IS NULL OR `id_order` = ' . (int) $order->id . ')');
+        $query->where('`flow_version` = 2 AND `verified_at` IS NOT NULL');
+        $query->where('`id_currency` = ' . (int) $payment->id_currency);
+        $query->where('ABS(`cart_amount` - ' . (float) $payment->amount . ') <= 0.01');
+        $query->where("COALESCE(NULLIF(`tracking_code`, ''), `ref_num`) = '" . $reference . "'");
+        $rows = Db::getInstance()->executeS($query, true, false);
+        if (!is_array($rows)) {
+            throw new RuntimeException('The verified Payment Hub transaction could not be read.');
+        }
+
+        return count($rows) === 1 ? (string) $rows[0]['provider'] : '';
+    }
+
     public static function getOrderModuleName($idOrder)
     {
         $idOrder = (int) $idOrder;
