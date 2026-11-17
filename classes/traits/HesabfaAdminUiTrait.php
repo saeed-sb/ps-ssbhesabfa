@@ -659,24 +659,6 @@ trait HesabfaAdminUiTrait
     {
         $input_array = array();
         $qestyarInstalled = Module::isInstalled('wavendorpay');
-        if ($qestyarInstalled) {
-            $input_array[] = array(
-                'col' => 5,
-                'type' => 'select',
-                'name' => 'SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT',
-                'label' => $this->l('Qestyar installment accounting'),
-                'desc' => $this->l('Applies to new Qestyar installment payments. Set the gateway receivable and fee expense account paths below.'),
-                'options' => array(
-                    'query' => array(
-                        array('id' => 0, 'name' => $this->l('Existing accounting method')),
-                        array('id' => 1, 'name' => $this->l('Gateway receivables and fee expense')),
-                    ),
-                    'id' => 'id',
-                    'name' => 'name',
-                ),
-            );
-        }
-
         $bank_options = array(
             array(
                 'id_option' => -1,
@@ -745,12 +727,31 @@ trait HesabfaAdminUiTrait
                     'html_content' => '
                     <div class="ssbhesabfa-payment-block-title">
                         <strong>' . htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') . '</strong>
-                        <span>' . $this->l('Bank and fee settings') . '</span>
                     </div>
                 ',
                     'form_group_class' => 'ssbhesabfa-payment-block-start',
                 );
 
+                $receivable = $qestyarInstalled && $this->getQestyarReceivableFirstPayment($paymentConfigId) > 0;
+                if ($qestyarInstalled) {
+                    $input_array[] = array(
+                        'col' => 5,
+                        'type' => 'select',
+                        'name' => $paymentConfigId . '_QESTYAR_RECEIVABLE_FROM_PAYMENT',
+                        'label' => $this->l('Qestyar installment accounting'),
+                        'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-payment-mode-row',
+                        'options' => array(
+                            'query' => array(
+                                array('id' => 0, 'name' => $this->l('Bank receipt with fee calculation')),
+                                array('id' => 1, 'name' => $this->l('Gateway receivables and fee expense')),
+                            ),
+                            'id' => 'id',
+                            'name' => 'name',
+                        ),
+                    );
+                }
+
+                $firstSetting = count($input_array);
                 /*
                  * Bank select
                  */
@@ -873,10 +874,8 @@ trait HesabfaAdminUiTrait
                     'type' => 'text',
                     'name' => $paymentConfigId . '_EXPENSE_ACCOUNT_PATH',
                     'label' => $this->l('Fee expense account path'),
-                    'desc' => $qestyarInstalled
-                        ? $this->l('Enter the Hesabfa expense account path. In Qestyar receivables mode the full fee is posted to this account.')
-                        : $this->l('Used for the part of the gateway fee not covered by the customer extra charge. Enter the exact Hesabfa expense account path.'),
-                    'form_group_class' => $qestyarInstalled ? 'ssbhesabfa-payment-row' : 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
+                    'desc' => $this->l('Enter the exact Hesabfa expense account path.'),
+                    'form_group_class' => 'ssbhesabfa-payment-row',
                 );
 
                 /*
@@ -891,6 +890,19 @@ trait HesabfaAdminUiTrait
                     'desc' => $this->l('Optional. Used in payment fee income accounting document for this payment method. If empty, contactCode will not be sent to Hesabfa.'),
                     'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-customer-fee-row',
                 );
+
+                $visible = $this->getVisibleBankSettings(
+                    $receivable,
+                    Configuration::get($paymentConfigId),
+                    Configuration::get($paymentConfigId . '_FEE_TYPE'),
+                    Configuration::get($paymentConfigId . '_FEE_PAYER')
+                );
+                for ($index = $firstSetting, $end = count($input_array); $index < $end; ++$index) {
+                    $suffix = substr($input_array[$index]['name'], strlen($paymentConfigId));
+                    if (!in_array($suffix, $visible, true)) {
+                        $input_array[$index]['form_group_class'] .= ' hide';
+                    }
+                }
             }
         } else {
             Configuration::updateValue('SSBHESABFA_LIVE_MODE', false);
@@ -1489,28 +1501,19 @@ trait HesabfaAdminUiTrait
             case 'Bank':
                 $keys = array();
                 $qestyarInstalled = Module::isInstalled('wavendorpay');
-                if ($qestyarInstalled) {
-                    $key = 'SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT';
-                    $keys[$key] = (int) ((int) Configuration::get($key) > 0);
-                }
-
                 foreach ($this->getPaymentMethodsName() as $item) {
-                    $keys[$item['id'] . '_TITLE'] = '';
-                    $keys[$item['id']] = Configuration::get($item['id']);
-                    if ($qestyarInstalled) {
-                        $key = $item['id'] . '_RECEIVABLE_ACCOUNT_PATH';
-                        $keys[$key] = Configuration::get($key);
+                    $id = $item['id'];
+                    $keys[$id . '_TITLE'] = '';
+                    $keys[$id] = Configuration::get($id);
+                    $keys[$id . '_FEE_TYPE'] = Configuration::get($id . '_FEE_TYPE') ?: 'none';
+                    $keys[$id . '_FEE_PAYER'] = Configuration::get($id . '_FEE_PAYER') ?: 'merchant';
+                    foreach (array('_FEE_PERCENT', '_FEE_FIXED', '_CUSTOMER_CHARGE_PERCENT', '_INCOME_ACCOUNT_PATH', '_EXPENSE_ACCOUNT_PATH', '_FEE_INCOME_CONTACT_CODE') as $suffix) {
+                        $keys[$id . $suffix] = Configuration::get($id . $suffix);
                     }
-
-                    $keys[$item['id'] . '_FEE_TYPE'] = Configuration::get($item['id'] . '_FEE_TYPE');
-                    $keys[$item['id'] . '_FEE_PERCENT'] = Configuration::get($item['id'] . '_FEE_PERCENT');
-                    $keys[$item['id'] . '_FEE_FIXED'] = Configuration::get($item['id'] . '_FEE_FIXED');
-
-                    $keys[$item['id'] . '_FEE_PAYER'] = Configuration::get($item['id'] . '_FEE_PAYER');
-                    $keys[$item['id'] . '_CUSTOMER_CHARGE_PERCENT'] = Configuration::get($item['id'] . '_CUSTOMER_CHARGE_PERCENT');
-                    $keys[$item['id'] . '_INCOME_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_INCOME_ACCOUNT_PATH');
-                    $keys[$item['id'] . '_EXPENSE_ACCOUNT_PATH'] = Configuration::get($item['id'] . '_EXPENSE_ACCOUNT_PATH');
-                    $keys[$item['id'] . '_FEE_INCOME_CONTACT_CODE'] = Configuration::get($item['id'] . '_FEE_INCOME_CONTACT_CODE');
+                    if ($qestyarInstalled) {
+                        $keys[$id . '_QESTYAR_RECEIVABLE_FROM_PAYMENT'] = (int) ($this->getQestyarReceivableFirstPayment($id) > 0);
+                        $keys[$id . '_RECEIVABLE_ACCOUNT_PATH'] = Configuration::get($id . '_RECEIVABLE_ACCOUNT_PATH');
+                    }
                 }
                 break;
             case 'AccountingText':
@@ -1587,6 +1590,166 @@ trait HesabfaAdminUiTrait
         return $keys;
     }
 
+    private function getVisibleBankSettings($receivable, $bank, $feeType, $feePayer)
+    {
+        $suffixes = $receivable ? array('_RECEIVABLE_ACCOUNT_PATH') : array('');
+        if (!$receivable && in_array((string) $bank, array('', '0', '-1'), true)) {
+            return $suffixes;
+        }
+
+        $suffixes[] = '_FEE_TYPE';
+        if ($feeType === 'percent') {
+            $suffixes[] = '_FEE_PERCENT';
+        } elseif ($feeType === 'fixed') {
+            $suffixes[] = '_FEE_FIXED';
+        }
+
+        if ($receivable) {
+            if (in_array($feeType, array('percent', 'fixed', 'shaparak_purchase'), true)) {
+                $suffixes[] = '_EXPENSE_ACCOUNT_PATH';
+            }
+        } else {
+            $suffixes[] = '_FEE_PAYER';
+            if ($feePayer === 'customer') {
+                array_push($suffixes, '_CUSTOMER_CHARGE_PERCENT', '_INCOME_ACCOUNT_PATH', '_EXPENSE_ACCOUNT_PATH', '_FEE_INCOME_CONTACT_CODE');
+            }
+        }
+
+        return $suffixes;
+    }
+
+    private function normalizeBankSetting($suffix, $value)
+    {
+        if (in_array($suffix, array('_FEE_PERCENT', '_FEE_FIXED', '_CUSTOMER_CHARGE_PERCENT'), true)) {
+            $value = trim(str_replace(',', '.', (string) $value));
+            return is_numeric($value) ? $value : '0';
+        }
+        if ($suffix === '_FEE_TYPE') {
+            return $value ?: 'none';
+        }
+        if ($suffix === '_FEE_PAYER') {
+            return $value ?: 'merchant';
+        }
+        if (in_array($suffix, array('_RECEIVABLE_ACCOUNT_PATH', '_EXPENSE_ACCOUNT_PATH'), true)) {
+            return trim((string) $value);
+        }
+
+        return (string) $value;
+    }
+
+    private function setBankConfigFormValues()
+    {
+        if (!HesabfaLock::acquire('payment-settings')) {
+            return false;
+        }
+
+        try {
+            if (method_exists('Configuration', 'resetStaticCache')) {
+                Configuration::resetStaticCache();
+            }
+            return $this->saveBankSettings();
+        } finally {
+            HesabfaLock::release('payment-settings');
+        }
+    }
+
+    private function saveBankSettings()
+    {
+        $qestyarInstalled = Module::isInstalled('wavendorpay');
+        $formValues = $this->getConfigFormValues('Bank');
+        $settings = array();
+        $modeChanges = array();
+        foreach ($this->getPaymentMethodsName() as $item) {
+            $id = $item['id'];
+            $modeKey = $id . '_QESTYAR_RECEIVABLE_FROM_PAYMENT';
+            $previousMode = $formValues[$modeKey] ?? 0;
+            $selection = $qestyarInstalled ? Tools::getValue($modeKey, $previousMode) : 0;
+            if (!in_array($selection, array(0, 1, '0', '1'), true)) {
+                throw new InvalidArgumentException(sprintf($this->l('Select an installment accounting method for %s.'), $item['name']));
+            }
+            $receivable = (int) $selection === 1;
+            $bank = Tools::getValue($id, $formValues[$id]);
+            $feeType = Tools::getValue($id . '_FEE_TYPE', $formValues[$id . '_FEE_TYPE']);
+            $feePayer = Tools::getValue($id . '_FEE_PAYER', $formValues[$id . '_FEE_PAYER']);
+            $visible = $this->getVisibleBankSettings($receivable, is_scalar($bank) ? $bank : '', $feeType, $feePayer);
+
+            $gatewaySettings = array();
+            foreach ($visible as $suffix) {
+                $key = $id . $suffix;
+                $value = Tools::getValue($key, null);
+                if (!is_scalar($value) || ($suffix === '' && (string) $value === '0')) {
+                    continue;
+                }
+                $value = $this->normalizeBankSetting($suffix, $value);
+                if ($value !== $this->normalizeBankSetting($suffix, $formValues[$key])) {
+                    $gatewaySettings[$key] = $value;
+                }
+            }
+
+            $modeChanged = (int) $selection !== $previousMode;
+            if ($receivable && ($modeChanged || $gatewaySettings)) {
+                $values = $gatewaySettings + $formValues;
+                $receivablePath = trim((string) $values[$id . '_RECEIVABLE_ACCOUNT_PATH']);
+                $expensePath = trim((string) $values[$id . '_EXPENSE_ACCOUNT_PATH']);
+                $feeType = $values[$id . '_FEE_TYPE'];
+                $hasFee = $feeType === 'shaparak_purchase'
+                    || ($feeType === 'percent' && (float) $values[$id . '_FEE_PERCENT'] > 0)
+                    || ($feeType === 'fixed' && (float) $values[$id . '_FEE_FIXED'] > 0);
+                if ($receivablePath === '') {
+                    throw new InvalidArgumentException(sprintf($this->l('Enter the receivable account path for %s.'), $item['name']));
+                }
+                if ($hasFee && ($expensePath === '' || $expensePath === $receivablePath)) {
+                    throw new InvalidArgumentException(sprintf($this->l('Enter a separate fee expense account path for %s.'), $item['name']));
+                }
+            }
+
+            $settings += $gatewaySettings;
+            if ($modeChanged) {
+                $modeChanges[$modeKey] = $receivable;
+            }
+        }
+
+        $nextPayment = 0;
+        if (in_array(true, $modeChanges, true)) {
+            $nextPayment = (int) Db::getInstance()->getValue(
+                'SELECT COALESCE(MAX(`id_order_payment`), 0) + 1 FROM `' . _DB_PREFIX_ . 'order_payment`',
+                false
+            );
+            if ($nextPayment < 1) {
+                return false;
+            }
+        }
+        foreach ($modeChanges as $key => $receivable) {
+            $settings[$key] = $receivable ? $nextPayment : 0;
+        }
+
+        if (!$settings) {
+            return true;
+        }
+
+        $db = Db::getInstance();
+        if (!$db->execute('START TRANSACTION')) {
+            return false;
+        }
+        $committed = false;
+        try {
+            foreach ($settings as $key => $value) {
+                if (!Configuration::updateValue($key, $value)) {
+                    return false;
+                }
+            }
+            $committed = $db->execute('COMMIT');
+            return $committed;
+        } finally {
+            if (!$committed) {
+                $db->execute('ROLLBACK');
+                if (method_exists('Configuration', 'resetStaticCache')) {
+                    Configuration::resetStaticCache();
+                }
+            }
+        }
+    }
+
     protected function setConfigFormsValues($form = null)
     {
         if ($form === 'FreightPerson') {
@@ -1595,88 +1758,19 @@ trait HesabfaAdminUiTrait
         if ($form === 'Invoice') {
             return $this->setInvoiceConfigFormValues();
         }
+        if ($form === 'Bank') {
+            return $this->setBankConfigFormValues();
+        }
         $form_values = $this->getConfigFormValues($form);
         $success = true;
-        $receivableMode = 'SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT';
 
         foreach (array_keys($form_values) as $key) {
-            if ($key === $receivableMode || in_array($key, array('SSBHESABFA_ACCOUNT_PASSWORD_CLEAR','SSBHESABFA_ACCOUNT_API_CLEAR','SSBHESABFA_ACCOUNT_TOKEN_CLEAR'), true)) { continue; }
-            $value = Tools::getValue($key, $form === 'Bank' ? null : false);
-            if ($form === 'Bank' && !is_scalar($value)) {
-                continue;
-            }
-            if (strpos($key, '_RECEIVABLE_ACCOUNT_PATH') !== false) {
-                if (!is_string($value)) {
-                    continue;
-                }
-                $value = trim($value);
-            }
-
-            // Don't replace password with null if password not entered
+            if (in_array($key, array('SSBHESABFA_ACCOUNT_PASSWORD_CLEAR','SSBHESABFA_ACCOUNT_API_CLEAR','SSBHESABFA_ACCOUNT_TOKEN_CLEAR'), true)) { continue; }
+            $value = Tools::getValue($key, false);
             $control1 = in_array($key, array('SSBHESABFA_ACCOUNT_PASSWORD', 'SSBHESABFA_ACCOUNT_API', 'SSBHESABFA_ACCOUNT_TOKEN'), true) && ($value === null || $value === '' || !is_string($value));
             if ($control1 && in_array(Tools::getValue($key . '_CLEAR'), array('1',1), true)) { $value = ''; $control1 = false; }
-
-            // Don't add bank map if bank is not defined in Hesabfa
-            // Only the bank field, not fee-related fields.
-            $isPaymentBankField =
-                strpos($key, 'SSBHESABFA_PAYMENT_METHOD_') !== false
-                && strpos($key, '_TITLE') === false
-                && strpos($key, '_FEE_TYPE') === false
-                && strpos($key, '_FEE_PERCENT') === false
-                && strpos($key, '_FEE_FIXED') === false
-                && strpos($key, '_FEE_PAYER') === false
-                && strpos($key, '_CUSTOMER_CHARGE_PERCENT') === false
-                && strpos($key, '_INCOME_ACCOUNT_PATH') === false
-                && strpos($key, '_EXPENSE_ACCOUNT_PATH') === false
-                && strpos($key, '_RECEIVABLE_ACCOUNT_PATH') === false
-                && strpos($key, '_FEE_INCOME_CONTACT_CODE') === false;
-
-            $control2 = $isPaymentBankField && ($value === '0' || $value === 0);
-
-            if ($control1 || $control2 || strpos($key, '_TITLE') !== false) {
-                continue;
-            }
-
-            // Default fee type
-            if (strpos($key, '_FEE_TYPE') !== false && ($value === null || $value === '')) {
-                $value = 'none';
-            }
-
-            // Normalize percent and fixed fee values
-            if (
-                strpos($key, '_FEE_PERCENT') !== false
-                || strpos($key, '_FEE_FIXED') !== false
-                || strpos($key, '_CUSTOMER_CHARGE_PERCENT') !== false
-            ) {
-                $value = str_replace(',', '.', (string) $value);
-                $value = trim($value);
-
-                if ($value === '' || !is_numeric($value)) {
-                    $value = 0;
-                }
-            }
-
-            if (strpos($key, '_FEE_PAYER') !== false && ($value === null || $value === '')) {
-                $value = 'merchant';
-            }
-
-            if (!Configuration::updateValue($key, $value)) {
+            if (!$control1 && !Configuration::updateValue($key, $value)) {
                 $success = false;
-            }
-        }
-
-        if ($success && isset($form_values[$receivableMode])) {
-            $selected = Tools::getValue($receivableMode);
-            $firstPayment = (int) Configuration::get($receivableMode);
-            if (in_array($selected, array('1', 1), true) && $firstPayment <= 0) {
-                $nextPayment = (int) Db::getInstance()->getValue(
-                    'SELECT COALESCE(MAX(`id_order_payment`), 0) + 1 FROM `' . _DB_PREFIX_ . 'order_payment`',
-                    false
-                );
-                $success = $nextPayment > 0 && Configuration::updateValue($receivableMode, $nextPayment);
-            } elseif (in_array($selected, array('0', 0), true) && $firstPayment > 0) {
-                // Keep the cutoff for retries of payments that already have an accounting plan.
-                $success = Configuration::updateValue($receivableMode, -$firstPayment);
             }
         }
 

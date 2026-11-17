@@ -108,38 +108,44 @@
 })(jQuery);
 
 $(document).ready(function () {
-    function ssbhesabfaTogglePaymentFeeBlock(bankSelectElement) {
-        var bankSelectName = $(bankSelectElement).attr('name');
-        var bankValue = $(bankSelectElement).val();
-        if (!bankSelectName) { return; }
-        var names = {
-            feeType: bankSelectName + '_FEE_TYPE', feePayer: bankSelectName + '_FEE_PAYER', percent: bankSelectName + '_FEE_PERCENT', fixed: bankSelectName + '_FEE_FIXED', customerCharge: bankSelectName + '_CUSTOMER_CHARGE_PERCENT', incomeAccount: bankSelectName + '_INCOME_ACCOUNT_PATH', expenseAccount: bankSelectName + '_EXPENSE_ACCOUNT_PATH', incomeContact: bankSelectName + '_FEE_INCOME_CONTACT_CODE'
-        };
-        var feeTypeRow = $('[name="' + names.feeType + '"]').closest('.form-group');
-        var feePayerRow = $('[name="' + names.feePayer + '"]').closest('.form-group');
-        var percentRow = $('[name="' + names.percent + '"]').closest('.form-group');
-        var fixedRow = $('[name="' + names.fixed + '"]').closest('.form-group');
-        var customerChargeRow = $('[name="' + names.customerCharge + '"]').closest('.form-group');
-        var incomeAccountRow = $('[name="' + names.incomeAccount + '"]').closest('.form-group');
-        var expenseAccountRow = $('[name="' + names.expenseAccount + '"]').closest('.form-group');
-        var incomeContactRow = $('[name="' + names.incomeContact + '"]').closest('.form-group');
-        if (bankValue === '-1' || bankValue === '' || bankValue === '0') { feeTypeRow.hide(); feePayerRow.hide(); percentRow.hide(); fixedRow.hide(); customerChargeRow.hide(); incomeAccountRow.hide(); expenseAccountRow.hide(); incomeContactRow.hide(); return; }
-        feeTypeRow.show(); feePayerRow.show(); ssbhesabfaToggleFeeFields($('[name="' + names.feeType + '"]')); ssbhesabfaToggleFeePayerFields($('[name="' + names.feePayer + '"]'));
+    var bankSelector = '.ssbhesabfa-payment-bank-row select';
+    var paymentSelector = bankSelector + ', .ssbhesabfa-payment-mode-row select, .ssbhesabfa-fee-type-row select, .ssbhesabfa-fee-payer-row select';
+
+    function updatePaymentFields(select) {
+        var form = $(select.form);
+        var baseName = select.name.replace(/(_QESTYAR_RECEIVABLE_FROM_PAYMENT|_FEE_TYPE|_FEE_PAYER)$/, '');
+
+        function field(suffix) {
+            return form.find('[name="' + baseName + suffix + '"]');
+        }
+
+        function show(suffix, visible) {
+            var input = field(suffix);
+            input.closest('.form-group').toggleClass('hide', !visible);
+            input.prop('disabled', !visible);
+        }
+
+        var receivable = field('_QESTYAR_RECEIVABLE_FROM_PAYMENT').val() === '1';
+        var bank = field('').val();
+        var hasBank = !!bank && bank !== '0' && bank !== '-1';
+        var feeType = field('_FEE_TYPE').val();
+        var showFees = receivable || hasBank;
+        var customerPays = !receivable && hasBank && field('_FEE_PAYER').val() === 'customer';
+        var hasFee = ['percent', 'fixed', 'shaparak_purchase'].indexOf(feeType) !== -1;
+
+        show('', !receivable);
+        show('_RECEIVABLE_ACCOUNT_PATH', receivable);
+        show('_FEE_TYPE', showFees);
+        show('_FEE_PERCENT', showFees && feeType === 'percent');
+        show('_FEE_FIXED', showFees && feeType === 'fixed');
+        show('_FEE_PAYER', !receivable && hasBank);
+        show('_CUSTOMER_CHARGE_PERCENT', customerPays);
+        show('_INCOME_ACCOUNT_PATH', customerPays);
+        show('_FEE_INCOME_CONTACT_CODE', customerPays);
+        show('_EXPENSE_ACCOUNT_PATH', receivable ? hasFee : customerPays);
     }
-    function ssbhesabfaToggleFeeFields(selectElement) {
-        var selectName = $(selectElement).attr('name'); var feeType = $(selectElement).val(); if (!selectName) { return; }
-        var baseName = selectName.replace('_FEE_TYPE', ''); var percentRow = $('[name="' + baseName + '_FEE_PERCENT"]').closest('.form-group'); var fixedRow = $('[name="' + baseName + '_FEE_FIXED"]').closest('.form-group');
-        percentRow.hide(); fixedRow.hide(); if (feeType === 'percent') { percentRow.show(); } if (feeType === 'fixed') { fixedRow.show(); }
-    }
-    function ssbhesabfaToggleFeePayerFields(selectElement) {
-        var selectName = $(selectElement).attr('name'); var feePayer = $(selectElement).val(); if (!selectName) { return; }
-        var baseName = selectName.replace('_FEE_PAYER', ''); var customerChargeRow = $('[name="' + baseName + '_CUSTOMER_CHARGE_PERCENT"]').closest('.form-group'); var incomeAccountRow = $('[name="' + baseName + '_INCOME_ACCOUNT_PATH"]').closest('.form-group'); var incomeContactRow = $('[name="' + baseName + '_FEE_INCOME_CONTACT_CODE"]').closest('.form-group');
-        var expenseAccountRow = $('[name="' + baseName + '_EXPENSE_ACCOUNT_PATH"]').closest('.form-group');
-        customerChargeRow.hide(); incomeAccountRow.hide(); expenseAccountRow.hide(); incomeContactRow.hide(); if (feePayer === 'customer') { customerChargeRow.show(); incomeAccountRow.show(); expenseAccountRow.show(); incomeContactRow.show(); }
-    }
-    $("select[name^='SSBHESABFA_PAYMENT_METHOD_']:not([name$='_FEE_TYPE']):not([name$='_FEE_PAYER'])").each(function () { ssbhesabfaTogglePaymentFeeBlock(this); });
-    $(document).on('change', "select[name^='SSBHESABFA_PAYMENT_METHOD_']:not([name$='_FEE_TYPE']):not([name$='_FEE_PAYER'])", function () { ssbhesabfaTogglePaymentFeeBlock(this); });
-    $(document).on('change', "select[name$='_FEE_TYPE']", function () { ssbhesabfaToggleFeeFields(this); });
-    $(document).on('change', "select[name$='_FEE_PAYER']", function () { ssbhesabfaToggleFeePayerFields(this); });
+
+    $(bankSelector).each(function () { updatePaymentFields(this); });
+    $(document).on('change', paymentSelector, function () { updatePaymentFields(this); });
     $(document).on('submit', 'form', function () { var deleteDataInput = $(this).find("input[name='SSBHESABFA_DELETE_DATA_ON_UNINSTALL']:checked"); var warning = $('.ssb-admin-wrap').data('delete-warning'); if (deleteDataInput.length && deleteDataInput.val() == '1' && warning) { return confirm(warning); } return true; });
 });

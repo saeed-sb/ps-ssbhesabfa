@@ -678,7 +678,6 @@ trait HesabfaPaymentTrait
         }
 
         $payments = OrderPayment::getByOrderReference($order->reference);
-        $qestyarFirstPayment = (int) Configuration::get('SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT');
         $hasFailure = false;
         $lastFailureResponse = null;
 
@@ -693,27 +692,26 @@ trait HesabfaPaymentTrait
             $paymentId = isset($payment->id) ? (int) $payment->id : md5($payment->payment_method . '|' . $payment->transaction_id . '|' . $payment->amount . '|' . $payment->date_add);
             $paymentOperationKey = $this->buildOperationKey('invoice_payment', array($id_order, $number, $paymentId, $payment->transaction_id));
 
-            if ($qestyarFirstPayment !== 0) {
-                try {
-                    $plan = $this->getQestyarReceivablePlan($qestyarFirstPayment, $paymentOperationKey, $order, $payment);
-                } catch (Exception $e) {
-                    $lastFailureResponse = $this->normalizeHesabfaResponse((object) array(
-                        'Success' => false,
-                        'ErrorCode' => 'QESTYAR_RECEIVABLE_CONFIGURATION',
-                        'ErrorMessage' => $e->getMessage(),
-                    ), 'qestyarReceivable', 'Order', $id_order);
-                    $this->addFollowUpIssue('qestyar_receivable_configuration', $e->getMessage(), 'Order', $id_order, $paymentOperationKey, 'ERROR');
+            try {
+                $paymentOperation = $this->getOperationByKey($paymentOperationKey);
+                $plan = $this->getQestyarReceivablePlan($paymentOperation, $order, $payment);
+            } catch (Exception $e) {
+                $lastFailureResponse = $this->normalizeHesabfaResponse((object) array(
+                    'Success' => false,
+                    'ErrorCode' => 'QESTYAR_RECEIVABLE_CONFIGURATION',
+                    'ErrorMessage' => $e->getMessage(),
+                ), 'qestyarReceivable', 'Order', $id_order);
+                $this->addFollowUpIssue('qestyar_receivable_configuration', $e->getMessage(), 'Order', $id_order, $paymentOperationKey, 'ERROR');
+                $hasFailure = true;
+                continue;
+            }
+            if ($plan !== null) {
+                $result = $this->registerQestyarReceivable($hesabfa, $id_order, $number, $paymentId, $paymentOperationKey, $plan);
+                if (!$result['success']) {
                     $hasFailure = true;
-                    continue;
+                    $lastFailureResponse = $result['response'];
                 }
-                if ($plan !== null) {
-                    $result = $this->registerQestyarReceivable($hesabfa, $id_order, $number, $paymentId, $paymentOperationKey, $plan);
-                    if (!$result['success']) {
-                        $hasFailure = true;
-                        $lastFailureResponse = $result['response'];
-                    }
-                    continue;
-                }
+                continue;
             }
 
             $paymentConfig = $this->getPaymentConfigByOrderPayment(
@@ -784,7 +782,7 @@ trait HesabfaPaymentTrait
              * - merchant pays fee: full paid amount + transaction fee
              * - customer pays fee: invoice base amount + transaction fee = 0
              */
-            if ($this->getCompletedOperation($paymentOperationKey)) {
+            if (($paymentOperation['status'] ?? null) === 'success') {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice payment operation.', 'INFO', null, 'Order', $id_order);
             } else {
                 if (!$this->startOperation($paymentOperationKey, 'invoice_payment', 'Order', $id_order)) { return false; }
@@ -904,9 +902,30 @@ trait HesabfaPaymentTrait
         return true;
     }
 
-    private function getQestyarReceivablePlan($firstPayment, $operationKey, $order, $payment)
+    private function getQestyarReceivableFirstPayment($configurationName)
     {
-        $operation = $this->getOperationByKey($operationKey);
+        $firstPayment = Configuration::get($configurationName . '_QESTYAR_RECEIVABLE_FROM_PAYMENT');
+        if ($firstPayment === false) {
+            // Inherit the 2.3.48 setting until the gateway is configured independently.
+            $firstPayment = Configuration::get('SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT');
+        }
+
+        return max(0, (int) $firstPayment);
+    }
+
+    private function usesQestyarReceivables($configurationName, $paymentId)
+    {
+        if ($configurationName === '') {
+            return false;
+        }
+
+        $firstPayment = $this->getQestyarReceivableFirstPayment($configurationName);
+
+        return $firstPayment > 0 && $paymentId >= $firstPayment;
+    }
+
+    private function getQestyarReceivablePlan($operation, $order, $payment)
+    {
         if (!empty($operation['payment_plan'])) {
             $plan = json_decode($operation['payment_plan'], true);
             if (!isset($plan['receivable'], $plan['expense'], $plan['amount'], $plan['fee'], $plan['date'], $plan['reference'], $plan['currency'], $plan['project'])) {
@@ -915,8 +934,8 @@ trait HesabfaPaymentTrait
             return $plan;
         }
 
-        if ($operation || $firstPayment < 1 || (int) ($payment->id ?? 0) < $firstPayment
-            || !Module::isInstalled('wavendorpay') || $payment->transaction_id === 'None') {
+        $paymentId = (int) ($payment->id ?? 0);
+        if ($operation || $paymentId < 1 || !Module::isInstalled('wavendorpay') || $payment->transaction_id === 'None') {
             return null;
         }
 
@@ -932,22 +951,27 @@ trait HesabfaPaymentTrait
             return null;
         }
 
+        $fullOrderPayment = abs((float) $order->total_paid_tax_incl - (float) $payment->amount) <= 0.01;
         if ($module === 'ssbpaymenthub') {
             $provider = HesabfaPrestashopRepository::getVerifiedCheckoutProvider($order, $payment);
+            $configurationName = $this->getProviderPaymentConfigName($module, $provider);
             if ($provider === '' || !in_array($gatewayPrefix . $provider, $methods, true)) {
-                if (abs((float) $order->total_paid_tax_incl - (float) $payment->amount) <= 0.01) {
-                    throw new RuntimeException('The confirmed checkout transaction does not match the Qestyar gateway on the order.');
+                if ($fullOrderPayment) {
+                    $this->checkQestyarGatewayMismatch($configurationName, $methods, $order, $payment);
                 }
                 return null;
             }
-            $configurationName = $this->getProviderPaymentConfigName($module, $provider);
         } else {
             // Other payment modules record the confirmed gateway on the original full order payment.
-            if (count($methods) !== 1 || abs((float) $order->total_paid_tax_incl - (float) $payment->amount) > 0.01) {
+            if (count($methods) !== 1 || !$fullOrderPayment) {
                 return null;
             }
             $configuration = $this->getPaymentConfigByOrderPayment((int) $order->id, $payment->payment_method);
             $configurationName = $configuration['configuration_name'] ?? '';
+        }
+
+        if (!$this->usesQestyarReceivables($configurationName, $paymentId)) {
+            return null;
         }
 
         $receivable = trim((string) Configuration::get($configurationName . '_RECEIVABLE_ACCOUNT_PATH'));
@@ -975,6 +999,25 @@ trait HesabfaPaymentTrait
             'currency' => $currency->iso_code,
             'project' => (string) Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
         );
+    }
+
+    private function checkQestyarGatewayMismatch($verifiedConfigurationName, array $methods, $order, $payment)
+    {
+        $candidates = array($verifiedConfigurationName);
+        foreach ($methods as $method) {
+            if ($method === 'ssbpaymenthub') {
+                $configuration = $this->getPaymentConfigByOrderPayment((int) $order->id, $payment->payment_method);
+                $candidates[] = $configuration['configuration_name'] ?? '';
+            } else {
+                $candidates[] = $this->getProviderPaymentConfigName('ssbpaymenthub', substr($method, strlen('ssbpaymenthub:')));
+            }
+        }
+
+        foreach ($candidates as $configurationName) {
+            if ($this->usesQestyarReceivables($configurationName, (int) $payment->id)) {
+                throw new RuntimeException('The confirmed checkout transaction does not match the Qestyar gateway on the order.');
+            }
+        }
     }
 
     private function registerQestyarReceivable($hesabfa, $idOrder, $invoice, $paymentId, $operationKey, array $plan)

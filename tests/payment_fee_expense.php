@@ -4,11 +4,20 @@ define('_PS_VERSION_', '8.1.7');
 define('_DB_NAME_', 'fee_expense_fixture');
 define('_DB_PREFIX_', 'fixture_');
 class Db {
-    public static $operationColumns = array(), $alterCount = 0;
+    public static $operationColumns = array(), $alterCount = 0, $configurationSnapshot = array();
     public static function getInstance() { return new self(); }
     public function getValue($query, $cache) { return 1; }
     public function executeS($query, $array, $cache) { return self::$operationColumns; }
     public function execute($query) {
+        if ($query === 'START TRANSACTION') {
+            self::$configurationSnapshot = Configuration::$values;
+            return true;
+        }
+        if ($query === 'COMMIT') { return true; }
+        if ($query === 'ROLLBACK') {
+            Configuration::$values = self::$configurationSnapshot;
+            return true;
+        }
         if (strpos($query, 'ADD COLUMN `payment_plan`') === false) { return false; }
         self::$operationColumns[] = array('Field' => 'payment_plan');
         ++self::$alterCount;
@@ -16,9 +25,14 @@ class Db {
     }
 }
 class Configuration {
-    public static $values = array();
+    public static $values = array(), $failedKey = null;
     public static function get($k) { return array_key_exists($k, self::$values) ? self::$values[$k] : false; }
-    public static function updateValue($k, $v) { self::$values[$k] = $v; return true; }
+    public static function updateValue($k, $v) {
+        if ($k === self::$failedKey) { return false; }
+        self::$values[$k] = $v;
+        return true;
+    }
+    public static function resetStaticCache() {}
 }
 class Tools {
     public static $values = array();
@@ -92,7 +106,12 @@ class FeeSubject {
     const HESABFA_DEFAULT_BANK_ACCOUNT_PATH = 'Assets:Bank';
     public $operations = array(), $claim = true, $issues = array();
     public function getPaymentConfigByOrderPayment($id, $method) { return array('configuration_name' => 'SSBHESABFA_PAYMENT_METHOD_fixture', 'bank_code' => '0019'); }
-    public function getPaymentMethodsName() { return array(array('id' => 'SSBHESABFA_PAYMENT_METHOD_fixture', 'name' => 'DigiPay')); }
+    public function getPaymentMethodsName() {
+        return array(
+            array('id' => 'SSBHESABFA_PAYMENT_METHOD_fixture', 'name' => 'DigiPay'),
+            array('id' => 'SSBHESABFA_PAYMENT_METHOD_' . md5('ssbpaymenthub|@provider:tara'), 'name' => 'Tara'),
+        );
+    }
     public function getInvoiceCodeByOrderId($id) { return 2080; }
     public function getOrderPriceInHesabfaDefaultCurrency($v, $id) { return $v * 10; }
     public static function getPriceInHesabfaDefaultCurrency($v) { return $v * 10; }
@@ -126,6 +145,7 @@ class FeeSubject {
 }
 function fresh() {
     $p = 'SSBHESABFA_PAYMENT_METHOD_fixture';
+    Configuration::$failedKey = null;
     Configuration::$values = array($p => '0019', $p.'_FEE_TYPE' => 'percent', $p.'_FEE_PAYER' => 'customer', $p.'_FEE_PERCENT' => 7.7, $p.'_CUSTOMER_CHARGE_PERCENT' => 6,
         $p.'_EXPENSE_ACCOUNT_PATH' => 'Expenses:Gateway', $p.'_INCOME_ACCOUNT_PATH' => 'Income:Gateway');
     Tools::$values = array('SSBHESABFA_MANUAL_PAYMENT_METHOD' => $p, 'SSBHESABFA_MANUAL_INVOICE_NUMBER' => 2080, 'SSBHESABFA_MANUAL_GATEWAY_PAID_AMOUNT' => 14628000,
@@ -257,7 +277,8 @@ HesabfaApi::$fail = true;
 check(!$s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment', 'expense'), 'A fee document failure leaves the receipt recorded');
 HesabfaApi::$fail = false;
 HesabfaApi::$writes = array();
-Configuration::$values[$mode] = -OrderPayment::$payment->id;
+Configuration::$values[$mode] = 0;
+Configuration::$values[$digipay . '_QESTYAR_RECEIVABLE_FROM_PAYMENT'] = 0;
 Configuration::$values[$digipay . '_FEE_PERCENT'] = 9;
 Configuration::$values[$digipay . '_RECEIVABLE_ACCOUNT_PATH'] = 'Assets:Receivables:New';
 Module::$qestyarInstalled = false;
@@ -286,19 +307,63 @@ $s = qestyarFixture();
 Configuration::$values[$mode] = -OrderPayment::$payment->id;
 check($s->setOrderPayment(38015) && isset(HesabfaApi::$receipts[0]['Transactions'][0]['Bank']), 'Switching back routes new payments through the existing accounting method');
 
+$tara = 'SSBHESABFA_PAYMENT_METHOD_' . md5('ssbpaymenthub|@provider:tara');
+$modeSuffix = '_QESTYAR_RECEIVABLE_FROM_PAYMENT';
+$s = qestyarFixture();
+Configuration::$values[$digipay . $modeSuffix] = 0;
+Configuration::$values[$tara . $modeSuffix] = OrderPayment::$payment->id;
+Configuration::$values[$p . '_FEE_PAYER'] = 'merchant';
+check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment')
+    && isset(HesabfaApi::$receipts[0]['Transactions'][0]['Bank']), 'An explicit bank route overrides the legacy setting regardless of another gateway');
+$s = qestyarFixture();
+Configuration::$values[$mode] = 0;
+Configuration::$values[$digipay . $modeSuffix] = OrderPayment::$payment->id;
+Configuration::$values[$tara . $modeSuffix] = 0;
+check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment', 'expense'), 'The verified gateway can use receivables with the global setting disabled');
+$s = qestyarFixture();
+Configuration::$values[$digipay . $modeSuffix] = OrderPayment::$payment->id + 1;
+check($s->setOrderPayment(38015) && isset(HesabfaApi::$receipts[0]['Transactions'][0]['Bank']), 'Each gateway has an independent cutoff for older payments');
+
 $s = fresh();
-Tools::$values = array($mode => '1');
-check(!isset($s->bankValues()[$mode]) && $s->saveBank() && Configuration::get($mode) === false, 'Mode activation requires Qestyar even for a submitted value');
+$formMode = $p . $modeSuffix;
+$taraMode = $tara . $modeSuffix;
+$path = $p . '_RECEIVABLE_ACCOUNT_PATH';
+Tools::$values = array($formMode => '1', $path => 'Assets:Receivables:DigiPay');
+check(!isset($s->bankValues()[$formMode]) && $s->saveBank() && Configuration::get($formMode) === false, 'Mode activation requires Qestyar even for a submitted value');
+
 $s = fresh();
 Module::$qestyarInstalled = true;
-$path = $p . '_RECEIVABLE_ACCOUNT_PATH';
-$inputs = array_column($s->bankForm()['form']['input'], 'name');
-check($s->bankValues()[$mode] === 0 && in_array($mode, $inputs, true) && in_array($path, $inputs, true), 'The Qestyar mode defaults to the existing method and exposes its account mapping');
-Tools::$values = array($mode => '1', $path => ' Assets:Receivables:DigiPay ');
-check($s->saveBank() && Configuration::get($mode) === 1 && Configuration::get($path) === 'Assets:Receivables:DigiPay'
-    && Configuration::get($p . '_FEE_PERCENT') === 7.7, 'Activating the mode saves the mapping and the first eligible payment ID');
-Tools::$values[$mode] = '0';
-check($s->saveBank() && Configuration::get($mode) === -1 && $s->bankValues()[$mode] === 0, 'Returning to the existing method preserves the marker for retries');
+$inputs = array_column($s->bankForm()['form']['input'], null, 'name');
+check($s->bankValues()[$formMode] === 0 && isset($inputs[$formMode], $inputs[$taraMode]) && !isset($inputs[$mode])
+    && str_contains($inputs[$path]['form_group_class'], ' hide')
+    && !str_contains($inputs[$p]['form_group_class'], ' hide'), 'Every gateway has an independent selector and initially shows only its saved mode fields');
+Tools::$values = array($formMode => '1', $path => ' Assets:Receivables:DigiPay ', $p => '0042', $p . '_FEE_PAYER' => 'merchant');
+check($s->saveBank() && Configuration::get($formMode) === 1 && Configuration::get($path) === 'Assets:Receivables:DigiPay'
+    && Configuration::get($p . '_FEE_PERCENT') === 7.7 && Configuration::get($p) === '0019'
+    && Configuration::get($p . '_FEE_PAYER') === 'customer' && $s->bankValues()[$taraMode] === 0, 'Activation saves only the current gateway and keeps its bank settings');
+$inputs = array_column($s->bankForm()['form']['input'], null, 'name');
+check(!str_contains($inputs[$path]['form_group_class'], ' hide')
+    && !str_contains($inputs[$p . '_EXPENSE_ACCOUNT_PATH']['form_group_class'], ' hide')
+    && str_contains($inputs[$p]['form_group_class'], ' hide')
+    && str_contains($inputs[$p . '_INCOME_ACCOUNT_PATH']['form_group_class'], ' hide'), 'The saved receivables form hides the bank and income settings');
+
+Configuration::$values[$mode] = 10;
+Tools::$values = array($formMode => '0', $path => '');
+check($s->saveBank() && Configuration::get($formMode) === 0 && Configuration::get($path) === 'Assets:Receivables:DigiPay'
+    && $s->bankValues()[$formMode] === 0 && $s->bankValues()[$taraMode] === 1, 'Switching back keeps the hidden receivable account and does not override other gateways');
+
+$s = fresh();
+Module::$qestyarInstalled = true;
+Tools::$values = array($formMode => '1', $tara => '1234');
+try {
+    $s->saveBank();
+    check(false, 'Activation needs a receivable account');
+} catch (InvalidArgumentException $e) {
+    check(Configuration::get($formMode) === false && Configuration::get($tara) === false, 'Invalid activation leaves all settings intact');
+}
+Tools::$values = array($formMode => '1', $path => 'Assets:Receivables:DigiPay');
+Configuration::$failedKey = $formMode;
+check(!$s->saveBank() && Configuration::get($path) === false && Configuration::get($formMode) === false, 'A failed mode write rolls back its associated account settings');
 
 require dirname(__DIR__) . '/upgrade/upgrade-2.3.48.php';
 check(upgrade_module_2_3_48(null) && upgrade_module_2_3_48(null) && Db::$alterCount === 1, 'The operation journal schema upgrade is repeatable');

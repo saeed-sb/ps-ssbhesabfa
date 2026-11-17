@@ -1,3 +1,8 @@
+## 2.3.49 - 2026-11-17
+
+- Choose Qestyar installment accounting separately for each gateway. Gateways inherit the previous choice until changed individually.
+- Show and save the fields used by the selected method while retaining settings for both methods.
+
 ## 2.3.48 - 2026-11-17
 
 - Add an optional accounting method for new installment payments made through Qestyar. Configure a Hesabfa receivable account for each gateway.

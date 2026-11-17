@@ -190,7 +190,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.48';
+        $this->version = '2.3.49';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 
@@ -313,7 +313,7 @@ class Ssbhesabfa extends Module
         if (Tools::getValue('module_name') == $this->name || Tools::getValue('configure') == $this->name || strpos((string) $controller, 'AdminSsbHesabfa') === 0) {
             $this->context->controller->addJqueryUI('ui.datepicker');
             $this->context->controller->addCSS($this->_path . 'views/css/admin.css');
-            $this->context->controller->addJS($this->_path . 'views/js/admin.js');
+            $this->context->controller->addJS($this->_path . 'views/js/admin.js?v=' . $this->version);
         }
     }
 

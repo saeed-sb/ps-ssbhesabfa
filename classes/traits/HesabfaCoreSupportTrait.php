@@ -586,8 +586,15 @@ trait HesabfaCoreSupportTrait
                 $output .= $this->displayError($this->l('Connecting to Hesabfa fail. Please check your Internet connection.'));
             }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleBank')) == true) {
-            $this->setConfigFormsValues('Bank');
-            $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
+            try {
+                if ($this->setConfigFormsValues('Bank')) {
+                    $output .= $this->displayConfirmation($this->l('Payments Methods Setting updated.'));
+                } else {
+                    $output .= $this->displayError($this->l('Payment settings could not be saved. Review the values and try again.'));
+                }
+            } catch (InvalidArgumentException $e) {
+                $output .= $this->displayError($e->getMessage());
+            }
         } elseif (((bool)Tools::isSubmit('submitSsbhesabfaModuleManualGatewayPayment')) == true) {
             if (Configuration::get('SSBHESABFA_LIVE_MODE')) {
                 $manualPaymentResult = $this->processManualGatewayPayment();
