@@ -678,12 +678,42 @@ trait HesabfaPaymentTrait
         }
 
         $payments = OrderPayment::getByOrderReference($order->reference);
+        $qestyarFirstPayment = (int) Configuration::get('SSBHESABFA_QESTYAR_RECEIVABLE_FROM_PAYMENT');
         $hasFailure = false;
         $lastFailureResponse = null;
 
         foreach ($payments as $payment) {
             if ($payment->amount <= 0) {
                 continue;
+            }
+
+            if ($payment->transaction_id == '') {
+                $payment->transaction_id = 'None';
+            }
+            $paymentId = isset($payment->id) ? (int) $payment->id : md5($payment->payment_method . '|' . $payment->transaction_id . '|' . $payment->amount . '|' . $payment->date_add);
+            $paymentOperationKey = $this->buildOperationKey('invoice_payment', array($id_order, $number, $paymentId, $payment->transaction_id));
+
+            if ($qestyarFirstPayment !== 0) {
+                try {
+                    $plan = $this->getQestyarReceivablePlan($qestyarFirstPayment, $paymentOperationKey, $order, $payment);
+                } catch (Exception $e) {
+                    $lastFailureResponse = $this->normalizeHesabfaResponse((object) array(
+                        'Success' => false,
+                        'ErrorCode' => 'QESTYAR_RECEIVABLE_CONFIGURATION',
+                        'ErrorMessage' => $e->getMessage(),
+                    ), 'qestyarReceivable', 'Order', $id_order);
+                    $this->addFollowUpIssue('qestyar_receivable_configuration', $e->getMessage(), 'Order', $id_order, $paymentOperationKey, 'ERROR');
+                    $hasFailure = true;
+                    continue;
+                }
+                if ($plan !== null) {
+                    $result = $this->registerQestyarReceivable($hesabfa, $id_order, $number, $paymentId, $paymentOperationKey, $plan);
+                    if (!$result['success']) {
+                        $hasFailure = true;
+                        $lastFailureResponse = $result['response'];
+                    }
+                    continue;
+                }
             }
 
             $paymentConfig = $this->getPaymentConfigByOrderPayment(
@@ -724,10 +754,6 @@ trait HesabfaPaymentTrait
                 continue;
             }
 
-            if ($payment->transaction_id == '') {
-                $payment->transaction_id = 'None';
-            }
-
             $paidAmount = $this->getOrderPriceInHesabfaDefaultCurrency(
                 $payment->amount,
                 $id_order
@@ -758,8 +784,6 @@ trait HesabfaPaymentTrait
              * - merchant pays fee: full paid amount + transaction fee
              * - customer pays fee: invoice base amount + transaction fee = 0
              */
-            $paymentId = isset($payment->id) ? (int) $payment->id : md5($payment->payment_method . '|' . $payment->transaction_id . '|' . $payment->amount . '|' . $payment->date_add);
-            $paymentOperationKey = $this->buildOperationKey('invoice_payment', array($id_order, $number, $paymentId, $payment->transaction_id));
             if ($this->getCompletedOperation($paymentOperationKey)) {
                 self::addModuleLog('Skipped duplicate Hesabfa invoice payment operation.', 'INFO', null, 'Order', $id_order);
             } else {
@@ -878,6 +902,136 @@ trait HesabfaPaymentTrait
         }
 
         return true;
+    }
+
+    private function getQestyarReceivablePlan($firstPayment, $operationKey, $order, $payment)
+    {
+        $operation = $this->getOperationByKey($operationKey);
+        if (!empty($operation['payment_plan'])) {
+            $plan = json_decode($operation['payment_plan'], true);
+            if (!isset($plan['receivable'], $plan['expense'], $plan['amount'], $plan['fee'], $plan['date'], $plan['reference'], $plan['currency'], $plan['project'])) {
+                throw new RuntimeException('The saved Qestyar payment plan is invalid.');
+            }
+            return $plan;
+        }
+
+        if ($operation || $firstPayment < 1 || (int) ($payment->id ?? 0) < $firstPayment
+            || !Module::isInstalled('wavendorpay') || $payment->transaction_id === 'None') {
+            return null;
+        }
+
+        $module = (string) $order->module;
+        $gatewayPrefix = $module . ':';
+        $methods = array_values(array_filter(
+            HesabfaPrestashopRepository::getInstallmentPaymentModules((int) $order->id),
+            static function ($method) use ($module, $gatewayPrefix) {
+                return $method === $module || strpos($method, $gatewayPrefix) === 0;
+            }
+        ));
+        if (!$methods) {
+            return null;
+        }
+
+        if ($module === 'ssbpaymenthub') {
+            $provider = HesabfaPrestashopRepository::getVerifiedCheckoutProvider($order, $payment);
+            if ($provider === '' || !in_array($gatewayPrefix . $provider, $methods, true)) {
+                if (abs((float) $order->total_paid_tax_incl - (float) $payment->amount) <= 0.01) {
+                    throw new RuntimeException('The confirmed checkout transaction does not match the Qestyar gateway on the order.');
+                }
+                return null;
+            }
+            $configurationName = $this->getProviderPaymentConfigName($module, $provider);
+        } else {
+            // Other payment modules record the confirmed gateway on the original full order payment.
+            if (count($methods) !== 1 || abs((float) $order->total_paid_tax_incl - (float) $payment->amount) > 0.01) {
+                return null;
+            }
+            $configuration = $this->getPaymentConfigByOrderPayment((int) $order->id, $payment->payment_method);
+            $configurationName = $configuration['configuration_name'] ?? '';
+        }
+
+        $receivable = trim((string) Configuration::get($configurationName . '_RECEIVABLE_ACCOUNT_PATH'));
+        $expense = trim((string) Configuration::get($configurationName . '_EXPENSE_ACCOUNT_PATH'));
+        $amount = round($this->getOrderPriceInHesabfaDefaultCurrency($payment->amount, (int) $order->id), 2);
+        $fee = round($this->getPaymentTransactionFee($configurationName, $amount), 2);
+        if ($receivable === '' || ($fee > 0 && ($expense === '' || $expense === $receivable))) {
+            throw new RuntimeException('Set the Qestyar receivable and fee expense account paths for this gateway.');
+        }
+
+        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
+        if ((int) $payment->id_currency !== (int) $order->id_currency
+            || empty($currency->iso_code) || !is_finite($amount) || !is_finite($fee)
+            || $amount <= 0 || $fee < 0 || $fee > $amount) {
+            throw new RuntimeException('The Qestyar receipt amount, fee or currency is invalid.');
+        }
+
+        return array(
+            'receivable' => $receivable,
+            'expense' => $expense,
+            'amount' => $amount,
+            'fee' => $fee,
+            'date' => $payment->date_add,
+            'reference' => $payment->transaction_id,
+            'currency' => $currency->iso_code,
+            'project' => (string) Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
+        );
+    }
+
+    private function registerQestyarReceivable($hesabfa, $idOrder, $invoice, $paymentId, $operationKey, array $plan)
+    {
+        if (!$this->getCompletedOperation($operationKey)) {
+            if (!$this->startOperation($operationKey, 'invoice_payment', 'Order', $idOrder, $plan)) {
+                return array('success' => false, 'response' => null);
+            }
+
+            $response = $this->normalizeHesabfaResponse($hesabfa->invoiceSavePayment(
+                $invoice,
+                array('accountPath' => $plan['receivable']),
+                $plan['date'],
+                $plan['amount'],
+                $plan['reference'],
+                null,
+                0,
+                $plan['project']
+            ), 'qestyarInvoiceSavePayment', 'Order', $idOrder);
+
+            if (!$this->isHesabfaSuccess($response)) {
+                $message = 'Failed to register the Qestyar invoice receipt: ' . $this->getHesabfaErrorMessage($response);
+                $this->finishOperation($operationKey, 'failed', $message);
+                $this->addFollowUpIssue('invoice_payment_failed', $message, 'Order', $idOrder, $operationKey, 'ERROR');
+                return array('success' => false, 'response' => $response);
+            }
+
+            $number = (int) ($response->Result->Number ?? 0);
+            if ($number <= 0) {
+                $message = 'Verify the Qestyar receipt in Hesabfa before retrying; the response did not include its number.';
+                $this->finishOperation($operationKey, 'needs_attention', $message);
+                $this->addFollowUpIssue('qestyar_receipt_number_missing', $message, 'Order', $idOrder, $operationKey, 'ERROR');
+                return array('success' => false, 'response' => null);
+            }
+            if (!$this->finishOperation($operationKey, 'success', 'Qestyar receipt registered.', $number)) {
+                return array('success' => false, 'response' => null);
+            }
+        }
+
+        if ($plan['fee'] <= 0) {
+            return array('success' => true, 'response' => null);
+        }
+
+        $type = 'payment_fee_expense_document';
+        $feeKey = $this->buildOperationKey($type, array($idOrder, $invoice, $paymentId, $plan['reference']));
+        return $this->registerPaymentFeeExpenseDocument(
+            $feeKey, $type, 'Order', $idOrder, null,
+            array(
+                'expense_account_path' => $plan['expense'],
+                'expense_amount' => $plan['fee'],
+                'receivable_account_path' => $plan['receivable'],
+                'currency' => $plan['currency'],
+                'project' => $plan['project'],
+            ),
+            $plan['date'], $plan['reference'],
+            'Qestyar gateway fee - order ' . $idOrder . ' - invoice ' . $invoice
+        );
     }
 
     private function getManualGatewayPaymentMethodOptions()
@@ -1318,19 +1472,26 @@ trait HesabfaPaymentTrait
         if (!$this->startOperation($operationKey, $operationType, $objectType, $objectId)) {
             return $fail('FINANCIAL_OPERATION_BUSY', 'Financial operation is busy or requires reconciliation.');
         }
-        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
-        $amount = round($breakdown['expense_amount']);
+        $receivable = $breakdown['receivable_account_path'] ?? null;
+        $currency = $breakdown['currency'] ?? (new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY')))->iso_code;
+        $amount = $receivable === null ? round($breakdown['expense_amount']) : $breakdown['expense_amount'];
+        $creditLine = array(
+            'accountPath' => $receivable ?? self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH,
+            'description' => $description, 'info' => (string) $reference, 'amount' => $amount,
+            'currencyAmount' => $amount, 'currency' => $currency, 'type' => 1,
+        );
+        if ($receivable === null) {
+            $creditLine['bankCode'] = $bankCode;
+        }
         $document = array(
             'number' => 0, 'reference' => 0, 'date' => $date, 'description' => $description,
-            'project' => Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
+            'project' => $breakdown['project'] ?? Configuration::get('SSBHESABFA_INVOICE_PROJECT'),
             'debit' => $amount, 'credit' => $amount, 'status' => 1,
             'transactions' => array(
                 array('accountPath' => $breakdown['expense_account_path'], 'description' => $description,
                     'info' => (string) $reference, 'amount' => $amount, 'currencyAmount' => $amount,
-                    'currency' => $currency->iso_code, 'type' => 0),
-                array('accountPath' => self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH, 'description' => $description,
-                    'info' => (string) $reference, 'amount' => $amount, 'currencyAmount' => $amount,
-                    'currency' => $currency->iso_code, 'type' => 1, 'bankCode' => $bankCode),
+                    'currency' => $currency, 'type' => 0),
+                $creditLine,
             ),
         );
         $response = $this->normalizeHesabfaResponse($hesabfa->documentSave($document), 'savePaymentFeeExpenseDocument', $objectType, $objectId);
@@ -1367,19 +1528,25 @@ trait HesabfaPaymentTrait
             || (int) $doc['Number'] !== (int) $number || count($doc['Transactions']) !== 2
             || substr($doc['Date'], 0, 10) !== substr($date, 0, 10)
             || abs((float) $doc['Debit'] - $amount) > 0.01 || abs((float) $doc['Credit'] - $amount) > 0.01) { return 'conflict'; }
-        $currency = new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY'));
-        $expense = false; $bank = false;
+        $currency = $breakdown['currency'] ?? (new Currency(Configuration::get('SSBHESABFA_HESABFA_DEFAULT_CURRENCY')))->iso_code;
+        $receivable = $breakdown['receivable_account_path'] ?? null;
+        $creditPath = $receivable ?? self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH;
+        $expense = false;
+        $credit = false;
         foreach ($doc['Transactions'] as $t) {
             if (!isset($t['Amount'], $t['Type'], $t['AccountPath'], $t['Currency'], $t['Info'])
-                || abs((float) $t['Amount'] - $amount) > 0.01 || $t['Currency'] !== $currency->iso_code
+                || abs((float) $t['Amount'] - $amount) > 0.01 || $t['Currency'] !== $currency
                 || (string) $t['Info'] !== (string) $reference) { return 'conflict'; }
             $account = preg_replace('/\s*:\s*/u', ':', trim($t['AccountPath']));
             if ((int) $t['Type'] === 0 && empty($t['BankCode']) && empty($t['ContactCode'])
                 && $account === preg_replace('/\s*:\s*/u', ':', trim($breakdown['expense_account_path']))) { $expense = true; }
-            if ((int) $t['Type'] === 1 && isset($t['BankCode']) && (int) $t['BankCode'] === (int) $bankCode
-                && $account === preg_replace('/\s*:\s*/u', ':', trim(self::HESABFA_DEFAULT_BANK_ACCOUNT_PATH))) { $bank = true; }
+            $matchesCreditTarget = $receivable === null
+                ? isset($t['BankCode']) && (int) $t['BankCode'] === (int) $bankCode
+                : empty($t['BankCode']) && empty($t['ContactCode']);
+            if ((int) $t['Type'] === 1 && $matchesCreditTarget
+                && $account === preg_replace('/\s*:\s*/u', ':', trim($creditPath))) { $credit = true; }
         }
-        return $expense && $bank ? 'exists' : 'conflict';
+        return $expense && $credit ? 'exists' : 'conflict';
     }
 
     private function savePaymentFeeIncomeDocument($bankCode, $incomeAccountPath, $contactCode, $date, $amount, $description = null, $project = null)

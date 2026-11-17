@@ -118,9 +118,9 @@ trait HesabfaCoreSupportTrait
         return HesabfaOperationRepository::getByKey($operationKey);
     }
 
-    protected function startOperation($operationKey, $operationType, $objectType = null, $objectId = null)
+    protected function startOperation($operationKey, $operationType, $objectType = null, $objectId = null, ?array $paymentPlan = null)
     {
-        if (HesabfaOperationRepository::start($operationKey, $operationType, $objectType, $objectId)) { return true; }
+        if (HesabfaOperationRepository::start($operationKey, $operationType, $objectType, $objectId, $paymentPlan)) { return true; }
         $row = HesabfaOperationRepository::getByKey($operationKey);
         $reconcile = $row && $row['status'] === 'needs_attention';
         $message = $reconcile ? 'Financial operation requires external reconciliation before retry.' : 'Financial operation could not be claimed; retry after the current owner finishes.';

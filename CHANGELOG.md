@@ -1,3 +1,9 @@
+## 2.3.48 - 2026-11-17
+
+- Add an optional accounting method for new installment payments made through Qestyar. Configure a Hesabfa receivable account for each gateway.
+- Register the full invoice payment in gateway receivables and debit the entire configured gateway fee to the expense account in a separate document.
+- Preserve the posting amounts and account paths for retries. A successfully registered receipt stays linked to its invoice while the fee document is retried.
+
 ## 2.3.47 - 2026-11-12
 
 - Recognize invoice creation and edit notifications from previous fiscal years using explicit yearId reads when the current-year lookup is empty and no later deletion is recorded.

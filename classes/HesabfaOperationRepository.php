@@ -108,7 +108,7 @@ class HesabfaOperationRepository
 
     private static $owned = array();
 
-    public static function start($operationKey, $operationType, $objectType = null, $objectId = null)
+    public static function start($operationKey, $operationType, $objectType = null, $objectId = null, ?array $paymentPlan = null)
     {
         $operationKey = (string) $operationKey;
         if ($operationKey === '' || !$operationType || isset(self::$owned[$operationKey])
@@ -131,11 +131,15 @@ class HesabfaOperationRepository
                 'SELECT COUNT(*) FROM `'._DB_PREFIX_.'ssb_hesabfa_operation` WHERE `operation_type`="invoice_save" AND `object_type`="'.pSQL((string)$objectType).'" AND `object_id`="'.pSQL((string)$objectId).'" AND `operation_key`<>"'.pSQL($operationKey).'" AND `status` IN ("pending","failed","needs_attention") AND `attempts`>0', false)) { return false; }
             $now = date('Y-m-d H:i:s');
             if (!$row) {
-                $ok = Db::getInstance()->insert('ssb_hesabfa_operation', array(
+                $data = array(
                     'operation_key'=>pSQL($operationKey), 'operation_type'=>pSQL($operationType),
                     'object_type'=>pSQL((string)$objectType), 'object_id'=>pSQL((string)$objectId),
                     'status'=>'pending', 'attempts'=>1, 'date_add'=>$now, 'date_upd'=>$now,
-                ));
+                );
+                if ($paymentPlan !== null) {
+                    $data['payment_plan'] = pSQL(json_encode($paymentPlan, JSON_THROW_ON_ERROR), true);
+                }
+                $ok = Db::getInstance()->insert('ssb_hesabfa_operation', $data);
             } else {
                 $ok = Db::getInstance()->execute('UPDATE `'._DB_PREFIX_.'ssb_hesabfa_operation` SET `status`="pending", `attempts`=`attempts`+1, `date_upd`=NOW() WHERE `operation_key`="'.pSQL($operationKey).'" AND `status` IN ("pending","failed")')
                     && (int) Db::getInstance()->Affected_Rows() === 1;

@@ -641,3 +641,18 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_91f2b17cf7cb5f2aa24daf4e87db9c72'] 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3d56eb3e50743b747c92e37974539d62'] = 'بازکردن تنظیمات حسابداری ارسال';
 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_444797a672d1ebb170ce37674c249c40'] = 'تنظیمات حسابداری ارسال را در ماژول مدیریت حمل تغییر دهید.';
+
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_b5bb5270f7eb832b97c9bcc2fb081c75'] = 'روش ثبت اقساط قسط‌یار';
+$_MODULE['<{ssbhesabfa}prestashop>configure_b5bb5270f7eb832b97c9bcc2fb081c75'] = 'روش ثبت اقساط قسط‌یار';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_23087c505c889910fb067c4cf00a7608'] = 'برای پرداخت‌های اقساطی جدید قسط‌یار اعمال می‌شود. مسیر حساب دریافتنی و هزینهٔ هر درگاه را در همین بخش وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_23087c505c889910fb067c4cf00a7608'] = 'برای پرداخت‌های اقساطی جدید قسط‌یار اعمال می‌شود. مسیر حساب دریافتنی و هزینهٔ هر درگاه را در همین بخش وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3914ddd1535a0ccd225fcdff78ac9e5f'] = 'روش فعلی';
+$_MODULE['<{ssbhesabfa}prestashop>configure_3914ddd1535a0ccd225fcdff78ac9e5f'] = 'روش فعلی';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fff2b5c5856f30869ee1e7b2d1dc04ff'] = 'حساب دریافتنی درگاه و سند هزینه';
+$_MODULE['<{ssbhesabfa}prestashop>configure_fff2b5c5856f30869ee1e7b2d1dc04ff'] = 'حساب دریافتنی درگاه و سند هزینه';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_dfc73147bf9059a62bc1a13f3ac84cd7'] = 'مسیر حساب دریافتنی درگاه';
+$_MODULE['<{ssbhesabfa}prestashop>configure_dfc73147bf9059a62bc1a13f3ac84cd7'] = 'مسیر حساب دریافتنی درگاه';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_9f12dcea9f2226a9d8b9f2c6d2a8a9c4'] = 'مسیر کامل سرفصل دریافتنی این درگاه را در حسابفا وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_9f12dcea9f2226a9d8b9f2c6d2a8a9c4'] = 'مسیر کامل سرفصل دریافتنی این درگاه را در حسابفا وارد کنید.';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_a75119167e78656844b53a40bd6f194a'] = 'مسیر حساب هزینه را در حسابفا وارد کنید. در حالت دریافتنی قسط‌یار، کل کارمزد درگاه در این حساب ثبت می‌شود.';
+$_MODULE['<{ssbhesabfa}prestashop>configure_a75119167e78656844b53a40bd6f194a'] = 'مسیر حساب هزینه را در حسابفا وارد کنید. در حالت دریافتنی قسط‌یار، کل کارمزد درگاه در این حساب ثبت می‌شود.';
