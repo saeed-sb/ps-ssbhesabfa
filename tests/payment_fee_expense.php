@@ -85,7 +85,7 @@ class HesabfaApi {
         self::$writes[] = 'expense';
         if (self::$fail) { return (object) array('Success' => false, 'ErrorCode' => 199, 'ErrorMessage' => 'fixture failure'); }
         $id = 9001 + count(self::$documents);
-        $doc = array('Number' => $id, 'Date' => $d['date'], 'Debit' => $d['debit'], 'Credit' => $d['credit'], 'Transactions' => array());
+        $doc = array('Number' => $id, 'Date' => $d['date'], 'Description' => $d['description'], 'Debit' => $d['debit'], 'Credit' => $d['credit'], 'Transactions' => array());
         foreach ($d['transactions'] as $t) {
             $v = array('BankCode' => '', 'ContactCode' => '');
             foreach ($t as $key => $value) { $v[ucfirst($key)] = $value; }
@@ -263,6 +263,10 @@ check((float) $receipt['Amount'] === 11000.0 && $receipt['TransactionFee'] === 0
     && $receipt['Account'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH && $receipt['ContactCode'] === '000421'
     && $receipt['Bank'] === null, 'The full receipt uses the fixed account and the gateway contact, with no built-in fee');
 $fee = HesabfaApi::$documents[9001];
+$feeDescription = 'کارمزد درگاه پرداخت بابت سفارش 38015، فاکتور 2080';
+check($fee['Description'] === $feeDescription
+    && $fee['Transactions'][0]['Description'] === $feeDescription
+    && $fee['Transactions'][1]['Description'] === $feeDescription, 'New fee journals use a Persian description with the order and invoice numbers');
 check((float) $fee['Debit'] === 847.0 && (float) $fee['Credit'] === 847.0, 'The entire 7.7% fee is expensed');
 check($fee['Transactions'][0]['AccountPath'] === 'Expenses:DigiPay' && $fee['Transactions'][0]['Type'] === 0, 'Expense account must be debited');
 check($fee['Transactions'][1]['AccountPath'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH
@@ -296,7 +300,8 @@ Module::$qestyarInstalled = false;
 check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('expense')
     && (float) HesabfaApi::$documents[9001]['Debit'] === 847.0
     && HesabfaApi::$documents[9001]['Transactions'][1]['AccountPath'] === FeeSubject::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH
-    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '000421', 'A fee retry uses the stored account, fee and contact');
+    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '000421'
+    && HesabfaApi::$documents[9001]['Description'] === $feeDescription, 'A fee retry uses the stored account, fee, contact and description');
 
 $s = qestyarFixture();
 $payment = OrderPayment::$payment;
@@ -314,7 +319,8 @@ $s->operations[$key] = array('status' => 'failed', 'payment_plan' => json_encode
 check($s->setOrderPayment(38015) && HesabfaApi::$writes === array('payment', 'expense')
     && HesabfaApi::$receipts[0]['Transactions'][0]['Account'] === 'Assets:Receivables:Legacy'
     && HesabfaApi::$receipts[0]['Transactions'][0]['ContactCode'] === null
-    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === '', 'Plans saved before contact mapping retry with their original payloads');
+    && HesabfaApi::$documents[9001]['Transactions'][1]['ContactCode'] === ''
+    && HesabfaApi::$documents[9001]['Description'] === 'Qestyar gateway fee - order 38015 - invoice 2080', 'Legacy plans reproduce the payload tied to their request IDs');
 
 $s = qestyarFixture();
 Configuration::$values[$digipay . '_FEE_TYPE'] = 'none';

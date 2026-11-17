@@ -694,7 +694,7 @@ trait HesabfaPaymentTrait
 
             try {
                 $paymentOperation = $this->getOperationByKey($paymentOperationKey);
-                $plan = $this->getQestyarReceivablePlan($paymentOperation, $order, $payment);
+                $plan = $this->getQestyarReceivablePlan($paymentOperation, $order, $payment, $number);
             } catch (Exception $e) {
                 $lastFailureResponse = $this->normalizeHesabfaResponse((object) array(
                     'Success' => false,
@@ -924,7 +924,7 @@ trait HesabfaPaymentTrait
         return $firstPayment > 0 && $paymentId >= $firstPayment;
     }
 
-    private function getQestyarReceivablePlan($operation, $order, $payment)
+    private function getQestyarReceivablePlan($operation, $order, $payment, $invoice)
     {
         if (!empty($operation['payment_plan'])) {
             $plan = json_decode($operation['payment_plan'], true);
@@ -996,6 +996,7 @@ trait HesabfaPaymentTrait
         return array(
             'receivable' => self::HESABFA_QESTYAR_RECEIVABLE_ACCOUNT_PATH,
             'contact_code' => $contactCode,
+            'fee_description' => sprintf('کارمزد درگاه پرداخت بابت سفارش %d، فاکتور %d', $order->id, $invoice),
             'expense' => $expense,
             'amount' => $amount,
             'fee' => $fee,
@@ -1081,6 +1082,8 @@ trait HesabfaPaymentTrait
 
         $type = 'payment_fee_expense_document';
         $feeKey = $this->buildOperationKey($type, array($idOrder, $invoice, $paymentId, $plan['reference']));
+        // Legacy plans must reproduce the payload associated with their request ID.
+        $description = $plan['fee_description'] ?? ('Qestyar gateway fee - order ' . $idOrder . ' - invoice ' . $invoice);
         return $this->registerPaymentFeeExpenseDocument(
             $feeKey, $type, 'Order', $idOrder, null,
             array(
@@ -1091,8 +1094,7 @@ trait HesabfaPaymentTrait
                 'currency' => $plan['currency'],
                 'project' => $plan['project'],
             ),
-            $plan['date'], $plan['reference'],
-            'Qestyar gateway fee - order ' . $idOrder . ' - invoice ' . $invoice
+            $plan['date'], $plan['reference'], $description
         );
     }
 

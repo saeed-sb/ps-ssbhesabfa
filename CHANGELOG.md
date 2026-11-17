@@ -1,3 +1,8 @@
+## 2.3.52 - 2026-11-17
+
+- Use Persian descriptions with the order and invoice numbers in new installment gateway fee documents.
+- Retain the saved request payload when retrying earlier operations.
+
 ## 2.3.51 - 2026-11-17
 
 - Use the standard accounts receivable ledger for Qestyar receipts and fee expense credits. Configure the Hesabfa contact code separately for each gateway.
