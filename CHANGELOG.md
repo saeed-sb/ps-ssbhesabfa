@@ -1,3 +1,7 @@
+## 2.3.50 - 2026-11-17
+
+- Rename the per-gateway payment receipt posting method field in English and Persian.
+
 ## 2.3.49 - 2026-11-17
 
 - Choose Qestyar installment accounting separately for each gateway. Gateways inherit the previous choice until changed individually.

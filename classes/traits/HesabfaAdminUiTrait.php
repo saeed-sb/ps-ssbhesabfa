@@ -738,7 +738,7 @@ trait HesabfaAdminUiTrait
                         'col' => 5,
                         'type' => 'select',
                         'name' => $paymentConfigId . '_QESTYAR_RECEIVABLE_FROM_PAYMENT',
-                        'label' => $this->l('Qestyar installment accounting'),
+                        'label' => $this->l('Payment receipt posting method'),
                         'form_group_class' => 'ssbhesabfa-payment-row ssbhesabfa-payment-mode-row',
                         'options' => array(
                             'query' => array(

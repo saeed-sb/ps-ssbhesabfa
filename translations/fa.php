@@ -642,8 +642,8 @@ $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_3d56eb3e50743b747c92e37974539d62'] 
 
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_444797a672d1ebb170ce37674c249c40'] = 'تنظیمات حسابداری ارسال را در ماژول مدیریت حمل تغییر دهید.';
 
-$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_b5bb5270f7eb832b97c9bcc2fb081c75'] = 'روش ثبت اقساط قسط‌یار';
-$_MODULE['<{ssbhesabfa}prestashop>configure_b5bb5270f7eb832b97c9bcc2fb081c75'] = 'روش ثبت اقساط قسط‌یار';
+$_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_bee06f5c3b9122acf145ab4ed01dac9f'] = 'روش ثبت رسید دریافت';
+$_MODULE['<{ssbhesabfa}prestashop>configure_bee06f5c3b9122acf145ab4ed01dac9f'] = 'روش ثبت رسید دریافت';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_fff2b5c5856f30869ee1e7b2d1dc04ff'] = 'حساب دریافتنی درگاه و سند هزینهٔ کارمزد';
 $_MODULE['<{ssbhesabfa}prestashop>configure_fff2b5c5856f30869ee1e7b2d1dc04ff'] = 'حساب دریافتنی درگاه و سند هزینهٔ کارمزد';
 $_MODULE['<{ssbhesabfa}prestashop>ssbhesabfa_dfc73147bf9059a62bc1a13f3ac84cd7'] = 'مسیر حساب دریافتنی درگاه';
