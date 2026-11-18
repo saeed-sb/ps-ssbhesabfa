@@ -315,7 +315,10 @@ trait HesabfaReturnTrait
         $response = $api->documentGet($number);
         $document = $response->Result ?? null;
         if (empty($response->Success) || !$document || (int) $document->Number !== $number
-            || (int) $document->Reference !== (int) $expected['reference']
+            // Hesabfa may assign Reference automatically; verify the source link in the description.
+            || (string) $document->Description !== (string) $expected['description']
+            || (string) $document->Project !== (string) $expected['project']
+            || (int) $document->Status !== (int) $expected['status']
             || substr($document->Date, 0, 10) !== substr($expected['date'], 0, 10)
             || abs((float) $document->Debit - $expected['debit']) > 0.01
             || abs((float) $document->Credit - $expected['credit']) > 0.01

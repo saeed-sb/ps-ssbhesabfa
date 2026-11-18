@@ -43,7 +43,7 @@ class Order {
 }
 class HesabfaApiResponse { public static function normalize($r) { return $r; } }
 class HesabfaApi {
-    public static $sale, $returned, $receipts, $documents, $writes, $fail='', $missingNumber=false;
+    public static $sale, $returned, $receipts, $documents, $writes, $fail='', $missingNumber=false, $automaticReference=false;
     public static function ok($r) { return json_decode(json_encode(array('Success'=>true,'Result'=>$r))); }
     private function reject($type) {
         self::$writes[]=$type;
@@ -101,6 +101,7 @@ class HesabfaApi {
                 }
             } elseif($key!=='number') { $doc[ucfirst($key)]=$value; }
         }
+        if (self::$automaticReference) { $doc['Reference']=$doc['Number']; }
         self::$documents[10000]=json_decode(json_encode($doc));
         return self::ok(array('Number'=>10000));
     }
@@ -144,6 +145,7 @@ function fixture($fee=8470) {
     HesabfaApi::$writes=array();
     HesabfaApi::$fail='';
     HesabfaApi::$missingNumber=false;
+    HesabfaApi::$automaticReference=false;
     $path='دارایی ها : دارایی های جاری : حساب های دریافتنی : حساب های دریافتنی';
     $plan=array('receivable'=>$path,'contact_code'=>'000421','amount'=>110000,'fee'=>$fee,
         'expense'=>'Expenses:Gateway','date'=>'2026-11-17 10:00:00','reference'=>'trx-original','currency'=>'IRR','project'=>'فروش وب‌سایت');
@@ -247,4 +249,16 @@ HesabfaApi::$returned->Rest=0;
 HesabfaMappingRepository::$values['returnOrder']=900;
 verify(!$s->setOrder(38166,2,null,null,$date) && !HesabfaApi::$writes,
     'An existing payout outside this workflow cannot trigger a second refund');
+$s=fixture();
+HesabfaApi::$automaticReference=true;
+verify($s->setOrder(38166,2,null,null,$date) && HesabfaApi::$documents[10000]->Reference===10000, 'Automatic journal references do not reject an otherwise exact fee reversal');
+$writes=HesabfaApi::$writes;
+verify($s->setOrder(38166,2,null,null,$date) && HesabfaApi::$writes===$writes, 'An automatically referenced reversal is reusable without another financial write');
+foreach (array('Description'=>'ویرایش خارجی', 'Project'=>'پروژه دیگر', 'Status'=>0) as $field=>$value) {
+    $s=fixture();
+    verify($s->setOrder(38166,2,null,null,$date), 'Reversal tamper fixture must first complete');
+    $writes=HesabfaApi::$writes;
+    HesabfaApi::$documents[10000]->{$field}=$value;
+    verify(!$s->setOrder(38166,2,null,null,$date) && HesabfaApi::$writes===$writes, 'An altered reversal header requires review without recreating financial entries: '.$field);
+}
 echo json_encode(array('success'=>true,'checks'=>$checks,'external_operations'=>0)),PHP_EOL;

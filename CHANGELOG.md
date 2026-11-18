@@ -1,5 +1,10 @@
 ## 2.3.54 - 2026-11-18
 
+## 2.3.55 — 2026-11-18
+
+- Verify installment fee reversals by exact header, amounts and transaction targets while accepting Hesabfa automatic journal references.
+- Preserve existing return, payment and reversal entries when retrying their final verification.
+
 - Let Hesabfa assign a sales return invoice number by omitting the number field when creating a new return.
 
 ## 2.3.53 - 2026-11-18
