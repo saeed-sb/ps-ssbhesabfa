@@ -25,6 +25,23 @@ class HesabfaOperationRepository
         return is_array($row) ? $row : false;
     }
 
+    public static function getInstallmentPayments($idOrder)
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT * FROM ' . _DB_PREFIX_ . 'ssb_hesabfa_operation'
+            . ' WHERE object_type="Order" AND object_id="' . (int) $idOrder . '"'
+            . ' AND operation_type="invoice_payment" AND payment_plan IS NOT NULL'
+            . ' ORDER BY date_add, operation_key',
+            true,
+            false
+        );
+        if (!is_array($rows)) {
+            throw new RuntimeException('خواندن دریافت‌های اصلی سفارش کامل نشد.');
+        }
+
+        return $rows;
+    }
+
     public static function getSuccessful($operationKey)
     {
         $operationKey = (string) $operationKey;

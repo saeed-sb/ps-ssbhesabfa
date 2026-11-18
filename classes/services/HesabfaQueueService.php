@@ -224,7 +224,9 @@ class HesabfaQueueService
                 return $this->module->setOrder(
                     (int) $payload['id_order'],
                     isset($payload['order_type']) ? (int) $payload['order_type'] : 0,
-                    isset($payload['reference']) ? $payload['reference'] : null
+                    isset($payload['reference']) ? $payload['reference'] : null,
+                    null,
+                    $payload['return_date'] ?? null
                 );
             case 'set_order_payment':
                 return $this->module->setOrderPayment((int) $payload['id_order']);

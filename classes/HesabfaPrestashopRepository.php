@@ -88,6 +88,21 @@ class HesabfaPrestashopRepository
         return (bool) Db::getInstance()->getValue($query);
     }
 
+    public static function getInstallmentOrderDetailIds($idOrder)
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT id_order_detail FROM ' . _DB_PREFIX_ . 'installment_order_detail'
+            . ' WHERE id_order=' . (int) $idOrder . ' AND vendor_type="installment"',
+            true,
+            false
+        );
+        if (!is_array($rows)) {
+            throw new RuntimeException('خواندن قیمت‌های ثبت‌شدهٔ فروش اقساطی کامل نشد.');
+        }
+
+        return array_map('intval', array_column($rows, 'id_order_detail'));
+    }
+
     public static function getInstallmentPaymentModules($idOrder)
     {
         // Vendor Pay records the selected vendor and gateway on the order lines.

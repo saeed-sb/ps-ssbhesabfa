@@ -1,3 +1,9 @@
+## 2.3.53 - 2026-11-18
+
+- Fully reverse installment receivable orders on cancellation. Copy the original sales invoice to the return, record its refund to the original gateway contact, and post the inverse of the original gateway fee.
+- Save the return date and original accounting details so a retry completes the remaining stages without duplicating successful entries.
+- Use the final order line prices for new Qestyar sales invoices.
+
 ## 2.3.52 - 2026-11-17
 
 - Use Persian descriptions with the order and invoice numbers in new installment gateway fee documents.

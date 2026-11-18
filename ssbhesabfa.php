@@ -75,6 +75,7 @@ include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/services/HesabfaProductMappingServ
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaInternalApiTrait.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaAdminUiTrait.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaPaymentTrait.php');
+include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaReturnTrait.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaSyncTrait.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaJobTrait.php');
 include(_PS_MODULE_DIR_ . 'ssbhesabfa/classes/traits/HesabfaCoreSupportTrait.php');
@@ -85,6 +86,7 @@ class Ssbhesabfa extends Module
     use HesabfaInternalApiTrait;
     use HesabfaAdminUiTrait;
     use HesabfaPaymentTrait;
+    use HesabfaReturnTrait;
     use HesabfaSyncTrait;
     use HesabfaJobTrait;
 
@@ -191,7 +193,7 @@ class Ssbhesabfa extends Module
     {
         $this->name = 'ssbhesabfa';
         $this->tab = 'billing_invoicing';
-        $this->version = '2.3.52';
+        $this->version = '2.3.53';
         $this->author = 'Saeed Sattar Beglou';
         $this->need_instance = 0;
 

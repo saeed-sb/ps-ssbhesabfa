@@ -4,6 +4,7 @@ trait HesabfaJobTrait
 {
     protected function safeSetOrderFromHook($idOrder, $orderType = 0, $reference = null, $hookName = '')
     {
+        $returnDate = (int) $orderType === 2 ? date('Y-m-d H:i:s') : null;
         if (!$this->isHesabfaSyncEnabled()) {
             return false;
         }
@@ -18,6 +19,7 @@ trait HesabfaJobTrait
                 'order_type' => (int) $orderType,
                 'reference' => $reference,
                 'source_hook' => (string) $hookName,
+                'return_date' => $returnDate,
             ), 'Order', (int) $idOrder);
             self::addModuleLog('Hesabfa order sync job was queued from hook.', 'INFO', null, 'Order', (int) $idOrder);
             return true;
@@ -28,7 +30,7 @@ trait HesabfaJobTrait
         }
 
         try {
-            return $this->setOrder((int) $idOrder, $orderType, $reference);
+            return $this->setOrder((int) $idOrder, $orderType, $reference, null, $returnDate);
         } catch (Exception $e) {
             self::addLegacyLog('Hesabfa order registration failed during PrestaShop hook execution. Hook: ' . $hookName . '. Order ID: ' . (int) $idOrder . '. Details: ' . $e->getMessage(), 3, 'HOOK_SET_ORDER_EXCEPTION', 'Order', (int) $idOrder, true);
         }

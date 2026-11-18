@@ -35,6 +35,7 @@ LOCAL_TESTS = {
 }
 LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/payment_fee_expense.php'])
 LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/invoice_payment_target.php'])
+LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/installment_return.php'])
 LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/invoice_stock_history.php'])
 LOCAL_TESTS['ssbhesabfa'].append(['php', 'tests/invoice_stock_only.php'])
 

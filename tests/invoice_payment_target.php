@@ -30,8 +30,12 @@ if ($method !== 'invoice/savepayment' || ($data['contactCode'] ?? null) !== '000
 if (($data['bankCode'] ?? null) !== 19 || isset($data['contactCode']) || isset($data['accountPath'])) {
     throw new RuntimeException('Number and string bank targets must preserve legacy behavior.');
 }
+[, $data] = $api->invoiceSavePayment(7, ['accountPath' => $path, 'contactCode' => '000421'], '2026-11-18', 1100, 'refund', 'بازپرداخت', 0, null, 2);
+if (($data['type'] ?? null) !== 2 || ($data['contactCode'] ?? null) !== '000421') {
+    throw new RuntimeException('A sales return payment must send its invoice type and original gateway contact.');
+}
 $result = $api->invoiceSavePayment(5, ['bankCode' => 19, 'contactCode' => '000421', 'accountPath' => $path], '2026-11-17', 1100, 'fixture');
-if ($api->calls !== 2 || $result->Success !== false || $result->ErrorCode !== 'INVALID_PAYMENT_TARGET') {
+if ($api->calls !== 3 || $result->Success !== false || $result->ErrorCode !== 'INVALID_PAYMENT_TARGET') {
     throw new RuntimeException('Conflicting payment targets must be rejected before transport.');
 }
 

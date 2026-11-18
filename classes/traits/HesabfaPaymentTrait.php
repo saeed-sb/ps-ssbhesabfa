@@ -247,14 +247,14 @@ trait HesabfaPaymentTrait
         return $paymentName;
     }
 
-    public function setOrder($id_order, $orderType = 0, $reference = null, $serials = null)
+    public function setOrder($id_order, $orderType = 0, $reference = null, $serials = null, $returnDate = null)
     {
         if (!HesabfaSecurity::isOperational() || !HesabfaLock::acquire('financial-order:' . (int)$id_order)) { return false; }
-        try { return $this->setOrderUnlocked($id_order, $orderType, $reference, $serials); }
+        try { return $this->setOrderUnlocked($id_order, $orderType, $reference, $serials, $returnDate); }
         finally { HesabfaOperationRepository::releaseOwned(); HesabfaLock::release('financial-order:' . (int)$id_order); }
     }
 
-    private function setOrderUnlocked($id_order, $orderType = 0, $reference = null, $serials = null)
+    private function setOrderUnlocked($id_order, $orderType = 0, $reference = null, $serials = null, $returnDate = null)
     {
         if (!isset($id_order)) {
             return false;
@@ -268,6 +268,13 @@ trait HesabfaPaymentTrait
         }
 
         $order = new Order($id_order);
+
+        if ((int) $orderType === 2) {
+            $result = $this->setInstallmentOrderReturn($order, (int) $number, $returnDate);
+            if ($result !== null) {
+                return $result;
+            }
+        }
 
         //set customer if not exists
         $contactCode = $this->getObjectId('customer', $order->id_customer);
@@ -288,6 +295,9 @@ trait HesabfaPaymentTrait
         // add product before insert invoice
         $items = array();
         $products = $order->getProducts();
+        $installmentDetails = Module::isInstalled('wavendorpay')
+            ? array_fill_keys(HesabfaPrestashopRepository::getInstallmentOrderDetailIds($id_order), true)
+            : array();
         foreach ($products as $product) {
             $code = $this->getItemCodeByProductId($product['product_id'], $product['product_attribute_id']);
             if ($code == null) {
@@ -325,7 +335,9 @@ trait HesabfaPaymentTrait
 
             //fix remaining discount amount on last item
             $array_key = array_keys($products);
-            $product_price = $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'], $id_order);
+            $installment = isset($installmentDetails[(int) ($product['id_order_detail'] ?? $key)]);
+            $basePrice = $installment ? $product['unit_price_tax_excl'] : $product['original_product_price'];
+            $product_price = $this->getOrderPriceInHesabfaDefaultCurrency($basePrice, $id_order);
 
             if (end($array_key) == $key) {
                 $discount = $order_total_discount - $total_discounts;
@@ -334,7 +346,7 @@ trait HesabfaPaymentTrait
                 $total_discounts += $discount;
             }
 
-            $reduction_amount = $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'] - $product['product_price'], $id_order);
+            $reduction_amount = $installment ? 0 : $this->getOrderPriceInHesabfaDefaultCurrency($product['original_product_price'] - $product['product_price'], $id_order);
             $discount += $reduction_amount * $product['product_quantity'];
 
             //fix if total discount greater than product price
@@ -353,7 +365,7 @@ trait HesabfaPaymentTrait
                 'Quantity' => (int)$product['product_quantity'],
                 'UnitPrice' => (float)$product_price,
                 'Discount' => (float)$discount,
-                'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']), $id_order),
+                'Tax' => (float)$this->getOrderPriceInHesabfaDefaultCurrency(($product['unit_price_tax_incl'] - $product['unit_price_tax_excl']) * ($installment ? $product['product_quantity'] : 1), $id_order),
             );
 
             // compatibility with ssbserialorder module
@@ -1578,6 +1590,15 @@ trait HesabfaPaymentTrait
         return array('success' => true, 'response' => $response);
     }
 
+    private function hasSameHesabfaContactCode($first, $second)
+    {
+        $first = (string) $first;
+        $second = (string) $second;
+
+        return $first === $second || (ctype_digit($first) && ctype_digit($second)
+            && ltrim($first, '0') === ltrim($second, '0'));
+    }
+
     private function verifyPaymentFeeExpenseDocument($hesabfa, array $operation, $bankCode, array $breakdown, $date, $reference)
     {
         $number = isset($operation['external_reference']) ? (string) $operation['external_reference'] : '';
@@ -1612,7 +1633,7 @@ trait HesabfaPaymentTrait
             } else {
                 $matchesContact = $expectedContactCode === null
                     ? empty($t['ContactCode'])
-                    : (string) ($t['ContactCode'] ?? '') === $expectedContactCode;
+                    : $this->hasSameHesabfaContactCode($t['ContactCode'] ?? '', $expectedContactCode);
                 $matchesCreditTarget = empty($t['BankCode']) && $matchesContact;
             }
             if ((int) $t['Type'] === 1 && $matchesCreditTarget

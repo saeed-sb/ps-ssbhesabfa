@@ -366,7 +366,8 @@ class HesabfaApi
         $transactionNumber = null,
         $description = null,
         $transactionFee = 0,
-        $project = null
+        $project = null,
+        $type = 0
     ) {
         $method = 'invoice/savepayment';
 
@@ -379,6 +380,10 @@ class HesabfaApi
             'transactionFee' => $transactionFee,
             'project' => $project,
         );
+
+        if ((int) $type !== 0) {
+            $data['type'] = (int) $type;
+        }
 
         /*
          * $paymentTarget can be:
