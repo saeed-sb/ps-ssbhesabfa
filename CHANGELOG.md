@@ -1,3 +1,7 @@
+## 2.3.54 - 2026-11-18
+
+- Let Hesabfa assign a sales return invoice number by omitting the number field when creating a new return.
+
 ## 2.3.53 - 2026-11-18
 
 - Fully reverse installment receivable orders on cancellation. Copy the original sales invoice to the return, record its refund to the original gateway contact, and post the inverse of the original gateway fee.

@@ -145,7 +145,7 @@ trait HesabfaReturnTrait
             throw new RuntimeException('فاکتور فروش قبلاً برگشت خورده است. شمارهٔ فاکتور برگشت باید تطبیق داده شود.');
         }
         $invoice = array(
-            'Number' => 0, 'InvoiceType' => 2, 'ContactCode' => $sale->ContactCode ?? $sale->Contact->Code,
+            'InvoiceType' => 2, 'ContactCode' => $sale->ContactCode ?? $sale->Contact->Code,
             'Date' => $date, 'DueDate' => $date, 'Reference' => (string) $saleNumber, 'Status' => 2,
             'Tag' => json_encode(array('id_order' => (int) $order->id, 'sale_invoice' => $saleNumber)),
             'Freight' => $sale->Freight, 'FreightPersonCode' => $sale->FreightPersonCode ?? '',

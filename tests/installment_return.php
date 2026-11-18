@@ -54,6 +54,9 @@ class HesabfaApi {
         return $invoice && (int)$invoice->Number===$number ? self::ok($invoice) : (object)array('Success'=>false,'ErrorCode'=>112);
     }
     public function invoiceSave($data) {
+        if ($data['InvoiceType'] === 2 && array_key_exists('Number', $data)) {
+            throw new RuntimeException('Omit the invoice number when requesting an automatically numbered sales return.');
+        }
         if ($r=$this->reject('invoice')) { return $r; }
         $sum=0;
         foreach($data['InvoiceItems'] as $row) { $sum+=$row['UnitPrice']*$row['Quantity']-$row['Discount']+$row['Tax']; }
