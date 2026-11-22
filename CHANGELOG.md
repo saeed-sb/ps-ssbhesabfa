@@ -1,3 +1,7 @@
+## 2.3.56 - 2026-11-22
+
+- Publish the common main and installment-receivables source from 2.3.55 as a new installable package.
+
 ## 2.3.54 - 2026-11-18
 
 ## 2.3.55 — 2026-11-18
